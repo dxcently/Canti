@@ -1,0 +1,7 @@
+.state/
+build/
+.gradle/
+local.properties
+suite/apks/
+suite/out/
+__pycache__/

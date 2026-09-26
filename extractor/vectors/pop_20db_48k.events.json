@@ -1,0 +1,153 @@
+{
+ "case": "pop_20db_48k",
+ "synthetic": true,
+ "truth": {
+  "cls": "pop",
+  "kind": "gesture",
+  "events": [
+   {
+    "label": "pop",
+    "t_start_ms": 951.3,
+    "t_end_ms": 981.7,
+    "expected_duration": "instant"
+   }
+  ],
+  "span_ms": [
+   951.3,
+   981.7
+  ],
+  "sr": 48000,
+  "meta": {
+   "snr_db": 20.0,
+   "background": "white"
+  }
+ },
+ "events": [
+  {
+   "t_start_ms": 949,
+   "t_end_ms": 979,
+   "label": "pop",
+   "sounds_like": "mouth sound",
+   "text": "a short lip pop; instant sound; loudness normal; sounds like mouth sound",
+   "emit": true,
+   "truncated": false,
+   "raw": {
+    "dur_ms": 30,
+    "frames": 3,
+    "floor_db": -45.31,
+    "level_db": -20.15,
+    "snr_db": 25.16,
+    "voiced_frac": 0.333,
+    "clarity_med": 0.588,
+    "f0_med_hz": 0.0,
+    "onset_flux_db": 3.09,
+    "decay_db": 6.36,
+    "peak_pos": 0.0,
+    "energy_iqr_db": 6.78,
+    "truncated": false,
+    "gate_close_over_floor_db": 5.0,
+    "peak_centroid_hz": 511.8,
+    "centroid_hz": 512.9,
+    "flatness": 0.0113,
+    "zcr": 0.1997,
+    "lf_ratio": 0.9322,
+    "hf_ratio": 0.0023,
+    "flux_mean_db": 2.434,
+    "centroid_spread_oct": 0.21,
+    "syllable_peaks": 0,
+    "syllable_rate_hz": 0.0,
+    "interval_cv": 1.0,
+    "voiced_runs": 0,
+    "strong_voiced_frac": 0.0,
+    "voicing_breaks_hz": 33.33,
+    "pitch_rough_st": 0.0,
+    "pitch_resid_std_st": 0.0,
+    "pitch_jumps_hz": 0.0,
+    "impulsive": true,
+    "core_ms": 30.0,
+    "tonal": false,
+    "why": "short+flux -> pop",
+    "fp_version": "fp1",
+    "fp": [
+     -3.0,
+     0.0,
+     0.0,
+     0.0,
+     0.333,
+     0.0,
+     0.588,
+     -0.9633,
+     0.21,
+     0.0113,
+     0.1997,
+     0.9322,
+     0.0023,
+     0.0619,
+     0.0291,
+     -1.737,
+     6.78,
+     2.434,
+     3.09,
+     6.36,
+     26.1838,
+     2.1313,
+     4.304,
+     3.7227
+    ],
+    "pitch16": []
+   },
+   "message": {
+    "v": 1,
+    "id": 1,
+    "mode": "gesture",
+    "armed": true,
+    "sounds": [
+     "a short lip pop; instant sound; loudness normal; sounds like mouth sound"
+    ],
+    "sequence": [
+     "pop"
+    ],
+    "timing": [
+     {
+      "t_start_ms": 949,
+      "t_end_ms": 979
+     }
+    ],
+    "phrase": null,
+    "cursor": null,
+    "features": [
+     {
+      "fp": [
+       -3.0,
+       0.0,
+       0.0,
+       0.0,
+       0.333,
+       0.0,
+       0.588,
+       -0.9633,
+       0.21,
+       0.0113,
+       0.1997,
+       0.9322,
+       0.0023,
+       0.0619,
+       0.0291,
+       -1.737,
+       6.78,
+       2.434,
+       3.09,
+       6.36,
+       26.1838,
+       2.1313,
+       4.304,
+       3.7227
+      ],
+      "fp_version": "fp1",
+      "pitch16": []
+     }
+    ]
+   }
+  }
+ ]
+}

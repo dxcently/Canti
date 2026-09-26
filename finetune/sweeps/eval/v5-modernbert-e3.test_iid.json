@@ -1,0 +1,26 @@
+{
+  "sweep-v5-modernbert-e3.test_iid.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 1.0,
+    "nll": 2.8118780018069097e-06,
+    "ece": 2.8105000000611113e-06,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.0,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 1.0,
+      "not_deliberate": 1.0,
+      "phrase": 1.0,
+      "phrase_rule": 1.0,
+      "screen_phrase": 1.0,
+      "sequence": 1.0,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 28.51,
+    "latency_ms_p95": 60.14
+  }
+}

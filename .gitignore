@@ -1,0 +1,67 @@
+# VOX monorepo: code and docs only. Large, regenerable or private things stay on disk, untracked.
+
+# --- environments and caches (everywhere)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.DS_Store
+
+# --- model weights, anywhere
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.ckpt
+
+# --- public audio datasets (~45 GB): see datasets/README.md for sources and fetch steps
+/datasets/*
+!/datasets/README.md
+!/datasets/SOURCES.md
+
+# --- the user's own voice recordings: private, never committed
+/extractor/recordings/*
+!/extractor/recordings/README.md
+
+# --- finetune: generated data (regenerate with python -m vox.generate / vox.targets), checkpoints, predictions, logs
+/finetune/data/*
+!/finetune/data/README.md
+/finetune/runs/
+/finetune/preds/
+/finetune/logs/
+/finetune/students/*/runs/
+/finetune/students/*/preds/
+/finetune/students/*/logs/
+/finetune/students/*.log
+/finetune/sweeps/preds_tmp/
+/finetune/sweeps/logs/
+/finetune/teachers/logs/
+# upstream repos cloned for the students: pinned in finetune/third_party/README.md
+/finetune/third_party/*
+!/finetune/third_party/README.md
+
+# --- android: build outputs, local SDK paths, emulator state, downloaded APKs, suite results
+/android/.state/
+/android/dev/
+build/
+.gradle/
+local.properties
+/android/suite/apks/
+/android/suite/out/
+*.apk
+*.aab
+/extractor/results/*_clips.jsonl
+/android/.kotlin/
+
+# --- firmware: Arduino toolchain + board core (downloaded by arduino-cli, ~1 GB) and build outputs
+/firmware/.arduino/
+/firmware/build/
+
+# --- hardware: generated STL/SVG (regenerate from the .scad)
+/hardware/case/out/
+
+# --- personal editor state
+/.obsidian/

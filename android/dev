@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# "path:" makes nix ignore git tracking (the parent repo may not track nix/).
+# Enter the pinned Android dev shell (SDK, emulator, JDK 17, Gradle, Python), or run one command in it:
+#   ./dev                      interactive shell
+#   ./dev gradle assembleDebug run a command
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export VOX_ANDROID="$here"
+cd "$here"
+if [ $# -eq 0 ]; then exec nix develop "path:$here/nix"; fi
+exec nix develop "path:$here/nix" --command "$@"

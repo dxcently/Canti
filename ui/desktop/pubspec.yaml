@@ -1,0 +1,21 @@
+name: vox_ui_desktop
+description: "Thin Linux desktop runner for the VOX Flutter UI (../), with the in-memory FakeBackend."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  vox_ui:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

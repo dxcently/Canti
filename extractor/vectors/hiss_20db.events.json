@@ -1,0 +1,154 @@
+{
+ "case": "hiss_20db",
+ "synthetic": true,
+ "truth": {
+  "cls": "hiss",
+  "kind": "gesture",
+  "events": [
+   {
+    "label": "hiss",
+    "t_start_ms": 770.8,
+    "t_end_ms": 1039.8,
+    "variant": "sh",
+    "expected_duration": "short (150-400 ms)"
+   }
+  ],
+  "span_ms": [
+   770.8,
+   1039.8
+  ],
+  "sr": 16000,
+  "meta": {
+   "snr_db": 20.0,
+   "background": "brown"
+  }
+ },
+ "events": [
+  {
+   "t_start_ms": 769,
+   "t_end_ms": 1039,
+   "label": "hiss",
+   "sounds_like": "mouth sound",
+   "text": "a hiss; duration short (150-400 ms); loudness loud; sounds like mouth sound",
+   "emit": true,
+   "truncated": false,
+   "raw": {
+    "dur_ms": 270,
+    "frames": 27,
+    "floor_db": -75.46,
+    "level_db": -27.97,
+    "snr_db": 47.49,
+    "voiced_frac": 0.0,
+    "clarity_med": 0.22,
+    "f0_med_hz": 0.0,
+    "onset_flux_db": 9.89,
+    "decay_db": 28.0,
+    "peak_pos": 0.5,
+    "energy_iqr_db": 6.24,
+    "truncated": false,
+    "gate_close_over_floor_db": 5.0,
+    "peak_centroid_hz": 3453.1,
+    "centroid_hz": 3434.0,
+    "flatness": 0.0167,
+    "zcr": 0.435,
+    "lf_ratio": 0.0,
+    "hf_ratio": 0.4932,
+    "flux_mean_db": 2.281,
+    "centroid_spread_oct": 0.047,
+    "syllable_peaks": 1,
+    "syllable_rate_hz": 3.7,
+    "interval_cv": 1.0,
+    "voiced_runs": 0,
+    "strong_voiced_frac": 0.0,
+    "voicing_breaks_hz": 0.0,
+    "pitch_rough_st": 0.0,
+    "pitch_resid_std_st": 0.0,
+    "pitch_jumps_hz": 0.0,
+    "impulsive": true,
+    "core_ms": 230.0,
+    "tonal": false,
+    "why": "hiss (mouth)",
+    "fp_version": "fp1",
+    "fp": [
+     -3.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.22,
+     1.7799,
+     0.047,
+     0.0167,
+     0.435,
+     0.0,
+     0.4932,
+     0.9998,
+     0.0,
+     1.433,
+     6.24,
+     2.281,
+     9.89,
+     28.0,
+     -48.7055,
+     -20.715,
+     6.4791,
+     4.3195
+    ],
+    "pitch16": []
+   },
+   "message": {
+    "v": 1,
+    "id": 1,
+    "mode": "gesture",
+    "armed": true,
+    "sounds": [
+     "a hiss; duration short (150-400 ms); loudness loud; sounds like mouth sound"
+    ],
+    "sequence": [
+     "hiss"
+    ],
+    "timing": [
+     {
+      "t_start_ms": 769,
+      "t_end_ms": 1039
+     }
+    ],
+    "phrase": null,
+    "cursor": null,
+    "features": [
+     {
+      "fp": [
+       -3.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.22,
+       1.7799,
+       0.047,
+       0.0167,
+       0.435,
+       0.0,
+       0.4932,
+       0.9998,
+       0.0,
+       1.433,
+       6.24,
+       2.281,
+       9.89,
+       28.0,
+       -48.7055,
+       -20.715,
+       6.4791,
+       4.3195
+      ],
+      "fp_version": "fp1",
+      "pitch16": []
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+{
+  "split": "test_iid",
+  "teacher": "decider4b",
+  "repo": "Mapika/decider-4b",
+  "revision": "eb5fbdfc9448473ec25e399882912863afbdb70e",
+  "temperature": 1.11,
+  "criteria": "text",
+  "kernels": "fla",
+  "limit": 300,
+  "token_budget": 8192,
+  "max_batch": 64,
+  "load_seconds": 10.5,
+  "device": "Radeon 8060S Graphics",
+  "torch": "2.11.0+rocm7.13.0a20260424",
+  "rows_scored": 300,
+  "input_tokens": 139755,
+  "gpu_seconds": 221.56,
+  "rows_per_s": 1.35,
+  "tokens_per_s": 631
+}

@@ -1,0 +1,599 @@
+{
+ "synthetic": true,
+ "note": "SYNTHETIC audio from synth.py. These vectors check that a port reproduces the Python reference; they say nothing about accuracy on real voices.",
+ "config": {
+  "sample_rate": 16000,
+  "hop": 160,
+  "win": 512,
+  "acf_fft": 1024,
+  "hpf_hz": 60.0,
+  "spec_lo_hz": 90.0,
+  "spec_hi_hz": 7600.0,
+  "lf_split_hz": 1000.0,
+  "hf_split_hz": 3500.0,
+  "flux_floor_db": -95.0,
+  "f0_min_hz": 75.0,
+  "f0_max_hz": 2600.0,
+  "mpm_k": 0.88,
+  "voiced_clarity": 0.6,
+  "voiced_min_db_over_floor": 6.0,
+  "floor_block_frames": 40,
+  "floor_blocks": 8,
+  "floor_bias_db": 0.0,
+  "floor_min_db": -85.0,
+  "warmup_frames": 25,
+  "floor_startup_blocks": 2,
+  "floor_startup_sub_frames": 5,
+  "floor_startup_pct": 0.25,
+  "floor_startup_keep_db": 3.0,
+  "floor_startup_trigger_db": 10.0,
+  "floor_rise_open_db_s": 3.0,
+  "gate_open_db": 9.0,
+  "gate_close_db": 5.0,
+  "gate_open_sigma": 2.5,
+  "gate_close_sigma": 1.5,
+  "open_frames": 1,
+  "hangover_frames": 10,
+  "max_segment_frames": 400,
+  "min_segment_frames": 1,
+  "median_frames": 5,
+  "jump_limit_st": 7.0,
+  "contour_db": 12.0,
+  "edge_frames": 5,
+  "smooth_frames": 5,
+  "flat_max_range_st": 1.5,
+  "shape_min_st": 1.0,
+  "arch_ratio": 1.0,
+  "exc_medium_st": 2.0,
+  "exc_large_st": 4.0,
+  "dur_short_ms": 150,
+  "dur_medium_ms": 400,
+  "dur_long_ms": 1000,
+  "tone_clear": 0.8,
+  "tone_breathy": 0.6,
+  "tone_min_voiced_frac": 0.5,
+  "loud_quiet_over_floor_db": 18.0,
+  "loud_loud_over_floor_db": 40.0,
+  "loud_ref_min_db": -80.0,
+  "loud_calib_db": null,
+  "loud_calib_span_db": 8.0,
+  "discrete_max_ms": 200,
+  "discrete_core_ms": 60,
+  "discrete_core_db": 15.0,
+  "discrete_max_voiced": 4,
+  "discrete_peak_pos": 0.4,
+  "pop_onset_flux_db": 6.0,
+  "pop_attack_frames": 3,
+  "click_centroid_hz": 1800.0,
+  "discrete_tonal_voiced_frac": 0.5,
+  "discrete_tonal_clarity": 0.8,
+  "hiss_min_ms": 100,
+  "hiss_max_voiced_frac": 0.25,
+  "hiss_centroid_hz": 2200.0,
+  "hiss_zcr": 0.18,
+  "hiss_bg_lf_ratio": 0.2,
+  "hiss_bg_steady_ms": 1500,
+  "hiss_steady_db": 3.0,
+  "whistle_min_hz": 600.0,
+  "syllable_prominence_db": 6.0,
+  "syllable_min_gap_frames": 8,
+  "talk_min_cues": 2,
+  "talk_max_voiced_frac": 0.85,
+  "talk_min_runs": 3,
+  "talk_centroid_spread_oct": 0.45,
+  "talk_strong_centroid_spread_oct": 0.7,
+  "talk_min_peaks": 2,
+  "talk_min_rate_hz": 2.0,
+  "talk_max_rate_hz": 9.0,
+  "talk_min_iqr_db": 8.0,
+  "train_gap_ms": 300,
+  "train_max_ms": 400,
+  "laugh_min_peaks": 3,
+  "laugh_rate_lo_hz": 3.0,
+  "laugh_rate_hi_hz": 8.0,
+  "laugh_max_interval_cv": 0.3,
+  "laugh_max_clarity": 0.88,
+  "cough_onset_flux_db": 5.0,
+  "cough_max_voiced_frac": 0.6,
+  "cough_decay_db": 10.0,
+  "cough_peak_pos": 0.35,
+  "cough_max_ms": 900,
+  "music_min_ms": 900,
+  "music_max_clarity": 0.9,
+  "music_max_flatness": 0.12,
+  "music_min_jumps_hz": 0.8,
+  "machine_max_pitch_std_st": 0.04,
+  "machine_min_ms": 900,
+  "max_gesture_ms": 3000,
+  "cooldown_ms": 0
+ },
+ "vocab_digest": "139d86bd72e13ae5",
+ "vocab": {
+  "CONTOURS": {
+   "rise": "rises from low to high",
+   "fall": "falls from high to low",
+   "arch": "rises then falls",
+   "dip": "falls then rises",
+   "flat": "stays level"
+  },
+  "DISCRETE": {
+   "pop": "a short lip pop",
+   "click": "a tongue click",
+   "hiss": "a hiss"
+  },
+  "EXCURSION": [
+   "small (under 2 semitones)",
+   "medium (2-4 semitones)",
+   "large (over 4 semitones)"
+  ],
+  "DURATION": [
+   "very short (under 150 ms)",
+   "short (150-400 ms)",
+   "medium (400-1000 ms)",
+   "long (over 1 s)"
+  ],
+  "CLARITY": [
+   "noisy",
+   "breathy",
+   "clear tone"
+  ],
+  "LOUDNESS": [
+   "quiet",
+   "normal",
+   "loud"
+  ],
+  "SOUNDS_LIKE": [
+   "hum",
+   "whistle",
+   "talking",
+   "laughing",
+   "coughing",
+   "background music",
+   "background noise",
+   "mouth sound"
+  ],
+  "LABELS": [
+   "rise",
+   "fall",
+   "arch",
+   "dip",
+   "flat",
+   "pop",
+   "click",
+   "hiss",
+   "unknown"
+  ]
+ },
+ "highpass_biquad": {
+  "b": [
+   0.9834772033538365,
+   -1.966954406707673,
+   0.9834772033538365
+  ],
+  "a": [
+   1.0,
+   -1.9666813852634852,
+   0.9672274281518607
+  ],
+  "form": "transposed direct form II, state starts at zero, float64 in the reference"
+ },
+ "decimator": {
+  "taps": [
+   -1.942813105415553e-05,
+   6.302943076713318e-20,
+   8.820936636766419e-05,
+   0.0001764126354828477,
+   9.071217937162146e-05,
+   -0.0002594011602923274,
+   -0.0006380861159414053,
+   -0.0005257033044472337,
+   0.0003776302910409868,
+   0.0015542956534773111,
+   0.0017360214842483401,
+   -2.037632880390663e-18,
+   -0.002859310479834676,
+   -0.004232199862599373,
+   -0.0017130267806351185,
+   0.004021381493657827,
+   0.008375944569706917,
+   0.005986413918435574,
+   -0.0038056038320064545,
+   -0.014102407731115818,
+   -0.014403847977519035,
+   7.845362259715301e-18,
+   0.02074066549539566,
+   0.029378367587924004,
+   0.011584488674998283,
+   -0.02707095257937908,
+   -0.05772221460938454,
+   -0.04393797740340233,
+   0.03165547177195549,
+   0.14901970326900482,
+   0.2565092146396637,
+   0.2999904751777649,
+   0.2565092146396637,
+   0.14901970326900482,
+   0.03165547177195549,
+   -0.04393797740340233,
+   -0.05772221460938454,
+   -0.02707095257937908,
+   0.011584488674998283,
+   0.029378367587924004,
+   0.02074066549539566,
+   7.845362259715301e-18,
+   -0.014403847977519035,
+   -0.014102407731115818,
+   -0.0038056038320064545,
+   0.005986413918435574,
+   0.008375944569706917,
+   0.004021381493657827,
+   -0.0017130267806351185,
+   -0.004232199862599373,
+   -0.002859310479834676,
+   -2.037632880390663e-18,
+   0.0017360214842483401,
+   0.0015542956534773111,
+   0.0003776302910409868,
+   -0.0005257033044472337,
+   -0.0006380861159414053,
+   -0.0002594011602923274,
+   9.071217937162146e-05,
+   0.0001764126354828477,
+   8.820936636766419e-05,
+   6.302943076713318e-20,
+   -1.942813105415553e-05
+  ],
+  "n_taps": 63,
+  "cutoff_hz": 7200.0,
+  "kaiser_beta": 8.0,
+  "rule": "output m = sum_k h[k] * x[3m - k] over k = 0..62 with x[<0] = 0 (first output at input 0)"
+ },
+ "frame_time": "frame j: t_ms = (( j+1)*hop - win/2 - hop/2) * 1000 / 16000 = 10*j - 11; window = the last 512 samples after hop j+1 (zeros before the stream starts); periodic Hann for spectra, no window for MPM",
+ "tolerances": {
+  "note": "float32 C vs float64 Python. Frames: compare where both sides agree the frame is above the floor + 6 dB.",
+  "frame": {
+   "e_db": 0.05,
+   "zcr": 0.0,
+   "centroid_rel": 0.002,
+   "flatness_abs": 0.002,
+   "flux_db": 0.05,
+   "lf_ratio": 0.002,
+   "hf_ratio": 0.002,
+   "f0_rel_if_clarity_ge_0.8": 0.003,
+   "clarity": 0.01,
+   "floor_db": 0.05
+  },
+  "events": {
+   "count": "exact",
+   "label": "exact",
+   "text": "exact (every bucket string)",
+   "t_start_ms": 10,
+   "t_end_ms": 10,
+   "fp1_and_pitch16": {
+    "abs": 0.01,
+    "rel": 0.01,
+    "rule": "per value: |c - ref| <= abs + rel * |ref|"
+   }
+  },
+  "decimator_abs": 1e-05,
+  "48k_note": "48 kHz cases go through the decimator; allow e_db 0.1 and the same event tolerances."
+ },
+ "files": {
+  "pcm": "<case>.pcm, int16 LE mono at 'rate'",
+  "frames": "<case>.frames.csv",
+  "events": "<case>.events.json",
+  "decimator": [
+   "decimator.in48k.f32",
+   "decimator.out16k.f32"
+  ]
+ },
+ "cases": [
+  {
+   "name": "rise_20db",
+   "class": "rise",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 32534,
+   "frames": 203,
+   "expected": [
+    [
+     "rise",
+     "hum that rises from low to high; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness normal; sounds like hum"
+    ]
+   ]
+  },
+  {
+   "name": "fall_20db",
+   "class": "fall",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "white",
+   "rate": 16000,
+   "samples": 40035,
+   "frames": 250,
+   "expected": [
+    [
+     "fall",
+     "hum that falls from high to low; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness normal; sounds like hum"
+    ]
+   ]
+  },
+  {
+   "name": "arch_20db",
+   "class": "arch",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "brown",
+   "rate": 16000,
+   "samples": 39829,
+   "frames": 248,
+   "expected": [
+    [
+     "arch",
+     "hum that rises then falls; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness loud; sounds like hum"
+    ]
+   ]
+  },
+  {
+   "name": "dip_20db",
+   "class": "dip",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 30325,
+   "frames": 189,
+   "expected": [
+    [
+     "dip",
+     "hum that falls then rises; pitch change large (over 4 semitones); duration short (150-400 ms); tone clear tone; loudness normal; sounds like hum"
+    ]
+   ]
+  },
+  {
+   "name": "flat_20db",
+   "class": "flat",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "white",
+   "rate": 16000,
+   "samples": 44566,
+   "frames": 278,
+   "expected": [
+    [
+     "flat",
+     "hum that stays level; pitch change small (under 2 semitones); duration long (over 1 s); tone clear tone; loudness normal; sounds like hum"
+    ]
+   ]
+  },
+  {
+   "name": "whistle_rise_20db",
+   "class": "whistle_rise",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 30029,
+   "frames": 187,
+   "expected": [
+    [
+     "rise",
+     "hum that rises from low to high; pitch change large (over 4 semitones); duration short (150-400 ms); tone clear tone; loudness normal; sounds like whistle"
+    ]
+   ]
+  },
+  {
+   "name": "pop_20db",
+   "class": "pop",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 23351,
+   "frames": 145,
+   "expected": [
+    [
+     "pop",
+     "a short lip pop; instant sound; loudness normal; sounds like mouth sound"
+    ]
+   ]
+  },
+  {
+   "name": "click_30db",
+   "class": "click",
+   "kind": "gesture",
+   "snr_db": 30,
+   "background": "white",
+   "rate": 16000,
+   "samples": 23412,
+   "frames": 146,
+   "expected": [
+    [
+     "click",
+     "a tongue click; instant sound; loudness normal; sounds like mouth sound"
+    ]
+   ]
+  },
+  {
+   "name": "hiss_20db",
+   "class": "hiss",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "brown",
+   "rate": 16000,
+   "samples": 27836,
+   "frames": 173,
+   "expected": [
+    [
+     "hiss",
+     "a hiss; duration short (150-400 ms); loudness loud; sounds like mouth sound"
+    ]
+   ]
+  },
+  {
+   "name": "click_pop_30db",
+   "class": "click_pop",
+   "kind": "sequence",
+   "snr_db": 30,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 28052,
+   "frames": 175,
+   "expected": [
+    [
+     "click",
+     "a tongue click; instant sound; loudness normal; sounds like mouth sound"
+    ],
+    [
+     "pop",
+     "a short lip pop; instant sound; loudness normal; sounds like mouth sound"
+    ]
+   ]
+  },
+  {
+   "name": "rise_10db_cafe",
+   "class": "rise",
+   "kind": "gesture",
+   "snr_db": 10,
+   "background": "cafe",
+   "rate": 16000,
+   "samples": 35081,
+   "frames": 219,
+   "expected": [
+    [
+     "rise",
+     "hum that rises from low to high; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness quiet; sounds like hum"
+    ]
+   ]
+  },
+  {
+   "name": "talk_20db",
+   "class": "talk",
+   "kind": "negative",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 86242,
+   "frames": 539,
+   "expected": [
+    [
+     "flat",
+     "hum that stays level; pitch change small (under 2 semitones); duration long (over 1 s); tone clear tone; loudness normal; sounds like talking"
+    ],
+    [
+     "fall",
+     "hum that falls from high to low; pitch change large (over 4 semitones); duration long (over 1 s); tone clear tone; loudness normal; sounds like talking"
+    ]
+   ]
+  },
+  {
+   "name": "laugh_20db",
+   "class": "laugh",
+   "kind": "negative",
+   "snr_db": 20,
+   "background": "white",
+   "rate": 16000,
+   "samples": 42148,
+   "frames": 263,
+   "expected": [
+    [
+     "fall",
+     "hum that falls from high to low; pitch change medium (2-4 semitones); duration medium (400-1000 ms); tone noisy; loudness normal; sounds like laughing"
+    ]
+   ]
+  },
+  {
+   "name": "cough_20db",
+   "class": "cough",
+   "kind": "negative",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 29499,
+   "frames": 184,
+   "expected": [
+    [
+     "flat",
+     "hum that stays level; pitch change small (under 2 semitones); duration short (150-400 ms); tone noisy; loudness normal; sounds like coughing"
+    ]
+   ]
+  },
+  {
+   "name": "music_20db",
+   "class": "music",
+   "kind": "negative",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 76974,
+   "frames": 481,
+   "expected": [
+    [
+     "hiss",
+     "a hiss; duration long (over 1 s); loudness normal; sounds like background noise"
+    ]
+   ]
+  },
+  {
+   "name": "fan_motor_20db",
+   "class": "fan_motor",
+   "kind": "negative",
+   "snr_db": 20,
+   "background": "brown",
+   "rate": 16000,
+   "samples": 83266,
+   "frames": 520,
+   "expected": [
+    [
+     "hiss",
+     "a hiss; duration long (over 1 s); loudness loud; sounds like background noise"
+    ]
+   ]
+  },
+  {
+   "name": "silence",
+   "class": "silence",
+   "kind": "negative",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 16000,
+   "samples": 59749,
+   "frames": 373,
+   "expected": []
+  },
+  {
+   "name": "arch_20db_48k",
+   "class": "arch",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "pink",
+   "rate": 48000,
+   "samples": 90330,
+   "frames": 188,
+   "expected": [
+    [
+     "arch",
+     "hum that rises then falls; pitch change large (over 4 semitones); duration short (150-400 ms); tone clear tone; loudness normal; sounds like hum"
+    ]
+   ]
+  },
+  {
+   "name": "pop_20db_48k",
+   "class": "pop",
+   "kind": "gesture",
+   "snr_db": 20,
+   "background": "white",
+   "rate": 48000,
+   "samples": 80723,
+   "frames": 168,
+   "expected": [
+    [
+     "pop",
+     "a short lip pop; instant sound; loudness normal; sounds like mouth sound"
+    ]
+   ]
+  }
+ ]
+}

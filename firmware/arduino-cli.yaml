@@ -1,0 +1,11 @@
+board_manager:
+  additional_urls:
+    - https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+directories:
+  data: .arduino/data
+  downloads: .arduino/downloads
+  user: .arduino/user
+  builtin:
+    tools: .arduino/data/packages/builtin/tools
+network:
+  connection_timeout: 300s

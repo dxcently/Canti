@@ -1,0 +1,26 @@
+{
+  "sweep-v5-e5-small-frozen.test_unseen_phrasing.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.6275,
+    "nll": 1.1609399950410884,
+    "ece": 0.07152005,
+    "false_trigger_rate": 0.1970649895178197,
+    "missed_command_rate": 0.030860144451739988,
+    "by_kind": {
+      "app_rule": 0.334,
+      "cursor": 0.833,
+      "default": 0.635,
+      "disabled": 1.0,
+      "global_rule": 0.55,
+      "not_deliberate": 0.926,
+      "phrase": 0.774,
+      "phrase_rule": 0.575,
+      "screen_phrase": 0.7,
+      "sequence": 0.383,
+      "unbound": 0.356
+    },
+    "latency_ms_p50": 11.09,
+    "latency_ms_p95": 12.6
+  }
+}

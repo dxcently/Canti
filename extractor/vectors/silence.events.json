@@ -1,0 +1,16 @@
+{
+ "case": "silence",
+ "synthetic": true,
+ "truth": {
+  "cls": "silence",
+  "kind": "negative",
+  "events": [],
+  "span_ms": null,
+  "sr": 16000,
+  "meta": {
+   "snr_db": 20.0,
+   "background": "pink"
+  }
+ },
+ "events": []
+}

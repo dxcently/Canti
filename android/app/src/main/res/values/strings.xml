@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VOX</string>
+    <string name="service_label">VOX sound control</string>
+    <string name="service_description">Performs taps, swipes and navigation when you make the vocal gestures your VOX device recognises. Every action comes from a sound or phrase you made. It reads the screen only to describe it (for example "video feed, playing") and to check that an action had a visible effect.</string>
+</resources>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 470 200" width="940" height="400">
+  <title>Canti</title>
+  <!-- One-colour wordmark: same letterforms as canti-wordmark.svg, no outline or shading.
+       Set fill to #DDEBD3 (mint cream) on dark backgrounds. -->
+  <g fill="#16192B">
+    <path d="M86 0H44A44 44 0 0 0 0 44V56A44 44 0 0 0 44 100H86V76H44A20 20 0 0 1 24 56V44A20 20 0 0 1 44 24H86Z"/>
+    <path d="M100 100V44A44 44 0 0 1 144 0H148A44 44 0 0 1 192 44V100H168V44A20 20 0 0 0 148 24H144A20 20 0 0 0 124 44V100Z"/>
+    <rect x="129" y="54" width="34" height="20"/>
+    <path d="M206 100V0H250A44 44 0 0 1 294 44V100H270V44A20 20 0 0 0 250 24H230V100Z"/>
+    <path d="M320 0H392V24H362V100H338V24H308V12A12 12 0 0 1 320 0Z"/>
+    <rect x="406" y="0" width="24" height="100"/>
+    <path d="M52 130H40V162H52V157H46V135H52Z"/>
+    <path d="M378 130H390V162H378V157H384V135H378Z"/>
+    <text x="215" y="152" text-anchor="middle" letter-spacing="7"
+          font-family="Futura, 'Century Gothic', Avenir, 'Trebuchet MS', sans-serif"
+          font-size="17" font-weight="600">HUM · CLICK · SWIPE</text>
+  </g>
+</svg>

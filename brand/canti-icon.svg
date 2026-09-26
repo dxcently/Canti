@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Canti</title>
+  <!-- App icon: an original little robot head inspired by Canti, peeking in from the lower-left
+       corner on a full-bleed charcoal square (Android masks the shape). The head is drawn in its
+       own coordinates, centred on the screen, then moved, turned 15 degrees clockwise and scaled
+       by the group transform, so the left and bottom edges crop it and the upper right stays empty.
+       Parts, back to front: antenna with a signal-orange light (orange = listening); a teal-shade
+       copy of the head shifted right, which shows as the side of the box; the teal front; the
+       visor-navy screen; two screen-glow glare bands clipped to the screen's top-right corner.
+       No eyes, no mouth, no ink outline, no gradients. -->
+  <defs>
+    <path id="head" d="M-230 300V-70C-230 -185 -130 -225 0 -225S230 -185 230 -70V300Z"/>
+    <clipPath id="screen"><rect x="-180" y="-140" width="360" height="270" rx="72"/></clipPath>
+  </defs>
+
+  <rect width="512" height="512" fill="#1E1F24"/>
+
+  <g transform="translate(168 378) rotate(15) scale(1.07)">
+    <!-- antenna -->
+    <rect x="62" y="-300" width="16" height="90" rx="8" fill="#4A9488"/>
+    <circle cx="70" cy="-300" r="26" fill="#F2A33A"/>
+
+    <!-- head: side, then front -->
+    <use href="#head" transform="translate(44 0)" fill="#4A9488"/>
+    <use href="#head" fill="#6DB8A8"/>
+
+    <!-- screen and its glare -->
+    <rect x="-180" y="-140" width="360" height="270" rx="72" fill="#1D2757"/>
+    <g clip-path="url(#screen)" fill="none" stroke="#7FE0C9" opacity="0.32">
+      <path d="M-199 -264L331 17" stroke-width="40"/>
+      <path d="M-218 -229L312 52" stroke-width="14"/>
+    </g>
+  </g>
+</svg>

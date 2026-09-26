@@ -1,0 +1,156 @@
+{
+ "generated_by": "firmware/tools/gen_test_sounds.py",
+ "synthetic": true,
+ "note": "Lines produced by running the Python extractor on its SYNTHETIC test clips. Canned, for link tests.",
+ "digest": "851a102482a68eb9",
+ "vocab_digest": "139d86bd72e13ae5",
+ "extractor_source_sha256": "4e039d79a043db3b",
+ "stale_vectors": [],
+ "sounds": [
+  {
+   "name": "rise",
+   "label": "rise",
+   "line": "hum that rises from low to high; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness normal; sounds like hum",
+   "dur_ms": 490,
+   "source": "extractor/vectors/rise_20db.pcm",
+   "extracted_t_ms": [
+    839,
+    1329
+   ]
+  },
+  {
+   "name": "fall",
+   "label": "fall",
+   "line": "hum that falls from high to low; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness normal; sounds like hum",
+   "dur_ms": 790,
+   "source": "extractor/vectors/fall_20db.pcm",
+   "extracted_t_ms": [
+    999,
+    1789
+   ]
+  },
+  {
+   "name": "arch",
+   "label": "arch",
+   "line": "hum that rises then falls; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness loud; sounds like hum",
+   "dur_ms": 920,
+   "source": "extractor/vectors/arch_20db.pcm",
+   "extracted_t_ms": [
+    969,
+    1889
+   ]
+  },
+  {
+   "name": "dip",
+   "label": "dip",
+   "line": "hum that falls then rises; pitch change large (over 4 semitones); duration short (150-400 ms); tone clear tone; loudness normal; sounds like hum",
+   "dur_ms": 320,
+   "source": "extractor/vectors/dip_20db.pcm",
+   "extracted_t_ms": [
+    869,
+    1189
+   ]
+  },
+  {
+   "name": "flat",
+   "label": "flat",
+   "line": "hum that stays level; pitch change small (under 2 semitones); duration long (over 1 s); tone clear tone; loudness normal; sounds like hum",
+   "dur_ms": 1240,
+   "source": "extractor/vectors/flat_20db.pcm",
+   "extracted_t_ms": [
+    829,
+    2069
+   ]
+  },
+  {
+   "name": "pop",
+   "label": "pop",
+   "line": "a short lip pop; instant sound; loudness normal; sounds like mouth sound",
+   "dur_ms": 30,
+   "source": "extractor/vectors/pop_20db.pcm",
+   "extracted_t_ms": [
+    719,
+    749
+   ]
+  },
+  {
+   "name": "click",
+   "label": "click",
+   "line": "a tongue click; instant sound; loudness normal; sounds like mouth sound",
+   "dur_ms": 10,
+   "source": "extractor/vectors/click_30db.pcm",
+   "extracted_t_ms": [
+    749,
+    759
+   ]
+  },
+  {
+   "name": "hiss",
+   "label": "hiss",
+   "line": "a hiss; duration short (150-400 ms); loudness loud; sounds like mouth sound",
+   "dur_ms": 270,
+   "source": "extractor/vectors/hiss_20db.pcm",
+   "extracted_t_ms": [
+    769,
+    1039
+   ]
+  },
+  {
+   "name": "clickpop.1",
+   "label": "click",
+   "line": "a tongue click; instant sound; loudness normal; sounds like mouth sound",
+   "dur_ms": 20,
+   "source": "extractor/vectors/click_pop_30db.pcm",
+   "extracted_t_ms": [
+    729,
+    749
+   ]
+  },
+  {
+   "name": "clickpop.2",
+   "label": "pop",
+   "line": "a short lip pop; instant sound; loudness normal; sounds like mouth sound",
+   "dur_ms": 40,
+   "source": "extractor/vectors/click_pop_30db.pcm",
+   "extracted_t_ms": [
+    1009,
+    1049
+   ]
+  }
+ ],
+ "sequences": [
+  {
+   "name": "clickpop",
+   "sounds": [
+    8,
+    9
+   ],
+   "gaps_ms": [
+    260
+   ],
+   "note": "one clip, gaps as extracted from click_pop_30db"
+  },
+  {
+   "name": "poppop",
+   "sounds": [
+    5,
+    5
+   ],
+   "gaps_ms": [
+    250
+   ],
+   "note": "composed from single sounds, gap 250 ms"
+  },
+  {
+   "name": "riserise",
+   "sounds": [
+    0,
+    0
+   ],
+   "gaps_ms": [
+    900
+   ],
+   "note": "composed from single sounds, gap 900 ms"
+  }
+ ]
+}

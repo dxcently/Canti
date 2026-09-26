@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="VOX fixture" android:allowBackup="false"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+        <activity android:name=".MenuActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".FeedActivity" android:exported="true" />
+        <activity android:name=".ListActivity" android:exported="true" />
+        <activity android:name=".ControlsActivity" android:exported="true" android:windowSoftInputMode="adjustNothing" />
+        <activity android:name=".StaticActivity" android:exported="true" />
+    </application>
+</manifest>

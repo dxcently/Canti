@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Run one command inside the extractor environment, e.g.:
+#   ./run python record.py --list-devices
+#   ./run python -m pytest tests -q
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$here/env.sh"
+cd "$here"
+export PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}"
+exec "$@"

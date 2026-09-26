@@ -1,0 +1,286 @@
+{
+ "case": "click_pop_30db",
+ "synthetic": true,
+ "truth": {
+  "cls": "click_pop",
+  "kind": "sequence",
+  "events": [
+   {
+    "label": "click",
+    "t_start_ms": 738.8,
+    "t_end_ms": 753.9,
+    "expected_duration": "instant"
+   },
+   {
+    "label": "pop",
+    "t_start_ms": 1015.7,
+    "t_end_ms": 1053.2,
+    "expected_duration": "instant"
+   }
+  ],
+  "span_ms": [
+   738.8,
+   1053.2
+  ],
+  "sr": 16000,
+  "meta": {
+   "snr_db": 30.0,
+   "background": "pink",
+   "gap_ms": 261.8
+  }
+ },
+ "events": [
+  {
+   "t_start_ms": 729,
+   "t_end_ms": 749,
+   "label": "click",
+   "sounds_like": "mouth sound",
+   "text": "a tongue click; instant sound; loudness normal; sounds like mouth sound",
+   "emit": true,
+   "truncated": false,
+   "raw": {
+    "dur_ms": 20,
+    "frames": 2,
+    "floor_db": -53.03,
+    "level_db": -25.8,
+    "snr_db": 27.23,
+    "voiced_frac": 0.0,
+    "clarity_med": 0.574,
+    "f0_med_hz": 0.0,
+    "onset_flux_db": 15.36,
+    "decay_db": 6.22,
+    "peak_pos": 1.0,
+    "energy_iqr_db": 6.22,
+    "truncated": false,
+    "gate_close_over_floor_db": 5.0,
+    "peak_centroid_hz": 3575.1,
+    "centroid_hz": 3575.9,
+    "flatness": 0.1951,
+    "zcr": 0.3625,
+    "lf_ratio": 0.0251,
+    "hf_ratio": 0.7843,
+    "flux_mean_db": 1.389,
+    "centroid_spread_oct": 0.003,
+    "syllable_peaks": 0,
+    "syllable_rate_hz": 0.0,
+    "interval_cv": 1.0,
+    "voiced_runs": 0,
+    "strong_voiced_frac": 0.0,
+    "voicing_breaks_hz": 0.0,
+    "pitch_rough_st": 0.0,
+    "pitch_resid_std_st": 0.0,
+    "pitch_jumps_hz": 0.0,
+    "impulsive": true,
+    "core_ms": 20.0,
+    "tonal": false,
+    "why": "short+flux -> click",
+    "fp_version": "fp1",
+    "fp": [
+     -3.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.574,
+     1.8383,
+     0.003,
+     0.1951,
+     0.3625,
+     0.0251,
+     0.7843,
+     0.9354,
+     0.0,
+     -2.3219,
+     6.22,
+     1.389,
+     15.36,
+     6.22,
+     -17.2352,
+     -4.1723,
+     -2.1275,
+     -11.4048
+    ],
+    "pitch16": []
+   },
+   "message": {
+    "v": 1,
+    "id": 1,
+    "mode": "gesture",
+    "armed": true,
+    "sounds": [
+     "a tongue click; instant sound; loudness normal; sounds like mouth sound"
+    ],
+    "sequence": [
+     "click"
+    ],
+    "timing": [
+     {
+      "t_start_ms": 729,
+      "t_end_ms": 749
+     }
+    ],
+    "phrase": null,
+    "cursor": null,
+    "features": [
+     {
+      "fp": [
+       -3.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.574,
+       1.8383,
+       0.003,
+       0.1951,
+       0.3625,
+       0.0251,
+       0.7843,
+       0.9354,
+       0.0,
+       -2.3219,
+       6.22,
+       1.389,
+       15.36,
+       6.22,
+       -17.2352,
+       -4.1723,
+       -2.1275,
+       -11.4048
+      ],
+      "fp_version": "fp1",
+      "pitch16": []
+     }
+    ]
+   }
+  },
+  {
+   "t_start_ms": 1009,
+   "t_end_ms": 1049,
+   "label": "pop",
+   "sounds_like": "mouth sound",
+   "text": "a short lip pop; instant sound; loudness normal; sounds like mouth sound",
+   "emit": true,
+   "truncated": false,
+   "raw": {
+    "dur_ms": 40,
+    "frames": 4,
+    "floor_db": -53.03,
+    "level_db": -21.33,
+    "snr_db": 31.7,
+    "voiced_frac": 0.75,
+    "clarity_med": 0.677,
+    "f0_med_hz": 0.0,
+    "onset_flux_db": 6.84,
+    "decay_db": 8.04,
+    "peak_pos": 0.333,
+    "energy_iqr_db": 9.73,
+    "truncated": false,
+    "gate_close_over_floor_db": 5.0,
+    "peak_centroid_hz": 496.7,
+    "centroid_hz": 530.7,
+    "flatness": 0.0027,
+    "zcr": 0.1275,
+    "lf_ratio": 0.9275,
+    "hf_ratio": 0.0002,
+    "flux_mean_db": 3.156,
+    "centroid_spread_oct": 0.156,
+    "syllable_peaks": 0,
+    "syllable_rate_hz": 0.0,
+    "interval_cv": 1.0,
+    "voiced_runs": 1,
+    "strong_voiced_frac": 0.667,
+    "voicing_breaks_hz": 50.0,
+    "pitch_rough_st": 0.0,
+    "pitch_resid_std_st": 0.0,
+    "pitch_jumps_hz": 0.0,
+    "impulsive": true,
+    "core_ms": 30.0,
+    "tonal": false,
+    "why": "short+flux -> pop",
+    "fp_version": "fp1",
+    "fp": [
+     -3.0,
+     0.0,
+     0.0,
+     0.0,
+     0.75,
+     0.667,
+     0.677,
+     -0.914,
+     0.156,
+     0.0027,
+     0.1275,
+     0.9275,
+     0.0002,
+     0.0672,
+     0.0298,
+     -1.3219,
+     9.73,
+     3.156,
+     6.84,
+     8.04,
+     37.5672,
+     -4.4757,
+     3.5834,
+     2.3867
+    ],
+    "pitch16": []
+   },
+   "message": {
+    "v": 1,
+    "id": 2,
+    "mode": "gesture",
+    "armed": true,
+    "sounds": [
+     "a short lip pop; instant sound; loudness normal; sounds like mouth sound"
+    ],
+    "sequence": [
+     "pop"
+    ],
+    "timing": [
+     {
+      "t_start_ms": 1009,
+      "t_end_ms": 1049
+     }
+    ],
+    "phrase": null,
+    "cursor": null,
+    "features": [
+     {
+      "fp": [
+       -3.0,
+       0.0,
+       0.0,
+       0.0,
+       0.75,
+       0.667,
+       0.677,
+       -0.914,
+       0.156,
+       0.0027,
+       0.1275,
+       0.9275,
+       0.0002,
+       0.0672,
+       0.0298,
+       -1.3219,
+       9.73,
+       3.156,
+       6.84,
+       8.04,
+       37.5672,
+       -4.4757,
+       3.5834,
+       2.3867
+      ],
+      "fp_version": "fp1",
+      "pitch16": []
+     }
+    ]
+   }
+  }
+ ]
+}

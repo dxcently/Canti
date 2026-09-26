@@ -1,0 +1,153 @@
+{
+ "case": "click_30db",
+ "synthetic": true,
+ "truth": {
+  "cls": "click",
+  "kind": "gesture",
+  "events": [
+   {
+    "label": "click",
+    "t_start_ms": 750.1,
+    "t_end_ms": 763.2,
+    "expected_duration": "instant"
+   }
+  ],
+  "span_ms": [
+   750.1,
+   763.2
+  ],
+  "sr": 16000,
+  "meta": {
+   "snr_db": 30.0,
+   "background": "white"
+  }
+ },
+ "events": [
+  {
+   "t_start_ms": 749,
+   "t_end_ms": 759,
+   "label": "click",
+   "sounds_like": "mouth sound",
+   "text": "a tongue click; instant sound; loudness normal; sounds like mouth sound",
+   "emit": true,
+   "truncated": false,
+   "raw": {
+    "dur_ms": 10,
+    "frames": 1,
+    "floor_db": -57.18,
+    "level_db": -31.42,
+    "snr_db": 25.76,
+    "voiced_frac": 1.0,
+    "clarity_med": 0.642,
+    "f0_med_hz": 0.0,
+    "onset_flux_db": 2.64,
+    "decay_db": 0.0,
+    "peak_pos": 0.0,
+    "energy_iqr_db": 0.0,
+    "truncated": false,
+    "gate_close_over_floor_db": 5.0,
+    "peak_centroid_hz": 3651.0,
+    "centroid_hz": 3651.0,
+    "flatness": 0.1328,
+    "zcr": 0.4922,
+    "lf_ratio": 0.0031,
+    "hf_ratio": 0.8529,
+    "flux_mean_db": 2.637,
+    "centroid_spread_oct": 0.0,
+    "syllable_peaks": 0,
+    "syllable_rate_hz": 0.0,
+    "interval_cv": 1.0,
+    "voiced_runs": 0,
+    "strong_voiced_frac": 1.0,
+    "voicing_breaks_hz": 100.0,
+    "pitch_rough_st": 0.0,
+    "pitch_resid_std_st": 0.0,
+    "pitch_jumps_hz": 0.0,
+    "impulsive": true,
+    "core_ms": 10.0,
+    "tonal": false,
+    "why": "short+flux -> click",
+    "fp_version": "fp1",
+    "fp": [
+     -3.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     1.0,
+     0.642,
+     1.8683,
+     0.0,
+     0.1328,
+     0.4922,
+     0.0031,
+     0.8529,
+     0.9771,
+     0.006,
+     -3.3219,
+     0.0,
+     2.637,
+     2.64,
+     0.0,
+     -23.5278,
+     -10.8195,
+     -1.3045,
+     -7.9171
+    ],
+    "pitch16": []
+   },
+   "message": {
+    "v": 1,
+    "id": 1,
+    "mode": "gesture",
+    "armed": true,
+    "sounds": [
+     "a tongue click; instant sound; loudness normal; sounds like mouth sound"
+    ],
+    "sequence": [
+     "click"
+    ],
+    "timing": [
+     {
+      "t_start_ms": 749,
+      "t_end_ms": 759
+     }
+    ],
+    "phrase": null,
+    "cursor": null,
+    "features": [
+     {
+      "fp": [
+       -3.0,
+       0.0,
+       0.0,
+       0.0,
+       1.0,
+       1.0,
+       0.642,
+       1.8683,
+       0.0,
+       0.1328,
+       0.4922,
+       0.0031,
+       0.8529,
+       0.9771,
+       0.006,
+       -3.3219,
+       0.0,
+       2.637,
+       2.64,
+       0.0,
+       -23.5278,
+       -10.8195,
+       -1.3045,
+       -7.9171
+      ],
+      "fp_version": "fp1",
+      "pitch16": []
+     }
+    ]
+   }
+  }
+ ]
+}

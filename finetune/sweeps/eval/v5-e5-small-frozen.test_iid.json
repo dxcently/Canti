@@ -1,0 +1,26 @@
+{
+  "sweep-v5-e5-small-frozen.test_iid.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.6825,
+    "nll": 0.9196778661200457,
+    "ece": 0.0268612955,
+    "false_trigger_rate": 0.1782608695652174,
+    "missed_command_rate": 0.02142857142857143,
+    "by_kind": {
+      "app_rule": 0.493,
+      "cursor": 0.837,
+      "default": 0.69,
+      "disabled": 1.0,
+      "global_rule": 0.47,
+      "not_deliberate": 0.927,
+      "phrase": 0.982,
+      "phrase_rule": 0.578,
+      "screen_phrase": 0.748,
+      "sequence": 0.469,
+      "unbound": 0.318
+    },
+    "latency_ms_p50": 11.15,
+    "latency_ms_p95": 13.03
+  }
+}

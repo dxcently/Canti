@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="title" type="id" />
+    <item name="feed" type="id" />
+    <item name="feed_index" type="id" />
+    <item name="feed_state" type="id" />
+    <item name="feed_play" type="id" />
+    <item name="feed_likes" type="id" />
+    <item name="feed_long" type="id" />
+    <item name="feed_page" type="id" />
+    <item name="list" type="id" />
+    <item name="toggle" type="id" />
+    <item name="toggle_state" type="id" />
+    <item name="long_state" type="id" />
+    <item name="text_field" type="id" />
+    <item name="static_label" type="id" />
+</resources>

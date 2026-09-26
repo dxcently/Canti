@@ -1,0 +1,9 @@
+{
+  "global": [],
+  "app:app.organicmaps": [
+    {"phrase": ["rise"], "kind": "fixed", "action": "zoom_in"},
+    {"phrase": ["fall"], "kind": "fixed", "action": "zoom_out"}
+  ],
+  "cursor": [],
+  "phrases": []
+}

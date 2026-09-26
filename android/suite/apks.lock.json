@@ -1,0 +1,81 @@
+{
+  "source": "https://f-droid.org/repo",
+  "abi": "x86_64",
+  "max_sdk": 35,
+  "apps": [
+    {
+      "role": "video feed / player (YouTube-like)",
+      "package": "org.schabi.newpipe",
+      "name": "NewPipe",
+      "versionCode": 1015,
+      "versionName": "0.29.1",
+      "url": "https://f-droid.org/repo/org.schabi.newpipe_1015.apk",
+      "sha256": "1d66d19eedbab969b1be2e44e0ea35f5f8921cbe83b5c5ac810767ca1a84b7e8",
+      "size": 11507122,
+      "nativecode": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86",
+        "x86_64"
+      ]
+    },
+    {
+      "role": "video player",
+      "package": "org.videolan.vlc",
+      "name": "VLC",
+      "versionCode": 13070108,
+      "versionName": "3.7.1",
+      "url": "https://f-droid.org/repo/org.videolan.vlc_13070108.apk",
+      "sha256": "4a9144fadfd8606cc5c0e9db892fd24846b7b2efeb1630db5377955d1612b119",
+      "size": 49444910,
+      "nativecode": [
+        "x86_64"
+      ]
+    },
+    {
+      "role": "map",
+      "package": "app.organicmaps",
+      "name": "Organic Maps\u30fbOffline Map & GPS",
+      "versionCode": 26082718,
+      "versionName": "2026.08.27-18-FDroid",
+      "url": "https://f-droid.org/repo/app.organicmaps_26082718.apk",
+      "sha256": "c1fc03a8bad4dac3c400c50764a929ec7a07b02ba572336bfdd9e722a4f96519",
+      "size": 64105378,
+      "nativecode": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86",
+        "x86_64"
+      ]
+    },
+    {
+      "role": "photo viewer / gallery",
+      "package": "org.fossify.gallery",
+      "name": "Fossify Gallery",
+      "versionCode": 28,
+      "versionName": "1.13.1",
+      "url": "https://f-droid.org/repo/org.fossify.gallery_28.apk",
+      "sha256": "ae7e699599e81f70e2b82626bb1dfa883fe096cd938387133e123c116e5641d9",
+      "size": 38606538,
+      "nativecode": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86",
+        "x86_64"
+      ]
+    },
+    {
+      "role": "web browser",
+      "package": "org.mozilla.fennec_fdroid",
+      "name": "Fennec F-Droid",
+      "versionCode": 1560010,
+      "versionName": "156.0.0",
+      "url": "https://f-droid.org/repo/org.mozilla.fennec_fdroid_1560010.apk",
+      "sha256": "62cabfbbdd7fbbd00215edf5323010e103e166650028f4e03f413a38a7df7c11",
+      "size": 133327937,
+      "nativecode": [
+        "x86_64"
+      ]
+    }
+  ]
+}

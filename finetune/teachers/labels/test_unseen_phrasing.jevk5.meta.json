@@ -1,0 +1,20 @@
+{
+  "split": "test_unseen_phrasing",
+  "teacher": "jevk5",
+  "repo": "alibiserikbay/JevK5",
+  "revision": "c4f7fdb3aeab5582336406e78d3bef11bf98833d",
+  "temperature": 1.22,
+  "criteria": "text",
+  "kernels": "fla",
+  "limit": 300,
+  "token_budget": 8192,
+  "max_batch": 64,
+  "load_seconds": 10.6,
+  "device": "Radeon 8060S Graphics",
+  "torch": "2.11.0+rocm7.13.0a20260424",
+  "rows_scored": 300,
+  "input_tokens": 200841,
+  "gpu_seconds": 193.4,
+  "rows_per_s": 1.55,
+  "tokens_per_s": 1038
+}

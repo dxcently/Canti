@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Canti</title>
+  <!-- App icon: Canti's teal body and navy visor. The wordmark's C glows on the screen and
+       sends out sound waves in signal orange. -->
+  <defs>
+    <clipPath id="body"><rect x="24" y="24" width="464" height="464" rx="120"/></clipPath>
+  </defs>
+
+  <!-- body, cel shade, glint, ink -->
+  <rect x="24" y="24" width="464" height="464" rx="120" fill="#6DB8A8"/>
+  <rect x="0" y="380" width="512" height="132" fill="#4A9488" clip-path="url(#body)"/>
+  <path d="M51.3 119.2A96 96 0 0 1 119.2 51.3" fill="none" stroke="#DDEBD3" stroke-width="14" stroke-linecap="round"/>
+  <rect x="24" y="24" width="464" height="464" rx="120" fill="none" stroke="#16192B" stroke-width="16"/>
+
+  <!-- visor: cartoon-uneven corners (big on the leading diagonal, small on the other) -->
+  <path d="M178 128H384A40 40 0 0 1 424 168V262A90 90 0 0 1 334 352H128A40 40 0 0 1 88 312V218A90 90 0 0 1 178 128Z"
+        fill="#1D2757" stroke="#16192B" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M111 206.2A68 68 0 0 1 154.7 154.1" fill="none" stroke="#DDEBD3" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+
+  <!-- the C, scaled from the wordmark -->
+  <path transform="translate(166 170) scale(1.4)" fill="#7FE0C9"
+        d="M86 0H44A44 44 0 0 0 0 44V56A44 44 0 0 0 44 100H86V76H44A20 20 0 0 1 24 56V44A20 20 0 0 1 44 24H86Z"/>
+  <!-- sound waves out of the C's mouth -->
+  <g fill="none" stroke-width="13" stroke-linecap="round">
+    <path d="M305.7 194A92 92 0 0 1 305.7 286" stroke="#F6C945"/>
+    <path d="M333.4 178A124 124 0 0 1 333.4 302" stroke="#F2A33A"/>
+    <path d="M361.1 162A156 156 0 0 1 361.1 318" stroke="#D6453D"/>
+  </g>
+
+  <!-- signal lamp -->
+  <rect x="96" y="392" width="92" height="34" rx="17" fill="#F2A33A" stroke="#16192B" stroke-width="10"/>
+</svg>

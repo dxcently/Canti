@@ -1,0 +1,3701 @@
+{
+ "104838": {
+  "note": "free: hums, whistles, talking",
+  "before": {
+   "n": 7,
+   "labels": {
+    "rise": 3,
+    "flat": 3,
+    "fall": 1
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 1039,
+     "what": "steady ~86 Hz hum (1.16 s): should NOT say talking",
+     "event": "1039 rise / talking",
+     "ok": false
+    }
+   ],
+   "events": [
+    [
+     1039,
+     2199,
+     "rise",
+     "talking",
+     87,
+     0.69
+    ],
+    [
+     2599,
+     3499,
+     "flat",
+     "hum",
+     118,
+     1.0
+    ],
+    [
+     3869,
+     4739,
+     "flat",
+     "hum",
+     89,
+     1.0
+    ],
+    [
+     6289,
+     7689,
+     "flat",
+     "hum",
+     183,
+     0.993
+    ],
+    [
+     8129,
+     8589,
+     "rise",
+     "hum",
+     91,
+     1.0
+    ],
+    [
+     9239,
+     9829,
+     "fall",
+     "hum",
+     106,
+     0.898
+    ],
+    [
+     10399,
+     10859,
+     "rise",
+     "hum",
+     97,
+     0.935
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 7,
+   "labels": {
+    "rise": 3,
+    "flat": 3,
+    "fall": 1
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 1039,
+     "what": "steady ~86 Hz hum (1.16 s): should NOT say talking",
+     "event": "1039 rise / talking",
+     "ok": false
+    }
+   ],
+   "events": [
+    [
+     1039,
+     2199,
+     "rise",
+     "talking",
+     87,
+     0.69
+    ],
+    [
+     2599,
+     3499,
+     "flat",
+     "hum",
+     118,
+     1.0
+    ],
+    [
+     3869,
+     4739,
+     "flat",
+     "hum",
+     89,
+     1.0
+    ],
+    [
+     6289,
+     7689,
+     "flat",
+     "hum",
+     183,
+     0.993
+    ],
+    [
+     8129,
+     8589,
+     "rise",
+     "hum",
+     91,
+     1.0
+    ],
+    [
+     9239,
+     9829,
+     "fall",
+     "hum",
+     106,
+     0.898
+    ],
+    [
+     10399,
+     10859,
+     "rise",
+     "hum",
+     97,
+     0.935
+    ]
+   ]
+  }
+ },
+ "104919": {
+  "note": "free (unlabelled)",
+  "before": {
+   "n": 10,
+   "labels": {
+    "rise": 6,
+    "hiss": 1,
+    "fall": 3
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_down"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     679,
+     1219,
+     "rise",
+     "hum",
+     103,
+     0.981
+    ],
+    [
+     2009,
+     2499,
+     "rise",
+     "hum",
+     120,
+     0.959
+    ],
+    [
+     3489,
+     4189,
+     "rise",
+     "hum",
+     120,
+     0.929
+    ],
+    [
+     4359,
+     4619,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     5059,
+     5969,
+     "rise",
+     "hum",
+     94,
+     1.0
+    ],
+    [
+     6539,
+     7019,
+     "rise",
+     "hum",
+     101,
+     0.958
+    ],
+    [
+     7689,
+     8179,
+     "rise",
+     "hum",
+     97,
+     0.959
+    ],
+    [
+     8949,
+     9369,
+     "fall",
+     "hum",
+     165,
+     0.976
+    ],
+    [
+     9679,
+     9959,
+     "fall",
+     "hum",
+     124,
+     0.75
+    ],
+    [
+     10859,
+     11429,
+     "fall",
+     "hum",
+     104,
+     0.667
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 10,
+   "labels": {
+    "rise": 6,
+    "hiss": 1,
+    "fall": 3
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_down"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     679,
+     1249,
+     "rise",
+     "hum",
+     103,
+     0.93
+    ],
+    [
+     2009,
+     2499,
+     "rise",
+     "hum",
+     120,
+     0.959
+    ],
+    [
+     3489,
+     4189,
+     "rise",
+     "hum",
+     120,
+     0.929
+    ],
+    [
+     4359,
+     4619,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     5059,
+     5969,
+     "rise",
+     "hum",
+     94,
+     1.0
+    ],
+    [
+     6539,
+     7019,
+     "rise",
+     "hum",
+     101,
+     0.958
+    ],
+    [
+     7689,
+     8179,
+     "rise",
+     "hum",
+     97,
+     0.959
+    ],
+    [
+     8949,
+     9369,
+     "fall",
+     "hum",
+     165,
+     0.976
+    ],
+    [
+     9679,
+     9959,
+     "fall",
+     "hum",
+     124,
+     0.75
+    ],
+    [
+     10859,
+     11429,
+     "fall",
+     "hum",
+     104,
+     0.667
+    ]
+   ]
+  }
+ },
+ "105004": {
+  "note": "free: hums, whistles, talking",
+  "before": {
+   "n": 6,
+   "labels": {
+    "fall": 1,
+    "pop": 1,
+    "flat": 1,
+    "click": 1,
+    "rise": 2
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 3759,
+     "what": "short spoken syllable: talking is right",
+     "event": "3759 fall / talking",
+     "ok": true
+    }
+   ],
+   "events": [
+    [
+     3759,
+     4329,
+     "fall",
+     "talking",
+     126,
+     0.544
+    ],
+    [
+     5559,
+     5619,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6089,
+     7959,
+     "flat",
+     "hum",
+     121,
+     0.968
+    ],
+    [
+     8989,
+     9049,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9909,
+     10769,
+     "rise",
+     "whistle",
+     1246,
+     0.756
+    ],
+    [
+     10919,
+     11109,
+     "rise",
+     "whistle",
+     1866,
+     1.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 5,
+   "labels": {
+    "fall": 1,
+    "flat": 1,
+    "click": 1,
+    "rise": 2
+   },
+   "actions": [
+    "long_press"
+   ],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 3759,
+     "what": "short spoken syllable: talking is right",
+     "event": "3759 fall / talking",
+     "ok": true
+    }
+   ],
+   "events": [
+    [
+     3759,
+     4329,
+     "fall",
+     "talking",
+     126,
+     0.544
+    ],
+    [
+     6089,
+     7959,
+     "flat",
+     "hum",
+     121,
+     0.968
+    ],
+    [
+     8989,
+     9049,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9909,
+     10769,
+     "rise",
+     "whistle",
+     1246,
+     0.756
+    ],
+    [
+     10919,
+     11109,
+     "rise",
+     "whistle",
+     1866,
+     1.0
+    ]
+   ]
+  }
+ },
+ "105021": {
+  "note": "free (unlabelled)",
+  "before": {
+   "n": 8,
+   "labels": {
+    "fall": 2,
+    "rise": 1,
+    "flat": 5
+   },
+   "actions": [
+    "swipe_down",
+    "swipe_up",
+    "swipe_down",
+    "long_press",
+    "long_press"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1069,
+     1789,
+     "fall",
+     "whistle",
+     1326,
+     0.861
+    ],
+    [
+     2799,
+     3049,
+     "rise",
+     "whistle",
+     1721,
+     0.96
+    ],
+    [
+     4259,
+     4839,
+     "fall",
+     "whistle",
+     1305,
+     0.983
+    ],
+    [
+     5759,
+     6129,
+     "flat",
+     "whistle",
+     1821,
+     0.946
+    ],
+    [
+     6829,
+     8279,
+     "flat",
+     "whistle",
+     1258,
+     0.993
+    ],
+    [
+     9039,
+     10289,
+     "flat",
+     "whistle",
+     1940,
+     0.912
+    ],
+    [
+     11159,
+     11229,
+     "flat",
+     "whistle",
+     746,
+     0.857
+    ],
+    [
+     11409,
+     11499,
+     "flat",
+     "whistle",
+     1328,
+     1.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 8,
+   "labels": {
+    "fall": 2,
+    "rise": 1,
+    "flat": 5
+   },
+   "actions": [
+    "swipe_down",
+    "swipe_up",
+    "swipe_down",
+    "long_press",
+    "long_press"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1069,
+     1789,
+     "fall",
+     "whistle",
+     1326,
+     0.861
+    ],
+    [
+     2799,
+     3049,
+     "rise",
+     "whistle",
+     1721,
+     0.96
+    ],
+    [
+     4259,
+     4839,
+     "fall",
+     "whistle",
+     1305,
+     0.983
+    ],
+    [
+     5759,
+     6129,
+     "flat",
+     "whistle",
+     1821,
+     0.946
+    ],
+    [
+     6829,
+     8279,
+     "flat",
+     "whistle",
+     1258,
+     0.993
+    ],
+    [
+     9039,
+     10289,
+     "flat",
+     "whistle",
+     1940,
+     0.912
+    ],
+    [
+     11159,
+     11229,
+     "flat",
+     "whistle",
+     746,
+     0.857
+    ],
+    [
+     11409,
+     11499,
+     "flat",
+     "whistle",
+     1328,
+     1.0
+    ]
+   ]
+  }
+ },
+ "105053": {
+  "note": "free: whistles, hums",
+  "before": {
+   "n": 10,
+   "labels": {
+    "pop": 1,
+    "rise": 5,
+    "fall": 2,
+    "flat": 2
+   },
+   "actions": [
+    "tap",
+    "swipe_up",
+    "swipe_down",
+    "swipe_up",
+    "swipe_up"
+   ],
+   "tonal_discrete": 1,
+   "checks": [
+    {
+     "t": 989,
+     "what": "top of a rising whistle that starts ~600 ms: must not be a pop/click",
+     "event": "989 pop / mouth sound",
+     "ok": false
+    }
+   ],
+   "events": [
+    [
+     989,
+     1049,
+     "pop",
+     "mouth sound",
+     1795,
+     1.0
+    ],
+    [
+     1809,
+     2089,
+     "rise",
+     "whistle",
+     1046,
+     1.0
+    ],
+    [
+     2869,
+     3399,
+     "fall",
+     "whistle",
+     1350,
+     0.868
+    ],
+    [
+     4139,
+     4449,
+     "rise",
+     "whistle",
+     1167,
+     1.0
+    ],
+    [
+     4739,
+     5239,
+     "flat",
+     "whistle",
+     1305,
+     1.0
+    ],
+    [
+     5839,
+     6799,
+     "flat",
+     "whistle",
+     1880,
+     1.0
+    ],
+    [
+     6989,
+     7819,
+     "rise",
+     "whistle",
+     980,
+     0.554
+    ],
+    [
+     8389,
+     8959,
+     "fall",
+     "whistle",
+     1509,
+     0.842
+    ],
+    [
+     9829,
+     9989,
+     "rise",
+     "whistle",
+     1449,
+     1.0
+    ],
+    [
+     10749,
+     10989,
+     "rise",
+     "hum",
+     375,
+     0.917
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 10,
+   "labels": {
+    "rise": 6,
+    "fall": 2,
+    "flat": 2
+   },
+   "actions": [
+    "swipe_down",
+    "swipe_up",
+    "swipe_up"
+   ],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 989,
+     "what": "top of a rising whistle that starts ~600 ms: must not be a pop/click",
+     "event": "249 rise / talking",
+     "ok": true
+    }
+   ],
+   "events": [
+    [
+     249,
+     1099,
+     "rise",
+     "talking",
+     1615,
+     0.459
+    ],
+    [
+     1699,
+     2089,
+     "rise",
+     "whistle",
+     1022,
+     0.769
+    ],
+    [
+     2869,
+     3399,
+     "fall",
+     "whistle",
+     1350,
+     0.868
+    ],
+    [
+     4139,
+     4449,
+     "rise",
+     "whistle",
+     1167,
+     1.0
+    ],
+    [
+     4739,
+     5239,
+     "flat",
+     "whistle",
+     1305,
+     1.0
+    ],
+    [
+     5839,
+     6799,
+     "flat",
+     "whistle",
+     1880,
+     1.0
+    ],
+    [
+     6989,
+     7819,
+     "rise",
+     "whistle",
+     980,
+     0.554
+    ],
+    [
+     8389,
+     8959,
+     "fall",
+     "whistle",
+     1509,
+     0.842
+    ],
+    [
+     9829,
+     9989,
+     "rise",
+     "whistle",
+     1449,
+     1.0
+    ],
+    [
+     10749,
+     10989,
+     "rise",
+     "hum",
+     375,
+     0.917
+    ]
+   ]
+  }
+ },
+ "105133": {
+  "note": "free: hums, talking",
+  "before": {
+   "n": 10,
+   "labels": {
+    "hiss": 1,
+    "rise": 5,
+    "flat": 3,
+    "fall": 1
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_up"
+   ],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 5129,
+     "what": "spoken syllable: talking is right",
+     "event": "5129 rise / talking",
+     "ok": true
+    },
+    {
+     "t": 6139,
+     "what": "spoken syllable: talking is right",
+     "event": "6139 rise / talking",
+     "ok": true
+    }
+   ],
+   "events": [
+    [
+     549,
+     1299,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     1709,
+     1999,
+     "rise",
+     "whistle",
+     1530,
+     1.0
+    ],
+    [
+     2789,
+     3229,
+     "rise",
+     "whistle",
+     1281,
+     0.955
+    ],
+    [
+     4129,
+     4489,
+     "rise",
+     "whistle",
+     1252,
+     1.0
+    ],
+    [
+     5129,
+     5619,
+     "rise",
+     "talking",
+     209,
+     0.918
+    ],
+    [
+     6139,
+     6569,
+     "rise",
+     "talking",
+     195,
+     0.907
+    ],
+    [
+     7199,
+     8089,
+     "flat",
+     "whistle",
+     1640,
+     1.0
+    ],
+    [
+     8499,
+     8849,
+     "fall",
+     "talking",
+     152,
+     0.943
+    ],
+    [
+     9599,
+     10789,
+     "flat",
+     "hum",
+     118,
+     1.0
+    ],
+    [
+     11349,
+     11519,
+     "flat",
+     "whistle",
+     1652,
+     0.941
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 10,
+   "labels": {
+    "hiss": 1,
+    "rise": 5,
+    "flat": 3,
+    "fall": 1
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_up"
+   ],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 5129,
+     "what": "spoken syllable: talking is right",
+     "event": "5129 rise / talking",
+     "ok": true
+    },
+    {
+     "t": 6139,
+     "what": "spoken syllable: talking is right",
+     "event": "6139 rise / talking",
+     "ok": true
+    }
+   ],
+   "events": [
+    [
+     549,
+     1309,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     1709,
+     1999,
+     "rise",
+     "whistle",
+     1530,
+     1.0
+    ],
+    [
+     2779,
+     3229,
+     "rise",
+     "whistle",
+     1281,
+     0.956
+    ],
+    [
+     4129,
+     4489,
+     "rise",
+     "whistle",
+     1252,
+     1.0
+    ],
+    [
+     5129,
+     5619,
+     "rise",
+     "talking",
+     209,
+     0.918
+    ],
+    [
+     6139,
+     6569,
+     "rise",
+     "talking",
+     195,
+     0.907
+    ],
+    [
+     7199,
+     8089,
+     "flat",
+     "whistle",
+     1640,
+     1.0
+    ],
+    [
+     8499,
+     8849,
+     "fall",
+     "talking",
+     152,
+     0.943
+    ],
+    [
+     9599,
+     10789,
+     "flat",
+     "hum",
+     118,
+     1.0
+    ],
+    [
+     11349,
+     11519,
+     "flat",
+     "whistle",
+     1652,
+     0.941
+    ]
+   ]
+  }
+ },
+ "105534": {
+  "note": "tongue + cheek clicks (no pops) + whistles",
+  "before": {
+   "n": 12,
+   "labels": {
+    "click": 7,
+    "rise": 1,
+    "fall": 2,
+    "flat": 2
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_down",
+    "swipe_down",
+    "long_press",
+    "long_press"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     699,
+     749,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1039,
+     1099,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1379,
+     1419,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1729,
+     1769,
+     "click",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     2789,
+     2819,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3049,
+     3069,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3319,
+     3349,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4469,
+     5099,
+     "rise",
+     "whistle",
+     1131,
+     0.968
+    ],
+    [
+     6309,
+     6819,
+     "fall",
+     "whistle",
+     1571,
+     1.0
+    ],
+    [
+     7639,
+     8089,
+     "fall",
+     "whistle",
+     1770,
+     0.978
+    ],
+    [
+     9359,
+     10109,
+     "flat",
+     "whistle",
+     1215,
+     1.0
+    ],
+    [
+     10749,
+     11519,
+     "flat",
+     "hum",
+     124,
+     1.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 12,
+   "labels": {
+    "click": 7,
+    "rise": 1,
+    "fall": 2,
+    "flat": 2
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_down",
+    "swipe_down",
+    "long_press",
+    "long_press"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     699,
+     749,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1039,
+     1099,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1379,
+     1419,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1729,
+     1769,
+     "click",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     2789,
+     2819,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3049,
+     3069,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3319,
+     3349,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4469,
+     5099,
+     "rise",
+     "whistle",
+     1131,
+     0.968
+    ],
+    [
+     6309,
+     6819,
+     "fall",
+     "whistle",
+     1571,
+     1.0
+    ],
+    [
+     7639,
+     8089,
+     "fall",
+     "whistle",
+     1770,
+     0.978
+    ],
+    [
+     9359,
+     10109,
+     "flat",
+     "whistle",
+     1215,
+     1.0
+    ],
+    [
+     10749,
+     11519,
+     "flat",
+     "hum",
+     124,
+     1.0
+    ]
+   ]
+  }
+ },
+ "105559": {
+  "note": "tongue + cheek clicks (no pops) + whistles",
+  "before": {
+   "n": 18,
+   "labels": {
+    "click": 18
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     509,
+     559,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     689,
+     749,
+     "click",
+     "mouth sound",
+     0,
+     0.333
+    ],
+    [
+     2379,
+     2449,
+     "click",
+     "mouth sound",
+     0,
+     0.286
+    ],
+    [
+     2589,
+     2739,
+     "click",
+     "mouth sound",
+     1086,
+     0.333
+    ],
+    [
+     2839,
+     2889,
+     "click",
+     "mouth sound",
+     0,
+     0.2
+    ],
+    [
+     3079,
+     3129,
+     "click",
+     "mouth sound",
+     0,
+     0.2
+    ],
+    [
+     4719,
+     4789,
+     "click",
+     "mouth sound",
+     0,
+     0.571
+    ],
+    [
+     4909,
+     4979,
+     "click",
+     "mouth sound",
+     0,
+     0.143
+    ],
+    [
+     5829,
+     5899,
+     "click",
+     "mouth sound",
+     0,
+     0.429
+    ],
+    [
+     6099,
+     6139,
+     "click",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     6379,
+     6439,
+     "click",
+     "mouth sound",
+     0,
+     0.167
+    ],
+    [
+     6649,
+     6729,
+     "click",
+     "mouth sound",
+     2033,
+     0.75
+    ],
+    [
+     7709,
+     7749,
+     "click",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     7889,
+     7939,
+     "click",
+     "mouth sound",
+     0,
+     0.6
+    ],
+    [
+     8569,
+     8629,
+     "click",
+     "mouth sound",
+     0,
+     0.333
+    ],
+    [
+     8849,
+     8879,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9079,
+     9099,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9299,
+     9339,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 18,
+   "labels": {
+    "click": 18
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     509,
+     559,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     689,
+     749,
+     "click",
+     "mouth sound",
+     0,
+     0.333
+    ],
+    [
+     2379,
+     2449,
+     "click",
+     "mouth sound",
+     0,
+     0.286
+    ],
+    [
+     2589,
+     2739,
+     "click",
+     "mouth sound",
+     1086,
+     0.333
+    ],
+    [
+     2839,
+     2889,
+     "click",
+     "mouth sound",
+     0,
+     0.2
+    ],
+    [
+     3079,
+     3129,
+     "click",
+     "mouth sound",
+     0,
+     0.2
+    ],
+    [
+     4719,
+     4789,
+     "click",
+     "mouth sound",
+     0,
+     0.571
+    ],
+    [
+     4909,
+     4979,
+     "click",
+     "mouth sound",
+     0,
+     0.143
+    ],
+    [
+     5829,
+     5899,
+     "click",
+     "mouth sound",
+     0,
+     0.429
+    ],
+    [
+     6099,
+     6139,
+     "click",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     6379,
+     6439,
+     "click",
+     "mouth sound",
+     0,
+     0.167
+    ],
+    [
+     6649,
+     6729,
+     "click",
+     "mouth sound",
+     2033,
+     0.75
+    ],
+    [
+     7709,
+     7749,
+     "click",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     7889,
+     7939,
+     "click",
+     "mouth sound",
+     0,
+     0.6
+    ],
+    [
+     8569,
+     8629,
+     "click",
+     "mouth sound",
+     0,
+     0.333
+    ],
+    [
+     8849,
+     8879,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9079,
+     9099,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9299,
+     9339,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ]
+   ]
+  }
+ },
+ "105615": {
+  "note": "tongue + cheek clicks (no pops) + whistles",
+  "before": {
+   "n": 21,
+   "labels": {
+    "click": 21
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     389,
+     409,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     539,
+     559,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1239,
+     1269,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1429,
+     1449,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1609,
+     1629,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1769,
+     1789,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2379,
+     2399,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3109,
+     3139,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3299,
+     3319,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3459,
+     3479,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3629,
+     3649,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4269,
+     4289,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4789,
+     4809,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4959,
+     4979,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     5179,
+     5189,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     5659,
+     5679,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6739,
+     6759,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     7639,
+     7659,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9499,
+     9529,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     10319,
+     10369,
+     "click",
+     "mouth sound",
+     0,
+     0.2
+    ],
+    [
+     11249,
+     11279,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 20,
+   "labels": {
+    "click": 20
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     389,
+     409,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     539,
+     559,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1239,
+     1269,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1429,
+     1449,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1609,
+     1629,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1769,
+     1789,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2379,
+     2399,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3109,
+     3139,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3299,
+     3319,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3459,
+     3479,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3629,
+     3649,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4269,
+     4289,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4789,
+     4809,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4959,
+     4979,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     5179,
+     5189,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     5659,
+     5679,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6739,
+     6759,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9499,
+     9529,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     10319,
+     10369,
+     "click",
+     "mouth sound",
+     0,
+     0.2
+    ],
+    [
+     11249,
+     11279,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ]
+   ]
+  }
+ },
+ "105910": {
+  "note": "6 lip pops, 2 whistles, 1 hum, 2 hisses",
+  "before": {
+   "n": 12,
+   "labels": {
+    "flat": 1,
+    "pop": 5,
+    "fall": 2,
+    "hiss": 3,
+    "arch": 1
+   },
+   "actions": [
+    "swipe_down",
+    "back"
+   ],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 669,
+     "what": "lip pop (70 ms): pop wanted; a non-action is a safe miss",
+     "event": "669 flat / coughing",
+     "ok": false
+    },
+    {
+     "t": 8559,
+     "what": "hiss",
+     "event": "8559 hiss / mouth sound",
+     "ok": true
+    },
+    {
+     "t": 9949,
+     "what": "hiss",
+     "event": "9949 hiss / mouth sound",
+     "ok": true
+    }
+   ],
+   "events": [
+    [
+     669,
+     739,
+     "flat",
+     "coughing",
+     0,
+     0.0
+    ],
+    [
+     1079,
+     1159,
+     "pop",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     1479,
+     1529,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1889,
+     1929,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2279,
+     2319,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2709,
+     2759,
+     "pop",
+     "mouth sound",
+     0,
+     0.4
+    ],
+    [
+     3829,
+     4249,
+     "fall",
+     "whistle",
+     1320,
+     1.0
+    ],
+    [
+     5269,
+     5839,
+     "fall",
+     "whistle",
+     1658,
+     1.0
+    ],
+    [
+     6399,
+     6469,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     7609,
+     8219,
+     "arch",
+     "hum",
+     354,
+     0.934
+    ],
+    [
+     8559,
+     9269,
+     "hiss",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9949,
+     10659,
+     "hiss",
+     "mouth sound",
+     0,
+     0.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 12,
+   "labels": {
+    "flat": 1,
+    "pop": 5,
+    "fall": 2,
+    "hiss": 3,
+    "arch": 1
+   },
+   "actions": [
+    "swipe_down",
+    "back"
+   ],
+   "tonal_discrete": 0,
+   "checks": [
+    {
+     "t": 669,
+     "what": "lip pop (70 ms): pop wanted; a non-action is a safe miss",
+     "event": "669 flat / coughing",
+     "ok": false
+    },
+    {
+     "t": 8559,
+     "what": "hiss",
+     "event": "8559 hiss / mouth sound",
+     "ok": true
+    },
+    {
+     "t": 9949,
+     "what": "hiss",
+     "event": "9949 hiss / mouth sound",
+     "ok": true
+    }
+   ],
+   "events": [
+    [
+     669,
+     739,
+     "flat",
+     "coughing",
+     0,
+     0.0
+    ],
+    [
+     1079,
+     1159,
+     "pop",
+     "mouth sound",
+     0,
+     0.25
+    ],
+    [
+     1479,
+     1529,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1889,
+     1929,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2279,
+     2319,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2709,
+     2759,
+     "pop",
+     "mouth sound",
+     0,
+     0.4
+    ],
+    [
+     3829,
+     4249,
+     "fall",
+     "whistle",
+     1320,
+     1.0
+    ],
+    [
+     5269,
+     5839,
+     "fall",
+     "whistle",
+     1658,
+     1.0
+    ],
+    [
+     6399,
+     6469,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     7609,
+     8219,
+     "arch",
+     "hum",
+     354,
+     0.934
+    ],
+    [
+     8559,
+     9269,
+     "hiss",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9949,
+     10659,
+     "hiss",
+     "mouth sound",
+     0,
+     0.0
+    ]
+   ]
+  }
+ },
+ "105946": {
+  "note": "NEGATIVE: the user meowing 8 times",
+  "before": {
+   "n": 8,
+   "labels": {
+    "arch": 1,
+    "flat": 5,
+    "fall": 1,
+    "pop": 1
+   },
+   "actions": [
+    "long_press",
+    "long_press",
+    "long_press",
+    "long_press",
+    "tap"
+   ],
+   "tonal_discrete": 1,
+   "checks": [],
+   "events": [
+    [
+     1289,
+     1749,
+     "arch",
+     "hum",
+     514,
+     0.978
+    ],
+    [
+     2579,
+     3039,
+     "flat",
+     "hum",
+     391,
+     1.0
+    ],
+    [
+     3989,
+     4399,
+     "flat",
+     "hum",
+     514,
+     0.976
+    ],
+    [
+     5489,
+     5929,
+     "flat",
+     "whistle",
+     607,
+     1.0
+    ],
+    [
+     6949,
+     7379,
+     "fall",
+     "hum",
+     458,
+     0.953
+    ],
+    [
+     8389,
+     8859,
+     "flat",
+     "hum",
+     514,
+     0.957
+    ],
+    [
+     10049,
+     10429,
+     "flat",
+     "hum",
+     558,
+     0.947
+    ],
+    [
+     11489,
+     11519,
+     "pop",
+     "mouth sound",
+     424,
+     1.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 7,
+   "labels": {
+    "arch": 1,
+    "flat": 5,
+    "fall": 1
+   },
+   "actions": [
+    "long_press",
+    "long_press",
+    "long_press",
+    "long_press"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1289,
+     1749,
+     "arch",
+     "hum",
+     514,
+     0.978
+    ],
+    [
+     2579,
+     3039,
+     "flat",
+     "hum",
+     391,
+     1.0
+    ],
+    [
+     3989,
+     4399,
+     "flat",
+     "hum",
+     514,
+     0.976
+    ],
+    [
+     5489,
+     5929,
+     "flat",
+     "whistle",
+     607,
+     1.0
+    ],
+    [
+     6949,
+     7379,
+     "fall",
+     "hum",
+     458,
+     0.953
+    ],
+    [
+     8389,
+     8859,
+     "flat",
+     "hum",
+     514,
+     0.957
+    ],
+    [
+     10049,
+     10429,
+     "flat",
+     "hum",
+     558,
+     0.947
+    ]
+   ]
+  }
+ },
+ "110107": {
+  "note": "NEGATIVE: the user yelling / screaming",
+  "before": {
+   "n": 7,
+   "labels": {
+    "flat": 1,
+    "fall": 3,
+    "rise": 2,
+    "dip": 1
+   },
+   "actions": [
+    "long_press",
+    "swipe_left",
+    "swipe_down",
+    "swipe_up"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     479,
+     1799,
+     "flat",
+     "hum",
+     129,
+     0.909
+    ],
+    [
+     2419,
+     3339,
+     "fall",
+     "hum",
+     582,
+     0.913
+    ],
+    [
+     3899,
+     4889,
+     "rise",
+     "background music",
+     139,
+     0.677
+    ],
+    [
+     5639,
+     6409,
+     "dip",
+     "whistle",
+     699,
+     0.857
+    ],
+    [
+     7219,
+     8069,
+     "fall",
+     "hum",
+     142,
+     0.647
+    ],
+    [
+     9229,
+     9679,
+     "fall",
+     "hum",
+     101,
+     0.933
+    ],
+    [
+     11299,
+     11519,
+     "rise",
+     "hum",
+     498,
+     0.773
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 7,
+   "labels": {
+    "flat": 1,
+    "fall": 3,
+    "rise": 2,
+    "dip": 1
+   },
+   "actions": [
+    "long_press",
+    "swipe_left",
+    "swipe_down",
+    "swipe_up"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     479,
+     1799,
+     "flat",
+     "hum",
+     129,
+     0.909
+    ],
+    [
+     2419,
+     3339,
+     "fall",
+     "hum",
+     582,
+     0.913
+    ],
+    [
+     3899,
+     4889,
+     "rise",
+     "background music",
+     139,
+     0.677
+    ],
+    [
+     5639,
+     6409,
+     "dip",
+     "whistle",
+     699,
+     0.857
+    ],
+    [
+     7219,
+     8069,
+     "fall",
+     "hum",
+     142,
+     0.647
+    ],
+    [
+     9229,
+     9679,
+     "fall",
+     "hum",
+     101,
+     0.933
+    ],
+    [
+     11299,
+     11519,
+     "rise",
+     "hum",
+     498,
+     0.773
+    ]
+   ]
+  }
+ },
+ "124028": {
+  "note": "",
+  "before": {
+   "n": 6,
+   "labels": {
+    "rise": 3,
+    "dip": 2,
+    "hiss": 1
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_left"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1179,
+     3139,
+     "rise",
+     "talking",
+     149,
+     0.893
+    ],
+    [
+     3869,
+     4609,
+     "rise",
+     "hum",
+     97,
+     0.932
+    ],
+    [
+     5079,
+     6299,
+     "dip",
+     "talking",
+     242,
+     0.877
+    ],
+    [
+     7029,
+     7659,
+     "rise",
+     "hum",
+     211,
+     1.0
+    ],
+    [
+     8499,
+     8599,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     10079,
+     11159,
+     "dip",
+     "hum",
+     210,
+     0.991
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 6,
+   "labels": {
+    "rise": 3,
+    "dip": 2,
+    "hiss": 1
+   },
+   "actions": [
+    "swipe_up",
+    "swipe_left"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1179,
+     3139,
+     "rise",
+     "talking",
+     149,
+     0.893
+    ],
+    [
+     3869,
+     4609,
+     "rise",
+     "hum",
+     97,
+     0.932
+    ],
+    [
+     5079,
+     6299,
+     "dip",
+     "talking",
+     242,
+     0.877
+    ],
+    [
+     7029,
+     7659,
+     "rise",
+     "hum",
+     211,
+     1.0
+    ],
+    [
+     8499,
+     8599,
+     "hiss",
+     "background noise",
+     0,
+     0.0
+    ],
+    [
+     10079,
+     11159,
+     "dip",
+     "hum",
+     210,
+     0.991
+    ]
+   ]
+  }
+ },
+ "124053": {
+  "note": "",
+  "before": {
+   "n": 9,
+   "labels": {
+    "dip": 2,
+    "rise": 3,
+    "fall": 3,
+    "flat": 1
+   },
+   "actions": [
+    "swipe_left",
+    "swipe_down"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     539,
+     1479,
+     "dip",
+     "hum",
+     194,
+     0.936
+    ],
+    [
+     2299,
+     2979,
+     "rise",
+     "hum",
+     97,
+     0.868
+    ],
+    [
+     3469,
+     4109,
+     "rise",
+     "hum",
+     100,
+     0.953
+    ],
+    [
+     4959,
+     5669,
+     "fall",
+     "hum",
+     246,
+     1.0
+    ],
+    [
+     6199,
+     6849,
+     "fall",
+     "hum",
+     227,
+     0.969
+    ],
+    [
+     7389,
+     7969,
+     "dip",
+     "hum",
+     187,
+     0.966
+    ],
+    [
+     8599,
+     9149,
+     "fall",
+     "hum",
+     222,
+     0.982
+    ],
+    [
+     10259,
+     10799,
+     "rise",
+     "whistle",
+     1174,
+     1.0
+    ],
+    [
+     11399,
+     11519,
+     "flat",
+     "whistle",
+     2007,
+     0.917
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 9,
+   "labels": {
+    "dip": 2,
+    "rise": 3,
+    "fall": 3,
+    "flat": 1
+   },
+   "actions": [
+    "swipe_left",
+    "swipe_down"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     539,
+     1479,
+     "dip",
+     "hum",
+     194,
+     0.936
+    ],
+    [
+     2299,
+     2979,
+     "rise",
+     "hum",
+     97,
+     0.868
+    ],
+    [
+     3469,
+     4109,
+     "rise",
+     "hum",
+     100,
+     0.953
+    ],
+    [
+     4959,
+     5669,
+     "fall",
+     "hum",
+     246,
+     1.0
+    ],
+    [
+     6199,
+     6849,
+     "fall",
+     "hum",
+     227,
+     0.969
+    ],
+    [
+     7389,
+     7969,
+     "dip",
+     "hum",
+     187,
+     0.966
+    ],
+    [
+     8599,
+     9149,
+     "fall",
+     "hum",
+     222,
+     0.982
+    ],
+    [
+     10259,
+     10799,
+     "rise",
+     "whistle",
+     1174,
+     1.0
+    ],
+    [
+     11399,
+     11519,
+     "flat",
+     "whistle",
+     2007,
+     0.917
+    ]
+   ]
+  }
+ },
+ "124112": {
+  "note": "",
+  "before": {
+   "n": 9,
+   "labels": {
+    "fall": 4,
+    "rise": 5
+   },
+   "actions": [
+    "swipe_down",
+    "swipe_down",
+    "swipe_down",
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_down"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1159,
+     1749,
+     "fall",
+     "whistle",
+     1734,
+     1.0
+    ],
+    [
+     2489,
+     2989,
+     "fall",
+     "whistle",
+     1797,
+     0.96
+    ],
+    [
+     3849,
+     4409,
+     "fall",
+     "whistle",
+     1812,
+     1.0
+    ],
+    [
+     5409,
+     5859,
+     "rise",
+     "whistle",
+     923,
+     0.956
+    ],
+    [
+     6659,
+     7039,
+     "rise",
+     "whistle",
+     983,
+     0.974
+    ],
+    [
+     7709,
+     8099,
+     "rise",
+     "whistle",
+     1423,
+     0.974
+    ],
+    [
+     9119,
+     9249,
+     "rise",
+     "hum",
+     224,
+     1.0
+    ],
+    [
+     9859,
+     10469,
+     "rise",
+     "hum",
+     203,
+     0.967
+    ],
+    [
+     11169,
+     11519,
+     "fall",
+     "hum",
+     235,
+     1.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 9,
+   "labels": {
+    "fall": 4,
+    "rise": 5
+   },
+   "actions": [
+    "swipe_down",
+    "swipe_down",
+    "swipe_down",
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_up",
+    "swipe_down"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1159,
+     1749,
+     "fall",
+     "whistle",
+     1734,
+     1.0
+    ],
+    [
+     2489,
+     2989,
+     "fall",
+     "whistle",
+     1797,
+     0.96
+    ],
+    [
+     3849,
+     4409,
+     "fall",
+     "whistle",
+     1812,
+     1.0
+    ],
+    [
+     5409,
+     5859,
+     "rise",
+     "whistle",
+     923,
+     0.956
+    ],
+    [
+     6659,
+     7039,
+     "rise",
+     "whistle",
+     983,
+     0.974
+    ],
+    [
+     7709,
+     8099,
+     "rise",
+     "whistle",
+     1423,
+     0.974
+    ],
+    [
+     9119,
+     9249,
+     "rise",
+     "hum",
+     224,
+     1.0
+    ],
+    [
+     9859,
+     10469,
+     "rise",
+     "hum",
+     203,
+     0.967
+    ],
+    [
+     11169,
+     11519,
+     "fall",
+     "hum",
+     235,
+     1.0
+    ]
+   ]
+  }
+ },
+ "124244": {
+  "note": "",
+  "before": {
+   "n": 13,
+   "labels": {
+    "rise": 5,
+    "pop": 1,
+    "arch": 2,
+    "fall": 1,
+    "click": 3,
+    "flat": 1
+   },
+   "actions": [
+    "swipe_right",
+    "swipe_right"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     439,
+     999,
+     "rise",
+     "hum",
+     108,
+     0.946
+    ],
+    [
+     1499,
+     2029,
+     "rise",
+     "hum",
+     107,
+     0.981
+    ],
+    [
+     2679,
+     2949,
+     "rise",
+     "hum",
+     207,
+     0.926
+    ],
+    [
+     3619,
+     4059,
+     "rise",
+     "hum",
+     100,
+     0.75
+    ],
+    [
+     4609,
+     5039,
+     "rise",
+     "hum",
+     103,
+     0.884
+    ],
+    [
+     5309,
+     5339,
+     "pop",
+     "mouth sound",
+     150,
+     1.0
+    ],
+    [
+     6119,
+     6429,
+     "arch",
+     "hum",
+     178,
+     0.839
+    ],
+    [
+     7299,
+     7659,
+     "arch",
+     "hum",
+     171,
+     0.889
+    ],
+    [
+     8679,
+     9069,
+     "fall",
+     "whistle",
+     1443,
+     1.0
+    ],
+    [
+     9629,
+     9689,
+     "click",
+     "mouth sound",
+     2204,
+     0.833
+    ],
+    [
+     9819,
+     9949,
+     "flat",
+     "talking",
+     1110,
+     0.385
+    ],
+    [
+     10769,
+     10829,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     11019,
+     11099,
+     "click",
+     "mouth sound",
+     1967,
+     0.625
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 12,
+   "labels": {
+    "rise": 5,
+    "arch": 2,
+    "fall": 1,
+    "click": 3,
+    "flat": 1
+   },
+   "actions": [
+    "swipe_right",
+    "swipe_right"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     439,
+     999,
+     "rise",
+     "hum",
+     108,
+     0.946
+    ],
+    [
+     1499,
+     2029,
+     "rise",
+     "hum",
+     107,
+     0.981
+    ],
+    [
+     2679,
+     2949,
+     "rise",
+     "hum",
+     207,
+     0.926
+    ],
+    [
+     3619,
+     4059,
+     "rise",
+     "hum",
+     100,
+     0.75
+    ],
+    [
+     4609,
+     5039,
+     "rise",
+     "hum",
+     103,
+     0.884
+    ],
+    [
+     6119,
+     6429,
+     "arch",
+     "hum",
+     178,
+     0.839
+    ],
+    [
+     7299,
+     7659,
+     "arch",
+     "hum",
+     171,
+     0.889
+    ],
+    [
+     8679,
+     9069,
+     "fall",
+     "whistle",
+     1443,
+     1.0
+    ],
+    [
+     9629,
+     9689,
+     "click",
+     "mouth sound",
+     2204,
+     0.833
+    ],
+    [
+     9819,
+     9949,
+     "flat",
+     "talking",
+     1110,
+     0.385
+    ],
+    [
+     10769,
+     10829,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     11019,
+     11099,
+     "click",
+     "mouth sound",
+     1967,
+     0.625
+    ]
+   ]
+  }
+ },
+ "124259": {
+  "note": "",
+  "before": {
+   "n": 24,
+   "labels": {
+    "click": 18,
+    "flat": 1,
+    "hiss": 1,
+    "pop": 4
+   },
+   "actions": [
+    "tap"
+   ],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1039,
+     1059,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1219,
+     1239,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2059,
+     2129,
+     "flat",
+     "coughing",
+     0,
+     0.0
+    ],
+    [
+     2239,
+     2249,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2389,
+     2429,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3129,
+     3139,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3289,
+     3389,
+     "hiss",
+     "background noise",
+     0,
+     0.1
+    ],
+    [
+     3919,
+     3939,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4159,
+     4169,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4349,
+     4379,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4889,
+     4929,
+     "click",
+     "mouth sound",
+     0,
+     0.75
+    ],
+    [
+     5069,
+     5109,
+     "click",
+     "mouth sound",
+     0,
+     0.5
+    ],
+    [
+     5819,
+     5839,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     5989,
+     6009,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6139,
+     6159,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6759,
+     6819,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6939,
+     6999,
+     "click",
+     "mouth sound",
+     2119,
+     0.667
+    ],
+    [
+     7399,
+     7419,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     7589,
+     7609,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     7759,
+     7779,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9259,
+     9299,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9789,
+     9829,
+     "pop",
+     "mouth sound",
+     718,
+     1.0
+    ],
+    [
+     10339,
+     10369,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     10879,
+     10919,
+     "pop",
+     "mouth sound",
+     0,
+     0.0
+    ]
+   ]
+  },
+  "tuned": {
+   "n": 19,
+   "labels": {
+    "click": 16,
+    "flat": 2,
+    "hiss": 1
+   },
+   "actions": [],
+   "tonal_discrete": 0,
+   "checks": [],
+   "events": [
+    [
+     1039,
+     1059,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     1219,
+     1239,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     2059,
+     2129,
+     "flat",
+     "coughing",
+     0,
+     0.0
+    ],
+    [
+     2389,
+     2429,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     3289,
+     3389,
+     "hiss",
+     "background noise",
+     0,
+     0.1
+    ],
+    [
+     3919,
+     3939,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4159,
+     4169,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4349,
+     4379,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     4889,
+     4929,
+     "click",
+     "mouth sound",
+     0,
+     0.75
+    ],
+    [
+     5069,
+     5109,
+     "click",
+     "mouth sound",
+     0,
+     0.5
+    ],
+    [
+     5819,
+     5839,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     5989,
+     6009,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6139,
+     6159,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6759,
+     6819,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     6939,
+     6999,
+     "click",
+     "mouth sound",
+     2119,
+     0.667
+    ],
+    [
+     7399,
+     7419,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     7589,
+     7609,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     7759,
+     7779,
+     "click",
+     "mouth sound",
+     0,
+     0.0
+    ],
+    [
+     9789,
+     9829,
+     "flat",
+     "hum",
+     718,
+     1.0
+    ]
+   ]
+  }
+ }
+}

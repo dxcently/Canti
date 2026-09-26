@@ -1,0 +1,98 @@
+{
+ "about": "Regression cases from the user's own live recordings (extractor/recordings/live-20260926-<session>/session.wav, private, never copied). Ground truth confirmed by the user on 2026-09-26. Times are the event span as recorded (ms from the session start); a case matches the replayed event that overlaps it most. tests/test_live_cases.py skips a case whose WAV is missing.",
+ "cases": [
+  {
+   "session": "124112",
+   "t_start_ms": 1159,
+   "t_end_ms": 1749,
+   "expected_label": "arch",
+   "what": "whistle arch: short early rise (~1.3 st), longer fall (~6 st)",
+   "status": "open",
+   "why_open": "open: asymmetric whistle arch (small early rise, bigger fall); by the extractor's rule (hump >= |net|) and the wiki's (peak >= 4 st above both ends) it is a fall. arch_ratio 0.5 fixes 1 of 4 and flips other live contours; see the extractor README 'Known weaknesses'. Per-user: enroll a gesture arch."
+  },
+  {
+   "session": "124112",
+   "t_start_ms": 2489,
+   "t_end_ms": 2989,
+   "expected_label": "arch",
+   "what": "whistle arch, same shape",
+   "status": "open",
+   "why_open": "open: asymmetric whistle arch (small early rise, bigger fall); by the extractor's rule (hump >= |net|) and the wiki's (peak >= 4 st above both ends) it is a fall. arch_ratio 0.5 fixes 1 of 4 and flips other live contours; see the extractor README 'Known weaknesses'. Per-user: enroll a gesture arch."
+  },
+  {
+   "session": "124112",
+   "t_start_ms": 3849,
+   "t_end_ms": 4409,
+   "expected_label": "arch",
+   "what": "whistle arch, same shape",
+   "status": "open",
+   "why_open": "open: asymmetric whistle arch (small early rise, bigger fall); by the extractor's rule (hump >= |net|) and the wiki's (peak >= 4 st above both ends) it is a fall. arch_ratio 0.5 fixes 1 of 4 and flips other live contours; see the extractor README 'Known weaknesses'. Per-user: enroll a gesture arch."
+  },
+  {
+   "session": "124244",
+   "t_start_ms": 8679,
+   "t_end_ms": 9069,
+   "expected_label": "arch",
+   "what": "whistle arch whose rise (+2.8 st) happens in the quiet onset",
+   "status": "open",
+   "why_open": "open: asymmetric whistle arch (small early rise, bigger fall); by the extractor's rule (hump >= |net|) and the wiki's (peak >= 4 st above both ends) it is a fall. arch_ratio 0.5 fixes 1 of 4 and flips other live contours; see the extractor README 'Known weaknesses'. Per-user: enroll a gesture arch."
+  },
+  {
+   "session": "124244",
+   "t_start_ms": 6119,
+   "t_end_ms": 6429,
+   "expected_label": "arch",
+   "what": "hum arch (already right)"
+  },
+  {
+   "session": "124244",
+   "t_start_ms": 7299,
+   "t_end_ms": 7659,
+   "expected_label": "arch",
+   "what": "hum arch (already right)"
+  },
+  {
+   "session": "124244",
+   "t_start_ms": 5309,
+   "t_end_ms": 5339,
+   "expected_label": "pop",
+   "what": "genuine lip pop"
+  },
+  {
+   "session": "124259",
+   "t_start_ms": 9259,
+   "t_end_ms": 9299,
+   "expected_label": "click",
+   "what": "soft tongue click (onset flux 1.6 dB, peak centroid ~1.1 kHz)",
+   "status": "open",
+   "why_open": "open: this user's soft tongue click is spectrally like their own lip pops (peak centroid 0.8-1.3 kHz vs 0.6-0.9 kHz); no general feature separates them on Deeply Nonverbal. Per-user: enroll a gesture click."
+  },
+  {
+   "session": "124259",
+   "t_start_ms": 9789,
+   "t_end_ms": 9829,
+   "expected_label": "click",
+   "what": "soft tongue click",
+   "status": "open",
+   "why_open": "open: this user's soft tongue click is spectrally like their own lip pops (peak centroid 0.8-1.3 kHz vs 0.6-0.9 kHz); no general feature separates them on Deeply Nonverbal. Per-user: enroll a gesture click."
+  },
+  {
+   "session": "124259",
+   "t_start_ms": 10339,
+   "t_end_ms": 10369,
+   "expected_label": "click",
+   "what": "soft tongue click",
+   "status": "open",
+   "why_open": "open: this user's soft tongue click is spectrally like their own lip pops (peak centroid 0.8-1.3 kHz vs 0.6-0.9 kHz); no general feature separates them on Deeply Nonverbal. Per-user: enroll a gesture click."
+  },
+  {
+   "session": "124259",
+   "t_start_ms": 10879,
+   "t_end_ms": 10919,
+   "expected_label": "click",
+   "what": "soft tongue click",
+   "status": "open",
+   "why_open": "open: this user's soft tongue click is spectrally like their own lip pops (peak centroid 0.8-1.3 kHz vs 0.6-0.9 kHz); no general feature separates them on Deeply Nonverbal. Per-user: enroll a gesture click."
+  }
+ ]
+}
