@@ -256,7 +256,7 @@ Which pin lands where (checked against the official Pico 2 W pinout, which is dr
 - **Column 0 (left row): pins 40–21, going up from the USB end. Pin *P* is in row 40 − *P*.** So pin 40 (VBUS) = row 0, pin 39 (VSYS) = row 1, pin 38 (GND) = row 2, pin 36 (3V3) = row 4, pin 26 = row 14, pin 25 = row 15, pin 24 = row 16, pin 23 (GND) = row 17.
 - Before soldering, turn the Pico over and check: **GP0 (pin 1) must be at the bottom of column 7**, next to the USB socket, and **VBUS (pin 40) at the bottom of column 0**. This only holds with the chips facing up. A Pico mounted chips-down is mirrored: pins 1–20 would then be in column 0, and everything below would be wrong.
 
-**The parts** (the template marks their centres):
+**The parts** (the template marks their centres; it also marks the mic header, and a circle under the lid's mic where nothing on the board may be taller than 4 mm):
 
 | Part | Centre | Legs | Notes |
 |---|---|---|---|
@@ -273,8 +273,12 @@ Which pin lands where (checked against the official Pico 2 W pinout, which is dr
 | LED short leg (col 14, row 16) | Pico pin 18 (col 7, row 17) | LED − to GND |
 | button leg col 12, row 12 | Pico pin 19 (col 7, row 18) | button signal (GP14) |
 | button leg col 14, row 9 (the **diagonal** one) | Pico pin 18 (col 7, row 17) | button to GND |
-| mic SCK / WS / SD | Pico pin 24 (col 0, row 16) / 25 (row 15) / 26 (row 14) | six short wires to the mic module in the case's pocket |
-| mic VDD | Pico pin 36 (col 0, row 4) | 3.3 V, **not** pin 39 or 40 (rows 1 and 0) |
-| mic GND and L/R | Pico pin 38 (col 0, row 2) | ground |
+| mic header, col 9 row 3 | Pico pin 3 (col 7, row 2) | GND |
+| mic header, col 9 row 4 | Pico pin 36 (col 0, row 4) | 3.3 V, **not** pin 39 or 40 (rows 1 and 0) |
+| mic header, col 9 row 5 | Pico pin 26 (col 0, row 14) | SD (GP20) |
+| mic header, col 9 row 6 | Pico pin 25 (col 0, row 15) | WS (GP19) |
+| mic header, col 9 row 7 | Pico pin 24 (col 0, row 16) | SCK (GP18) |
 
-Before you plug in, test with a multimeter (continuity): button leg col 12/row 12 to pin 19 only; pin 18 to both the LED's short leg and the button's diagonal leg; nothing touches rows 0 and 1 of column 0. Then run Step 3's checks again.
+**The microphone lives in the case lid**, not on the protoboard. The round INMP441 module clips into a pocket on the inside of the lid, sound hole towards the lid. Five wires are soldered straight into its pads (VDD, GND, SD, WS, SCK; **L/R is bridged to GND on the module**). They end in female Dupont plugs, best combined in one 1×5 housing. The plug goes onto a **5-pin right-angle male header** soldered in **column 9, rows 3–7** (pins in order GND, 3V3, SD, WS, SCK from row 3 up), lying flat and pointing to the right. So the lid comes off whole by unplugging it. Buying list, the pad-by-pad table and the step-by-step assembly are in `hardware/case/README.md`, *The microphone*.
+
+Before you plug in, test with a multimeter (continuity): button leg col 12/row 12 to pin 19 only; pin 18 to both the LED's short leg and the button's diagonal leg; each mic header pin (col 9, rows 3–7) to its Pico pin only, and rows 3 and 4 not to each other; nothing touches rows 0 and 1 of column 0. Then run Step 3's checks, and the microphone checklist with the mic plugged onto the header.

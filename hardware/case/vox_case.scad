@@ -1,15 +1,20 @@
 // VOX necklace case: parametric enclosure for the 5x7 cm protoboard + Pico 2 W.
 //
-// Worn as a pendant: the back (body side) carries the mic port, the front lid carries
-// the button and the status LED, the cord goes through one loop at the top centre,
-// and the USB cable to the power bank leaves at the bottom, zip-tied to a tab.
+// Worn as a pendant, lid against the chest (the mic hole faces the body; a small weight at the
+// bottom keeps it from flipping). The lid carries the button hole, the LED hole and the mic (the
+// INMP441 module clips into a pocket on the inside of the lid, sound hole over the lid's
+// acoustic hole, and a 5-wire cable plugs onto a right-angle header on the protoboard, so
+// the lid comes off whole), the cord goes through one loop at the top centre, and the USB
+// cable to the power bank leaves at the bottom, zip-tied to a tab. The back is closed.
 //
-// Frame: board coordinates, looking at the component side (the front). x = across the
+// Frame: board coordinates, looking at the component side (the lid side). x = across the
 // 50 mm width, y = up the 70 mm length (y = 0 is the USB end, y = 70 the top), z = 0 is
 // the outer back face. All dimensions in mm.
 //
 // Render one part:   openscad -D 'part="base"' -o out/base.stl vox_case.scad
-// Parts: "assembly" (preview), "base", "lid", "plunger", "fit_test" (short base slice), "layout" (2D, 1:1 SVG template)
+// Parts: "assembly" (preview), "base", "lid", "plunger", "mic_clip" (C-ring that holds the mic),
+//        "fit_test" (short base slice), "mic_test" (the lid's mic pocket on a small plate),
+//        "layout" (2D, 1:1 SVG template)
 
 part = "assembly";
 
@@ -18,7 +23,8 @@ board_w = 50;       // protoboard width (sold as 5x7 cm, 18x24 holes)
 board_l = 70;       // protoboard length
 board_t = 1.6;      // protoboard thickness
 above = 10;         // tallest thing above the board top (Pico on headers, bent LED)
-under_gap = 4;      // space under the board: solder tails and the mic module
+under_gap = 4;      // space under the board: solder tails and the wires (the mic no longer lives here;
+                    // ~3 would do, but 4 is what was printed and fits, so it stays)
 pico_standoff = 2.5;// Pico underside above the board top (2.5 = soldered on male headers)
 
 // --- case ----------------------------------------------------------------------------
@@ -65,16 +71,54 @@ flange_t = 1.0;
 plunger_out = 1.5;  // how far the plunger stands proud of the lid
 led_hole = 5.3;     // 5 mm blue status LED
 
-// --- mic: module sits in a pocket on the back wall, wired to the board with short leads
-mic_x = 32;         // under the board, beside the Pico's far end (no solder tails there)
-mic_y = 60;         // pocket must stay clear of the top inner wall (y = 70.5)
-mic_d = 14.2;       // INMP441 breakout (round); set mic_square = true for square modules
-mic_square = false;
-mic_ring = 1.2;     // pocket wall thickness
-mic_ring_h = 2.0;   // pocket wall height
-mic_port_d = 2.0;   // acoustic hole through the back wall
-cloth_d = 11;       // outside recess for a fabric/foam disc against rubbing noise
+// --- mic: the round INMP441 breakout, clipped into a pocket on the INSIDE of the lid ------
+// Module (see README.md for the sources): a 14 mm round PCB, 6 pad holes in two rows of 3
+// (2.54 mm pitch, rows 7.62 mm apart), the sound hole through the PCB at the centre on the
+// side with the pin labels, and the MEMS chip on the other side. It sits LABEL SIDE (sound
+// hole) TOWARDS THE LID, chip side into the case:
+//   lid plate | foam ring around the hole (squeezed to mic_seat_h) | module | clip ring
+// A printed seat ring at the rim sets the gap, so the pads' solder bumps never touch the
+// lid; the foam ring seals the port to the lid's hole, so the mic hears the outside and
+// not the case cavity; a printed C-ring (part "mic_clip") snaps into a groove in the
+// pocket wall and holds the module. The 5 wires leave the chip side straight into the case.
+mic_x = 36.43;      // lid position (= hole column 13, same line as the button and the LED)
+mic_y = 60.4;       // clear of the y = 52 band groove, the LED and the Pico's antenna end
+mic_d = 14.0;       // module PCB diameter
+mic_pcb_t = 1.0;    // module PCB thickness: MEASURE; the clip groove is placed for this (+0.05)
+mic_pad_r = 5.4;    // the pads and their solder reach this far from the centre
+mic_seat_h = 1.2;   // lid-to-module gap = squeezed foam; solder bumps on the label side must stay under this
+mic_port_d = 2.0;   // acoustic hole through the lid
+mic_wall = 1.6;     // pocket wall
+mic_bore = mic_d + 0.4;
+mic_groove = 0.65;  // radial depth of the clip groove in the pocket wall
+mic_clip_t = 1.0;   // clip ring thickness
+mic_clip_id = 11.8; // clip ring inner diameter: bears on the module's rim, clear of the pads
+mic_clip_gap = 4.5; // opening of the C, lets it squeeze through the bore
+mic_lip = 0.9;      // pocket wall below the groove, holds the clip
+// foam ring (not printed): 2 mm EVA craft foam or foam tape, 5 mm outside, 2.5 mm hole,
+// squeezed from 2 mm to mic_seat_h
+cloth_d = 10;       // outside recess for a fabric/foam disc against wind and rubbing noise
 cloth_depth = 0.6;
+
+// --- mic cable strain relief on the lid: a short open channel ~1 cm from the pads. Put a
+// blob of hot glue over the wires in it, or a small zip tie through the two tunnels at its
+// floor and around the walls and the wires, so flexing happens here and not at the pads.
+relief_c = [44, 47];    // centre; the wires run along y through it
+relief_len = 6;
+relief_in = 4.5;        // inside width: 5 jumper wires in a bundle
+relief_wall = 1.0;
+relief_h = 3.5;
+relief_tunnel = [3.0, 1.4];  // zip-tie tunnels through both walls at the lid face (along y, height)
+
+// --- mic connector on the protoboard: a 5-pin RIGHT-ANGLE male header, plug pointing +x,
+// so the female Dupont housing lies flat on the board (a vertical one is ~14 mm tall and
+// does not fit under the lid). Pins in hole column hdr_col, rows hdr_row0 .. hdr_row0 + 4.
+hdr_col = 9;        // one free column between it and the Pico's pin row (column 7)
+hdr_row0 = 3;       // rows 3..7: below the button, above the USB end
+hdr_pins = ["GND", "3V3", "SD", "WS", "SCK"];   // row hdr_row0 upwards; see README for the wiring
+plug_reach = 16;    // from the header's pins to the back of the Dupont housing (body ~1.5 + housing 14)
+plug_h = 3.0;       // housing height above the board
+plug_bend = 6;      // room behind the housing for the wires to bend up
 
 // --- necklace loop: one bail at the top centre; the cord runs side to side through it,
 // parallel to the face, so the case hangs flat facing forward instead of turning sideways
@@ -113,6 +157,26 @@ ox = -fit - wall;                           // outer corner in board coordinates
 oy = -fit - wall;
 buttons = [[hx(button_col), hy(b1_row)]];
 led = [hx(button_col), hy(led_row)];
+mic_groove_d0 = mic_seat_h + mic_pcb_t + 0.05;              // depths below the lid's inner face
+mic_groove_d1 = mic_groove_d0 + mic_clip_t + 0.2;
+mic_pocket_d = mic_groove_d1 + mic_lip;                     // pocket wall depth
+mic_pocket_od = mic_bore + 2 * mic_wall;
+mic_clip_od = mic_bore + 2 * mic_groove - 0.3;
+hdr_x = hx(hdr_col);
+hdr_y0 = hy(hdr_row0);
+hdr_y1 = hy(hdr_row0 + len(hdr_pins) - 1);
+
+// sanity checks: fail the render instead of printing a bad part
+for (y = band_ys) assert(abs(mic_y - y) >= band_w / 2 + cloth_d / 2 + 0.5, "mic hole/recess crosses a rubber-band groove");
+assert(mic_x + mic_pocket_od / 2 <= board_w - post - 0.5, "mic pocket hits a lid corner post");
+assert(mic_y + mic_pocket_od / 2 <= board_l + fit - lid_fit, "mic pocket sticks out of the lid skirt");
+assert(mic_y - mic_pocket_od / 2 >= led[1] + led_hole / 2 + 1, "mic pocket hits the LED");
+assert(mic_clip_id / 2 >= mic_pad_r + 0.3, "mic clip ring would press on the pads");
+assert(relief_c[0] - relief_in / 2 - relief_wall >= led[0] + led_hole / 2 + 1.5, "strain relief too close to the LED hole");
+assert(relief_c[0] + relief_in / 2 + relief_wall <= board_w + fit - lid_fit - 1.2 - 1.2, "no room for a zip tie between the strain relief and the skirt");
+assert(hdr_x - 1.3 > pico_x + pico_w, "mic header under the Pico");
+assert(hdr_x + plug_reach + plug_bend <= board_w + fit, "no room behind the mic plug for the wires to bend");
+assert(hdr_y1 + 1.5 < buttons[0][1] - switch_size / 2, "mic plug hits the button");
 
 module rrect(x, y, w, l, r) {
     translate([x, y]) offset(r) offset(-r) square([w, l]);
@@ -173,18 +237,9 @@ module base() {
             corner_posts(back_t - 0.01, under_gap + 0.01);
             bail();
             if (cable_tie) tie_tab();
-            // mic pocket
-            translate([mic_x, mic_y, back_t - 0.01])
-                linear_extrude(mic_ring_h)
-                    difference() {
-                        mic_shape(mic_d + 0.4 + 2 * mic_ring);
-                        mic_shape(mic_d + 0.4);
-                    }
         }
         usb_notch();
         band_grooves();
-        translate([mic_x, mic_y, -1]) cylinder(d = mic_port_d, h = back_t + 2);
-        translate([mic_x, mic_y, -1]) cylinder(d = cloth_d, h = cloth_depth + 1);
     }
 }
 
@@ -200,8 +255,39 @@ module band_grooves() {
             }
 }
 
-module mic_shape(d) {
-    if (mic_square) square(d, center = true); else circle(d = d);
+// The mic pocket on the inside of the lid: wall with the clip groove, and the seat ring.
+module mic_pocket() {
+    translate([mic_x, mic_y, base_h - mic_pocket_d]) difference() {
+        cylinder(d = mic_pocket_od, h = mic_pocket_d + 0.01);
+        translate([0, 0, -1]) cylinder(d = mic_bore, h = mic_pocket_d + 2);
+        // clip groove
+        translate([0, 0, mic_pocket_d - mic_groove_d1]) cylinder(d = mic_bore + 2 * mic_groove, h = mic_groove_d1 - mic_groove_d0);
+        // lead-in chamfer at the mouth, for pushing the clip in
+        translate([0, 0, -0.01]) cylinder(d1 = mic_bore + 1.0, d2 = mic_bore, h = 0.5);
+    }
+    // seat ring: the module's rim rests here, mic_seat_h below the lid
+    translate([mic_x, mic_y, base_h - mic_seat_h]) difference() {
+        cylinder(d = mic_bore + 0.2, h = mic_seat_h + 0.01);
+        translate([0, 0, -1]) cylinder(r = mic_pad_r + 0.4, h = mic_seat_h + 2);
+    }
+}
+
+// Acoustic hole through the lid, and the outside recess for the fabric disc.
+module mic_holes() {
+    translate([mic_x, mic_y, base_h - 1]) cylinder(d = mic_port_d, h = lid_t + 2, $fn = 24);
+    translate([mic_x, mic_y, base_h + lid_t - cloth_depth]) cylinder(d = cloth_d, h = cloth_depth + 1);
+}
+
+// Strain relief: two short walls with zip-tie tunnels at the lid face.
+module strain_relief() {
+    difference() {
+        for (s = [-1, 1])
+            translate([relief_c[0] + s * (relief_in + relief_wall) / 2 - relief_wall / 2,
+                       relief_c[1] - relief_len / 2, base_h - relief_h])
+                cube([relief_wall, relief_len, relief_h + 0.01]);
+        translate([relief_c[0] - relief_in, relief_c[1] - relief_tunnel[0] / 2, base_h - relief_tunnel[1]])
+            cube([2 * relief_in, relief_tunnel[0], relief_tunnel[1] + 0.5]);
+    }
 }
 
 module lid() {
@@ -215,11 +301,37 @@ module lid() {
                         inner2d(lid_fit + 1.2);
                     }
             corner_posts(board_top, base_h - board_top + 0.01);
+            mic_pocket();
+            strain_relief();
         }
         usb_notch();
         band_grooves();
         for (b = buttons) translate([b[0], b[1], base_h - 1]) cylinder(d = plunger_hole, h = lid_t + 2);
         translate([led[0], led[1], base_h - 1]) cylinder(d = led_hole, h = lid_t + 2);
+        mic_holes();
+    }
+}
+
+// C-shaped clip ring: squeeze it, push it into the pocket over the module until it snaps
+// into the groove. Prints flat.
+module mic_clip() {
+    linear_extrude(mic_clip_t) difference() {
+        circle(d = mic_clip_od);
+        circle(d = mic_clip_id);
+        translate([0, -mic_clip_gap / 2]) square([mic_clip_od, mic_clip_gap]);
+    }
+}
+
+// Print-in-minutes check of the mic pocket: the pocket, the hole and the recess on a small
+// plate. Fit the foam ring, the module and the clip into it before printing the whole lid.
+module mic_test() {
+    s = mic_pocket_od + 4;
+    difference() {
+        union() {
+            translate([mic_x - s / 2, mic_y - s / 2, base_h]) cube([s, s, lid_t]);
+            mic_pocket();
+        }
+        mic_holes();
     }
 }
 
@@ -247,14 +359,27 @@ module layout() {
         square(switch_size - 0.8, center = true);
     }
     translate(led) difference() { circle(d = 5); circle(d = 4.2); }
-    // mic sits under the board (dashed-style marker: ring only)
-    translate([mic_x, mic_y]) difference() { mic_shape(mic_d); mic_shape(mic_d - 0.5); }
+    // mic header: 5 pins (filled rings) in column hdr_col, and where its plug lies
+    for (i = [0 : len(hdr_pins) - 1]) translate([hdr_x, hy(hdr_row0 + i)]) {
+        difference() { circle(d = 1.9, $fn = 16); circle(d = 0.9, $fn = 16); }
+        translate([-1.6, -0.55]) text(hdr_pins[i], size = 1.3, halign = "right");
+    }
+    translate([hdr_x + 1.3, hdr_y0 - 1.5]) difference() {
+        square([plug_reach - 1.3, hdr_y1 - hdr_y0 + 3]);
+        translate([0.3, 0.3]) square([plug_reach - 1.9, hdr_y1 - hdr_y0 + 2.4]);
+    }
+    translate([hdr_x + 3, (hdr_y0 + hdr_y1) / 2 + 0.3]) text("mic plug, flat", size = 1.5);
+    translate([hdr_x + 3, (hdr_y0 + hdr_y1) / 2 - 1.8]) text("(right-angle header)", size = 1.05);
+    // where the mic hangs from the lid: keep the board under it lower than 4 mm
+    translate([mic_x, mic_y]) difference() { circle(d = mic_pocket_od); circle(d = mic_pocket_od - 0.4); }
+    translate([mic_x, mic_y + 1]) text("mic is in the lid", size = 1.4, halign = "center");
+    translate([mic_x, mic_y - 1.2]) text("above this circle:", size = 1.2, halign = "center");
+    translate([mic_x, mic_y - 3]) text("nothing over 4 mm", size = 1.2, halign = "center");
     // labels
     translate([pico_x + 3, pico_y + 25]) text("PICO", size = 3.5);
     translate([pico_x + 2, pico_y + 2]) text("USB", size = 2.5);
     translate([buttons[0][0] + 4, buttons[0][1] - 1]) text("button", size = 2.2);
     translate([led[0] + 4, led[1] - 1]) text("LED", size = 2.2);
-    translate([mic_x - 5, mic_y - 1]) text("mic (under)", size = 1.8);
     // 40 mm scale bar below the board: measure it after printing
     translate([0, -6]) square([40, 0.6]);
     translate([0, -10]) text("40 mm check", size = 2.5);
@@ -264,6 +389,8 @@ if (part == "base") base();
 else if (part == "lid") translate([0, 0, base_h + lid_t]) rotate([180, 0, 0]) lid();
 else if (part == "plunger") plunger();
 else if (part == "layout") layout();
+else if (part == "mic_clip") mic_clip();
+else if (part == "mic_test") translate([0, 0, base_h + lid_t]) rotate([180, 0, 0]) mic_test();   // outer face down, like the lid
 else if (part == "fit_test") intersection() {   // bottom slice of the base: checks the board fit fast
     base();
     translate([ox - 20, oy - 20, -1]) cube([out_w + 40, out_l + 40, board_top + 1.5 + 1]);
@@ -278,5 +405,19 @@ else {
     for (b = buttons) color("Black") translate([b[0] - 3, b[1] - 3, board_top]) cube([6, 6, switch_h]);
     for (b = buttons) color("Orange") translate([b[0], b[1], board_top + switch_h + 25]) plunger();
     color("White") translate([led[0], led[1], board_top]) cylinder(d = 5, h = 8.6);
-    color("Purple") translate([mic_x, mic_y, back_t]) linear_extrude(1.6) mic_shape(mic_d);
+    // mic connector: right-angle header body and the Dupont plug lying flat on the board
+    color("Black") translate([hdr_x - 1, hdr_y0 - 1.27, board_top]) cube([2.5, hdr_y1 - hdr_y0 + 2.54, 2.54]);
+    color("DimGray") translate([hdr_x + 1.5, hdr_y0 - 1.27, board_top + 0.1]) cube([plug_reach - 1.5, hdr_y1 - hdr_y0 + 2.54, plug_h - 0.1]);
+    // mic in the lid (lifted with it): foam ring, module (label side up against the lid), clip
+    translate([0, 0, 25]) {
+        color("DimGray") translate([mic_x, mic_y, base_h - mic_seat_h]) difference() {
+            cylinder(d = 5, h = mic_seat_h);
+            translate([0, 0, -1]) cylinder(d = 2.5, h = mic_seat_h + 2);
+        }
+        color("Purple") translate([mic_x, mic_y, base_h - mic_seat_h - mic_pcb_t]) difference() {
+            cylinder(d = mic_d, h = mic_pcb_t);
+            translate([0, 0, -1]) cylinder(d = 1, h = mic_pcb_t + 2);
+        }
+        color("Orange") translate([mic_x, mic_y, base_h - mic_groove_d1 + 0.1]) mic_clip();
+    }
 }
