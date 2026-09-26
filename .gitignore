@@ -60,8 +60,8 @@ local.properties
 /firmware/.arduino/
 /firmware/build/
 
-# --- hardware: generated STL/SVG (regenerate from the .scad)
-/hardware/case/out/
+# --- hardware: generated STL/SVG are committed so they can be printed without OpenSCAD.
+# Re-export (see hardware/case/README.md) and re-commit after changing vox_case.scad.
 
 # --- personal editor state
 /.obsidian/
