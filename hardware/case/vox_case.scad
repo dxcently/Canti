@@ -14,7 +14,7 @@
 // Render one part:   openscad -D 'part="base"' -o out/base.stl vox_case.scad
 // Parts: "assembly" (preview), "base", "lid", "plunger", "mic_clip" (C-ring that holds the mic),
 //        "fit_test" (short base slice), "mic_test" (the lid's mic pocket on a small plate),
-//        "layout" (2D, 1:1 SVG template)
+//        "layout" (2D, 1:1 SVG template), "clash" (base/lid overlap check: must render empty)
 
 part = "assembly";
 
@@ -300,7 +300,12 @@ module lid() {
                         inner2d(lid_fit);
                         inner2d(lid_fit + 1.2);
                     }
-            corner_posts(board_top, base_h - board_top + 0.01);
+            // the posts reach into the wall (for the base's union), so trim them to the skirt's outline:
+            // same lid_fit gap and rounded corners as the skirt, or they bind in the walls' corners
+            intersection() {
+                corner_posts(board_top, base_h - board_top + 0.01);
+                translate([0, 0, board_top - 1]) linear_extrude(base_h - board_top + 2) inner2d(lid_fit);
+            }
             mic_pocket();
             strain_relief();
         }
@@ -394,6 +399,10 @@ else if (part == "mic_test") translate([0, 0, base_h + lid_t]) rotate([180, 0, 0
 else if (part == "fit_test") intersection() {   // bottom slice of the base: checks the board fit fast
     base();
     translate([ox - 20, oy - 20, -1]) cube([out_w + 40, out_l + 40, board_top + 1.5 + 1]);
+}
+else if (part == "clash") intersection() {   // base and lid overlap below the wall top: must render EMPTY
+    base();
+    intersection() { lid(); translate([ox - 1, oy - 1, -1]) cube([out_w + 2, out_l + 2, base_h - 0.01 + 1]); }
 }
 else if (part == "none") { }
 else {

@@ -172,6 +172,10 @@ for p in base lid plunger mic_clip fit_test mic_test; do nix run nixpkgs#opensca
 nix run nixpkgs#openscad -- -D 'part="layout"' -o out/layout.svg vox_case.scad
 sed -i 's/stroke-width="0.5"/stroke-width="0.1"/' out/layout.svg   # thin outlines, so the small labels stay readable
 nix run nixpkgs#openscad -- vox_case.scad        # GUI preview of the assembly
+nix run nixpkgs#openscad -- -D 'part="clash"' -o /tmp/clash.stl vox_case.scad   # must fail with "top level object is empty"
 ```
+
+After any change to the lid or the walls, run the clash check: it renders where the lid overlaps the base below the
+wall top, and anything there means the lid won't seat.
 
 Each STL export should report `Simple: yes`. The `.scad` file also checks the mic, strain relief and header positions against the grooves, LED, button, Pico and walls, and stops with a message if a change breaks one of them. Regenerate `out/` from the `.scad` file after any change.
