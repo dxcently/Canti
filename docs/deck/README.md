@@ -1,6 +1,6 @@
 # Overview deck
 
-`../canti-overview.pptx` is the project overview (17 slides, 16:9), drawn in the app's 1-bit pixel kit
+`../canti-overview.pptx` is the project overview (21 slides, 16:9), drawn in the app's 1-bit pixel kit
 (`../../brand/README.md` "Shape language", `../../ui/lib/src/theme`).
 
 - **Art.** Each slide's pixel art is one background PNG on the kit's grid: 320 x 180 art pixels, 6 device px each

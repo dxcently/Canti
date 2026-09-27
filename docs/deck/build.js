@@ -440,6 +440,39 @@ slides.push((n) => {
   return s;
 });
 
+// Why I built it
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.pillars.push({ cx: 154, a: 6, top: 80 });
+  s.header(n, 'Why I built it');
+  const a = s.window(8, 31, 150, 142, 'THE SPARK');
+  s.text([
+    { text: 'An AI service was selling a box that records your voice all day, and a dictation model sends it wherever you want.', options: { breakLine: true } },
+    { text: 'It cost $200. But it is just a microphone pointed at yourself, so I built my own.', options: { bold: true } },
+  ], a.x + 1, a.y, a.w - 2, 58, { size: 11, valign: 'top', paraSpaceAfter: 6 });
+  const prices = [['THEIR BOX', 200, '$200'], ['CANTI', 20, '~$15–20']];
+  const px = a.x + 1, pw = a.w - 2, per = (pw - 2) / 200;
+  prices.forEach(([label, v, txt], i) => {
+    const y = a.y + 50 + i * 24;
+    s.text(label, px, y, 60, 8, { font: 'title', size: 18, bold: true });
+    s.text(txt, px + pw - 40, y, 40, 8, { size: 11, align: 'right' });
+    s.block(px, y + 10, Math.max(4, Math.round(v * per)), 8, 'ink');
+  });
+  s.text('Parts: a $7 Pico 2 W, a $2–4 I2S mic, a button, an LED, a printed case.', a.x + 1, a.y + 104, a.w - 2, 13, { size: 9, valign: 'top' });
+
+  const b = s.window(164, 31, 148, 96, 'WHY SWIPES');
+  s.text(bullets([
+    'On TikTok and reels I kept wishing for an auto-scroller. You are not always holding the phone, and waiting out every video is annoying.',
+    'So it scrolls for you, or dictates.',
+    'It helps people with accessibility needs use their phone at all.',
+    'Full range of motion: gestures, plus a cursor.',
+  ]), b.x + 1, b.y, b.w - 2, b.h, { size: 10, valign: 'top', paraSpaceAfter: 3 });
+  const c = s.window(164, 133, 148, 40, 'NEXT');
+  s.text('Desktop and web control (computer use). A prototype exists.', c.x + 1, c.y, c.w - 2, c.h, { size: 10, valign: 'top' });
+  s.field();
+  return s;
+});
+
 // How it works
 slides.push((n) => {
   const s = new Slide(LIGHT);
@@ -794,21 +827,122 @@ slides.push((n) => {
   s.text('A 225 ms lag tripled pointing errors (MacKenzie & Ware 1993). So fixed bindings act locally, and models only get what rules cannot settle.',
     a.x + 1, ay + 13, a.w - 2, a.h - (ay + 13 - a.y), { size: 11, valign: 'top' });
 
-  const b = s.window(190, 31, 122, 140, 'MODELS');
-  const models = [
-    ['RULES', 'On the phone today.', null],
-    ['VERDICT 118M', 'Target picker. Chosen for the phone; not on it yet.', COLORS.signalYellow],
-    ['JEVLIKE', 'Gesture decider, served on the PC.', null],
-    ['CLOUD', 'DeepSeek via Ollama, hard cases only.', null],
+  const b = s.window(190, 31, 122, 140, 'WHY CODE WON');
+  const steps = [
+    ['FIRST PLAN', 'A model on the phone picks each next move from your voice training data.'],
+    ['WHAT I FOUND', 'Once a sound is labelled, a rule is exact and instant. The errors come from hearing, not deciding.'],
+    ['SO', 'Gestures run on plain code, much quicker and easier. No special LLM needed.'],
   ];
   let y = b.y;
-  models.forEach(([name, d, lamp]) => {
-    s.lamp(b.x + 1, y, lamp);
-    s.text(name, b.x + 16, y + 1, b.w - 16, 9, { font: 'title', size: 18, bold: true });
-    const lines = Math.ceil(d.length / Math.floor(((b.w - 16) * PT_PER_ART) / 6.6));
-    s.text(d, b.x + 16, y + 11, b.w - 17, lines * 6.5 + 1, { size: 11, valign: 'top' });
-    y += 12 + lines * 6.5 + 4;
+  steps.forEach(([k, d]) => {
+    s.panel(b.x, y, b.w, 11);
+    s.text(k, b.x + 4, y + 1, b.w - 8, 9, { font: 'title', size: 18, bold: true, color: 'paper' });
+    s.text(d, b.x + 1, y + 13, b.w - 2, 26, { size: 10, valign: 'top' });
+    y += 41;
   });
+  s.field();
+  return s;
+});
+
+// Verdict: the phrase model on the phone
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Verdict');
+  const a = s.window(8, 31, 150, 142, 'ON THE PHONE');
+  s.text('You say what to tap; Verdict picks one thing on the screen, or none.', a.x + 1, a.y, a.w - 2, 14, { size: 10, valign: 'top' });
+  s.box(a.x, a.y + 16, a.w, 12, { fill: 'ink' });
+  s.text('"tap the search button"', a.x, a.y + 16, a.w, 12, { size: 11, color: 'paper', align: 'center' });
+  const opts = ['Home (button, top left)', 'Search (button, top right)', 'Shorts (tab, bottom)', 'none'];
+  opts.forEach((o, i) => {
+    const y = a.y + 32 + i * 10;
+    if (i === 1) s.brackets(a.x, y - 1, a.w, 11, 'ink', 4, 1);
+    s.text(o, a.x + 4, y, a.w - 8, 9, { size: 10, bold: i === 1 });
+  });
+  const rows = [['MODEL', '118M, 2.1 ms on the PC'], ['ON DISK', '118 MB, 45 MB pruned'], ['NETWORK', 'none: 100% local'], ['STATUS', 'not shipped yet']];
+  rows.forEach(([label, value], i) => s.statRow(a.x, a.y + 76 + i * 11, a.w, { label, value, valueSize: 10 }));
+
+  const b = s.window(164, 31, 148, 142, 'HOW IT GOT HERE');
+  const steps = [
+    'Trained jevlike first: fast, 0.978 on synthetic phrases, but 0.447 on real screens.',
+    'Verdict did better at picking things by phrase: 0.646 on the same real screens.',
+    'So Verdict became the model to train and fine-tune.',
+    'jevlike, fine-tuned earlier, served as its teacher.',
+    'Fine-tuned on real screens: ~12–14 h total on the Strix Halo (8.75 h of it logged).',
+  ];
+  steps.forEach((t, i) => {
+    const y = b.y + i * 24;
+    s.box(b.x, y, 13, 13);
+    s.text(String(i + 1), b.x, y, 13, 13, { font: 'title', size: 18, bold: true, align: 'center' });
+    s.text(t, b.x + 17, y - 1, b.w - 18, 22, { size: 10, valign: 'top' });
+  });
+  s.field();
+  return s;
+});
+
+// Raising the numbers
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Raising the numbers');
+  const a = s.window(8, 31, 176, 142, 'ACCURACY');
+  s.text('Picking the right target on real screens (dev-test, 344 rows):', a.x + 1, a.y, a.w - 2, 14, { size: 10, valign: 'top' });
+  const bx = a.x + 1, bw = a.w - 32;
+  const bars = (list, y0) => list.forEach(([label, v], i) => {
+    const y = y0 + i * 17;
+    s.text(label, bx, y, 100, 8, { font: 'title', size: 18, bold: true });
+    s.block(bx, y + 9, Math.round(v * bw), 6, 'ink');
+    s.text(v.toFixed(3), bx + Math.round(v * bw) + 2, y + 7, 28, 9, { size: 10 });
+  });
+  bars([['JEVLIKE', 0.465], ['VERDICT V1D', 0.738], ['CLOUD, FOR SCALE', 0.852]], a.y + 15);
+  s.hline(a.x, a.y + 67, a.w);
+  s.text('Unseen phrasings (synthetic):', a.x + 1, a.y + 70, a.w - 2, 8, { size: 10 });
+  bars([['BEFORE', 0.545], ['AFTER', 0.675]], a.y + 80);
+  s.text('Cloud is smarter but slower (p50 0.7 s) and misses "none" more often (0.43 vs 0.53).', a.x + 1, a.y + 115, a.w - 2, 10, { size: 9, valign: 'top' });
+
+  const b = s.window(190, 31, 122, 142, 'WHAT RAISED THEM');
+  s.text(bullets([
+    'Real screens: 4,648 rows from 613 screens in 57 apps.',
+    'A blind second labelling pass: 97% agreement.',
+    'Frozen embeddings and a higher learning rate (v1d).',
+    'Filler words cut "none" recall to 0.25; a normaliser brings it back to 0.80.',
+    'Hidden elements dropped from the options.',
+    'Honest scoring: held-out apps, 5-fold cross-fit, a sealed locked test.',
+  ]), b.x + 1, b.y, b.w - 2, 104, { size: 9, valign: 'top', paraSpaceAfter: 2 });
+  s.hline(b.x, b.y + 96, b.w);
+  s.lamp(b.x, b.y + 99, null);
+  s.text('wrong taps 0.036, under the 0.05 bound', b.x + 14, b.y + 99, b.w - 14, 11, { size: 9 });
+  s.lamp(b.x, b.y + 111, COLORS.signalRed);
+  s.text('"none" recall 0.62, gate is 0.8', b.x + 14, b.y + 111, b.w - 14, 11, { size: 9 });
+  s.field();
+  return s;
+});
+
+// When it's unsure: the cloud fallback
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, "When it's unsure");
+  const a = s.window(8, 31, 304, 62, 'THE CHAIN');
+  const chain = [['RULES', 'gestures: instant and exact'], ['VERDICT', 'phrases: on the phone, milliseconds'], ['CLOUD', 'what neither understands: slower, smarter']];
+  const bw = 80, gap = (a.w - 3 * bw) / 2;
+  chain.forEach(([t, d], i) => {
+    const x = Math.round(a.x + i * (bw + gap));
+    s.box(x, a.y + 1, bw, 15, { fill: i === 2 ? 'paper' : 'ink' });
+    s.text(t, x, a.y + 1, bw, 15, { font: 'title', size: 18, bold: true, align: 'center', color: i === 2 ? 'ink' : 'paper' });
+    s.text(d, x, a.y + 19, bw, 20, { size: 10, valign: 'top', align: 'center' });
+    if (i < 2) s.glyph(G.Marks.right, Math.round(x + bw + gap / 2 - 2), a.y + 5, 'ink');
+  });
+  const b = s.window(8, 99, 150, 74, 'JEV API');
+  s.text(bullets([
+    'TypeSafe\'s typed-decision API (Jev).',
+    'Put your key in the app\'s settings; it asks the same /v1/systemone endpoint.',
+    'Jev answers in 253 ms median, 437 ms p95 (published desktop figures).',
+  ]), b.x + 1, b.y, b.w - 2, b.h, { size: 10, valign: 'top', paraSpaceAfter: 3 });
+  const c = s.window(164, 99, 148, 74, 'OLLAMA KEY');
+  s.text(bullets([
+    '$20 a month: really cheap DeepSeek, plus whatever other models you can use.',
+    'As long as you don\'t mind giving your information away to China.',
+    'Smarter than Verdict on real screens (0.852 vs 0.738), but slower: 0.7 s p50.',
+    'Cloud answers are unscored, so risky taps wait for a confirm pop.',
+  ]), c.x + 1, c.y, c.w - 2, c.h, { size: 10, valign: 'top', paraSpaceAfter: 2 });
   s.field();
   return s;
 });
