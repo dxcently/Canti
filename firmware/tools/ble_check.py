@@ -321,6 +321,8 @@ class BleCheck:
             errs.append("sleeping must be true, only with armed:false and no sounds")
         if "rejected" in d and (not isinstance(d["rejected"], str) or not d["rejected"] or snd):
             errs.append("rejected must be a non-empty reason on a no-sound message")
+        if "by" in d and (d["by"] != "button" or snd):
+            errs.append('by must be "button", only on a no-sound state message')
         if "features" in d:
             errs.append("features present (fp1 is not final; the firmware must leave it out)")
         if snd:

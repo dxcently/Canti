@@ -38,7 +38,7 @@ Each folder has its own README with a file table and commands.
 
 ```sh
 cd android
-suite/run.sh build        # flutter pub get in ../ui, then gradle assembleDebug + 76 JVM unit tests (first run fetches deps into .state)
+suite/run.sh build        # flutter pub get in ../ui, then gradle assembleDebug + 441 JVM unit tests (first run fetches deps into .state)
 suite/run.sh boot         # create AVD "vox35" if needed; boot headless (-no-window -no-audio, KVM); VOX_WIPE=1 = factory-fresh
 suite/run.sh setup        # install VOX + fixture + 5 hash-pinned F-Droid APKs, seed 5 photos, enable the a11y service
 suite/run.sh test         # 34 emulator tests; -k NAME to filter; results in suite/out/results-*.json
@@ -89,11 +89,16 @@ The settings screen (the launcher icon "VOX") and the debug `config` op share th
 
 | key | default | |
 |---|---|---|
-| `decider` | `rules` | `rules` (deterministic), `model` (falls back to rules on error), or `hybrid` (explicit bindings local, else the model) |
+| `decider` | `rules` | `rules` (deterministic), `model` (falls back to rules on error), `hybrid` (explicit bindings local, else the model), or `escalate` (hybrid plus a cloud model for target picking and the cases the local path can't settle; PROTOCOL.md "Decider `escalate`") |
 | `base_url` | `https://api.typesafe.ai` | `POST {base_url}/v1/systemone` |
 | `model` | `jev-1.13.0` | |
 | `api_key` | empty | Entered in settings and never hard-coded. It is redacted in `ping` and never logged. Stored in app-private SharedPreferences (Keystore encryption is a TODO). |
 | `min_confidence` | 0.5 | A model answer below this becomes `none`. |
+| `ollama_endpoint` | `https://ollama.com` | Decider `escalate`: `POST {ollama_endpoint}/api/chat` (Ollama cloud, or a LAN Ollama). |
+| `ollama_model` | `deepseek-v4.1-flash` | |
+| cloud key | empty | Entered in the settings screen only (not accepted by `config`; `ping` shows `"set"` or `""`). Stored AES-GCM encrypted under an Android Keystore key; never logged. |
+| `ollama_timeout_ms` / `ollama_target_timeout_ms` | 1500 / 2500 | Hard deadlines for a cloud gesture/phrase decision and a cloud target pick; past them the local path answers. |
+| `auto_scroll_pct` | 10 | Hold-to-scroll speed (rise/fall, then hold a flat hum: it scrolls while the hum is held), in percent of the screen height per second (2-60). It also stops on an app change, screen off, or 5 s without a `hold end`. |
 | `gap_ms` | 600 | Max device gap between sounds of one sequence; also the wait for a follow-up (only when a bound sequence continues). |
 | `jitter_ms` | 150 | With device timestamps: extra wait allowing for a follow-up that arrives late. |
 | `confirm_timeout_ms` | 1500 | The confirmer's window. |
@@ -103,6 +108,16 @@ The settings screen (the launcher icon "VOX") and the debug `config` op share th
 | `target_choose_ms` | 6000 | How long the highlighted candidates wait for rise/fall/pop/hiss before cancelling. |
 | `enroll_reject_mult` | 1.4 | Personalization: a sound matches an enrolled class only within the class's within-class distance × this. |
 | `ble_device` | none | The remembered VOX device (Bluetooth address). Set on the first good connection; the service connects to it at start. `null` forgets it. |
+| `sound_source` | `pico` | Where sounds come from: `pico` (the VOX device over Bluetooth), `phone` (the phone's mic) or `usb` (a USB mic plugged into the phone). The mic sources run the Pico's extractor on the phone (PROTOCOL.md "Phone microphone"). Also the **Sound source** block of the settings screen and the notification's **Source** button. |
+| `mic_rate` | 16000 | Capture rate for the mic sources: 16000, or 48000 (decimated by 3 in the extractor). |
+| `mic_preset` | `auto` | `auto` (UNPROCESSED when supported, else VOICE_RECOGNITION), `unprocessed`, `voice_recognition`, `voice_communication` (the call path, with the platform's echo canceller: for the echo A/B), `mic`. |
+| `mic_effects` | `off` | Platform pre-processing on the capture: `off` (AGC/NS/AEC off where attached), `platform` (as the preset attaches them), `aec` (echo canceller only), `aec_ns` (+ noise suppressor). |
+| `mic_touch_guard` | true | Drop a phone-mic sound when a touch-down on the screen lies within 400 ms before its start to 150 ms after its end: a finger on the glass reads as a pop (`TouchGuard.kt`, fed by `TouchWatch.kt`, a 1×1 accessibility overlay watching outside touches). Canti's own injected gestures do not count. |
+| `mic_media_gate` | `speaker` | While media plays, a pop/click must be ≥ 14 dB over the noise floor and a hum ≥ 14 dB with clarity ≥ 0.8, else it reaches the service as `unknown` (not deliberate; `PhoneGate.kt`). `speaker`: only while media plays on the phone's own speaker (earbuds/Bluetooth: no echo, no gate); `media`: any media; `always`; `off`. |
+| `hiss_media_max_centroid_hz` | 6500 | While media plays on the phone's own speaker, a phone/USB mic hiss with a spectral centroid over this many Hz reaches the service as `unknown` (`PhoneGate.hissReason`; logged in `mic_sound.gated`). 0 = off, 0-8000. Independent of `mic_media_gate`; never for the Pico. From the Z Flip's 7 kHz media hisses (wiki/phone-mic-echo.md). |
+| `mic_dry_run` | false | Measurement: phone-mic sounds are logged (`mic_sound`) but never handed to the service. |
+| `mic_read_ms` | 20 | AudioRecord read size in ms (10-40). |
+| `mic_while_disarmed` | false | Keep the mic open while disarmed (normally a disarm or pause closes it). |
 
 Profiles are JSON with scopes `global`, `app:<package>`, `cursor` and `phrases`, plus an optional `name` that selects
 the enrollment store; see `Profile.kt`. The bundled
@@ -110,7 +125,7 @@ default (`assets/profile_default.json`) binds rise→zoom_in and fall→zoom_out
 
 ## Intent cursor mode
 
-In cursor mode, `click pop` opens the listening window and the next phrase names an element ("the subscriptions
+In cursor mode, `pop pop` opens the listening window and the next phrase names an element ("the subscriptions
 tab"). The app builds an option list from the accessibility tree (`Targets.kt`, spec: `finetune/vox/targets.py`),
 asks the `target` question on `/v1/systemone`, and then:
 - taps the element if confidence >= `target_min_confidence`;
@@ -130,8 +145,10 @@ Deviations from, and additions to, the targets.py spec:
   NewPipe's tab strip produced a spurious "Live (item, top)".
 - **Reading order** = 3x3 cell (row, then column), then top edge, then left edge. The cap is 40 options
   **including** `none`.
-- **`click pop` in cursor mode** is handled by the app (source `app:cursor-listen`), because `schema.CURSOR_ACTIONS`
-  has no listen option. So a cursor-mode `click` now waits `gap_ms + jitter_ms` for a possible `pop`.
+- **`pop pop` in cursor mode** is handled by the app (source `app:cursor-listen`), because `schema.CURSOR_ACTIONS`
+  has no listen option. So a cursor-mode `pop` (click) waits `gap_ms + jitter_ms` for a possible second `pop`.
+  Since 2026-09-27 `pop pop` (not `click pop`) is also the gesture-mode listen gesture, owned by the app (`app:listen`)
+  in every decider mode, because the models were trained on `click pop` (`Vocab.DEFAULTS_TEXT` still says so).
 
 ## Personalization
 
@@ -160,7 +177,8 @@ leave-one-out within-class distance × `enroll_reject_mult`, for every class siz
 
 ## Flutter UI (`../ui`)
 
-The launcher, `MainActivity`, is a `FlutterActivity` that shows the status screen from [`../ui`](../ui/README.md).
+`MainActivity` (launched through the icon aliases below) is a `FlutterActivity` that shows the status screen from
+[`../ui`](../ui/README.md).
 The screen shows:
 - whether the service runs, the device's arm state, mode, foreground app, Bluetooth link and decider;
 - **Pause VOX** / **Resume VOX**, a phone-side switch independent of the device's `armed`;
@@ -187,10 +205,25 @@ In the release APK:
 - `libflutter.so` is 13.1 MB (x86_64), 11.8 MB (arm64) and 8.6 MB (armv7);
 - `libapp.so` (the compiled Dart) is about 3.7–4.0 MB per ABI;
 - `classes.dex` is 6.3 MB;
-- MaterialIcons is 1.6 MB.
+- MaterialIcons was 1.6 MB. Since the Canti restyle `gradle.properties` sets `tree-shake-icons=true`, which cuts it to
+  2 KB; the restyle's before/after sizes are in `../ui/README.md` "Performance".
 
 An arm64-only release would be about 22.7 MB. A Play App Bundle's per-ABI split would give about the same per
 device.
+
+**Launcher icon.** The Canti stipple icon (`../brand`), as adaptive icons with a themed (monochrome) layer:
+`res/mipmap-anydpi-v26/ic_launcher_on|off.xml`, their pixel-exact PNG layers per density and
+`res/drawable/ic_launcher_mono_on|off.xml`, all generated by `../brand/tools/stipple.py launcher`. The icon shows
+the link: "on" (lit eyes and lamp) while a device is paired and connected (BLE state `ready`), "off" otherwise. The
+LAUNCHER intent filter is on two `<activity-alias>`es of `MainActivity`, `.LauncherOn` (enabled in the manifest, the
+default) and `.LauncherOff`; `LauncherIcon.kt` enables one and disables the other with `DONT_KILL_APP`. It switches
+only when the state has been stable for 10 s, and at most once a minute (`IconSwitch`, tested by
+`LauncherIconTest`), because every switch is a component change for the launcher:
+- most launchers redraw the icon in place within a few seconds, but some drop a home-screen shortcut or move the app
+  back to the drawer, and some close its recents entry;
+- the icon only follows the link while the accessibility service runs; otherwise it keeps its last state;
+- `am start -n ai.vox.companion/.MainActivity` still works (MainActivity stays exported), and
+  `monkey -c android.intent.category.LAUNCHER` resolves to whichever alias is enabled.
 
 **Start time** on the emulator (vox35, API 35 x86_64, KVM): `am start -W` TotalTime in ms, median (min–max) of 5
 after one warm-up. Two cases:
@@ -461,6 +494,11 @@ Earlier rounds:
   the debug socket, runs the rule decider, and asserts on the app's own tree dump, screenshots and the event log.
   The previous version also passed 25/25 via `suite/run.sh all` on a factory-fresh AVD.
 
+  **Note (2026-09-27): the results below predate pop pop = listen and have not been re-run.** The suite now sends
+  `pop pop` for the listen and intent-cursor checks, a lone `pop` is expected to tap after one gap (waiting for `pop
+  pop`), and `click pop` is unbound (it still merges on the arrival clock, now to `none`). With `decider=model` the
+  app answers `pop pop` itself (`app:listen`), so the real-Jev run no longer asks the model about the listen gesture.
+
   Fixture: every default gesture.
   - `rise`/`fall`: next/previous video ("Video 1 of 20" → 2 → 1).
   - `dip`/`arch`: horizontal page ±1.
@@ -595,8 +633,9 @@ Earlier rounds:
   is settable only through `config`.
 - The pixel confirmer cannot tell our effect from ambient motion. A playing video or an animation that changes
   more than 0.5% of the grid during the timeout reads as "confirmed (pixels)". It only runs when no event confirmed.
-  `takeScreenshot` is rate-limited by the OS, so an action that starts too soon after the previous one's
-  screenshot gets no pixel check (`by: screenshot unavailable`).
+  `takeScreenshot` is rate-limited by the OS (one per second), so an action that starts less than 1 s after the
+  previous one's baseline gets no pixel check (`by: screenshot rate-limited`) unless the previous watch's timeout
+  screenshot is recent enough to reuse (PROTOCOL.md "confirm").
 - Not tested on a physical phone. `usesCleartextTraffic=true` is set so the suite can reach its local fake servers;
   turn it off for release.
 

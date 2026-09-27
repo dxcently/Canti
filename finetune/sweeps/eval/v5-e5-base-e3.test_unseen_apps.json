@@ -2,25 +2,25 @@
   "sweep-v5-e5-base-e3.test_unseen_apps.jsonl": {
     "n": 2000,
     "coverage": 1.0,
-    "accuracy": 0.983,
-    "nll": 0.11702322232030492,
-    "ece": 0.01625478250000007,
-    "false_trigger_rate": 0.0021141649048625794,
+    "accuracy": 0.992,
+    "nll": 0.09768939954225467,
+    "ece": 0.008207242999999993,
+    "false_trigger_rate": 0.0,
     "missed_command_rate": 0.0,
     "by_kind": {
-      "app_rule": 0.997,
-      "cursor": 0.922,
-      "default": 0.996,
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 0.991,
       "disabled": 1.0,
       "global_rule": 1.0,
       "not_deliberate": 1.0,
-      "phrase": 0.988,
+      "phrase": 0.994,
       "phrase_rule": 0.993,
       "screen_phrase": 0.93,
-      "sequence": 1.0,
-      "unbound": 0.987
+      "sequence": 0.996,
+      "unbound": 1.0
     },
-    "latency_ms_p50": 26.82,
-    "latency_ms_p95": 50.51
+    "latency_ms_p50": 16.21,
+    "latency_ms_p95": 18.29
   }
 }

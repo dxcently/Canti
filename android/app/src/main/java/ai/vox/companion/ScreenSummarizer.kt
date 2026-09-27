@@ -22,6 +22,7 @@ data class NodeSnap(
     val collectionItem: Boolean = false,   // has CollectionItemInfo (a row/cell of a list or grid)
     val rows: Int = -1,           // CollectionInfo row count (-1 = none)
     val cols: Int = -1,
+    val drawingOrder: Int = 0,    // AccessibilityNodeInfo.getDrawingOrder among its siblings (0 = unknown, e.g. Compose)
     val children: List<NodeSnap> = emptyList(),
 ) {
     val width get() = (right - left).coerceAtLeast(0)
@@ -32,6 +33,32 @@ data class NodeSnap(
         for (c in children) yieldAll(c.walk())
     }
     val shortCls get() = cls.substringAfterLast('.')
+}
+
+/**
+ * Which scroller is the screen's main list (SCREEN_SCROLL, and the node Executor scrolls for scroll_up/down).
+ * Several scrollers often share the biggest area: Instagram's home is a horizontal tab ViewPager > a horizontal nav
+ * RecyclerView > the vertical feed, all [0,94][1080,2388]. Taking the first (outermost) of them described the tab
+ * pager, which on its first page can only go "forward": "at the top" however far the feed was scrolled (Instagram,
+ * WhatsApp), and a node-scroll there would page sideways. So a vertical-looking scroller wins over a horizontal one
+ * when it is at least half the size, and among near-equal ones (within 80%) the innermost (last in pre-order) wins.
+ */
+object ScrollPick {
+    /** Horizontal by CollectionInfo (one row, several columns) or by class (ViewPager without vertical rows, HorizontalScrollView). */
+    fun horizontal(cls: String?, rows: Int, cols: Int): Boolean {
+        val c = cls ?: ""
+        return rows == 1 && cols > 1 || c.endsWith("HorizontalScrollView") || c.endsWith("ViewPager") && rows <= 1
+    }
+
+    /** [items] in tree pre-order. */
+    fun <T> best(items: List<T>, area: (T) -> Long, horizontal: (T) -> Boolean): T? {
+        if (items.isEmpty()) return null
+        val top = items.maxOf(area)
+        val vertical = items.filter { !horizontal(it) }
+        val pool = if (vertical.isNotEmpty() && vertical.maxOf(area) * 2 >= top) vertical else items
+        val m = pool.maxOf(area)
+        return pool.lastOrNull { area(it) * 5 >= m * 4 }
+    }
 }
 
 /** What the summariser knows beyond the node tree. */
@@ -66,8 +93,7 @@ object ScreenSummarizer {
         fun frac(n: NodeSnap) = if (screenArea == 0L) 0.0 else n.area.toDouble() / screenArea
         fun label(n: NodeSnap) = ((n.desc ?: "") + " " + (n.text ?: "")).trim().lowercase()
 
-        val primaryScroll = nodes.filter { it.scrollable }
-            .maxWithOrNull(compareBy<NodeSnap> { it.area }.thenBy { if (it.rows > 1) 1 else 0 })
+        val primaryScroll = ScrollPick.best(nodes.filter { it.scrollable }, { it.area }, { ScrollPick.horizontal(it.cls, it.rows, it.cols) })
         val scroll = when {
             primaryScroll == null -> "not scrollable"
             primaryScroll.canScrollForward && primaryScroll.canScrollBackward -> "can scroll both ways"
@@ -81,22 +107,34 @@ object ScreenSummarizer {
         val pauseCtl = nodes.any { label(it).let { l -> l == "pause" || l.startsWith("pause ") || l.startsWith("pause video") } }
         val playCtl = nodes.any { label(it).let { l -> l == "play" || l.startsWith("play ") && !l.startsWith("play all") || l.startsWith("play video") } }
 
-        // A pager: a big scroller showing one dominant page. It is a feed only if that page is not itself a list
-        // (NewPipe's and VLC's tab pagers wrap RecyclerViews) and not just a still image (a photo pager).
-        val pager = nodes.firstOrNull { n ->
-            n.scrollable && frac(n) >= 0.6 && n.rows != 0 &&
-                n.children.count { it.visible && it.area > 0 } in 1..2 &&
-                n.children.any { c -> c.visible && c.area >= n.area * 0.8 }
+        // A pager: a big scroller showing one dominant page ([ScrollStep.pageFill]; small overlays such as a feed's side
+        // buttons and caption are ignored), or one whose view id names a video feed ([ScrollStep.feedId]: Reels,
+        // Shorts). It is a feed only if that page is not itself a list (NewPipe's and VLC's tab pagers wrap
+        // RecyclerViews that fill the page) and not just a still image (a photo pager).
+        val pagers = nodes.filter { n ->
+            n.scrollable && frac(n) >= 0.6 && n.rows != 0 && (ScrollStep.pageFill(n) != null || ScrollStep.feedId(n) != null)
         }
-        val page = pager?.children?.filter { it.visible }?.maxByOrNull { it.area }
-        val pageIsList = page != null && page.walk().any { it.scrollable }
-        val pageVideo = page != null && page.walk().any { d -> VIDEO_SURFACES.any { d.cls.endsWith(it) } } ||
-            pager != null && (pauseCtl || playCtl)
-        val pageImage = page != null && page.walk().any { it.cls.endsWith("ImageView") && it.area >= page.area * 0.5 }
-        // Feed = a vertical pager (CollectionInfo rows > 1, one column, as vertical ViewPager2/RecyclerView report it)
-        // or a pager whose page shows video. A horizontal tab pager with an empty page is not a feed.
-        val vertical = pager != null && pager.rows > 1 && pager.cols <= 1
-        val feed = pager?.takeIf { !pageIsList && (pageVideo || vertical && !pageImage) }
+        fun pageOf(p: NodeSnap) = p.children.filter { it.visible }.maxByOrNull { it.area }
+        fun imageOn(page: NodeSnap?) = page != null && page.walk().any { it.cls.endsWith("ImageView") && it.area >= page.area * 0.5 }
+        // Feed = a vertical pager (CollectionInfo rows > 1, one column, as vertical ViewPager2/RecyclerView report it),
+        // a pager whose page shows video, a pager named as a feed, or a full-bleed pager ([ScrollStep.immersive]:
+        // TikTok's feed pager reports no CollectionInfo and no video view) whose page is not a still image.
+        // A horizontal tab pager with an empty page is not a feed. Pagers nest (TikTok: two tab pagers around the
+        // feed pager), so the first pager that is a feed counts; an outer one whose page holds the feed is a list.
+        fun isFeed(p: NodeSnap): Boolean {
+            val page = pageOf(p) ?: return false
+            if (ScrollStep.feedId(p) != null) return true   // named as a video feed (its page may be its own inner list)
+            if (page.walk().any { it.scrollable && it.area * 2 >= page.area }) return false   // a list (or a pager) fills the page
+            val video = page.walk().any { d -> VIDEO_SURFACES.any { d.cls.endsWith(it) } } || pauseCtl || playCtl
+            val vertical = p.rows > 1 && p.cols <= 1
+            return video || (vertical || ScrollStep.immersive(p, f.screenW, f.screenH)) && !imageOn(page)
+        }
+        val pager = pagers.firstOrNull()
+        val pageImage = pager != null && imageOn(pageOf(pager))
+        // Package fallback ([ScrollStep.PAGER_PKGS], TikTok): its main vertical scroller when that covers most of the
+        // screen, as ScrollStep.decide has it.
+        val feed = pagers.firstOrNull(::isFeed)
+            ?: primaryScroll?.takeIf { f.pkg in ScrollStep.PAGER_PKGS && it.height * 5 >= f.screenH * 3 && !ScrollStep.horizontal(it) }
 
         val kind = when {
             f.keyboardOpen && nodes.any { it.editable && it.focused } -> "text entry"

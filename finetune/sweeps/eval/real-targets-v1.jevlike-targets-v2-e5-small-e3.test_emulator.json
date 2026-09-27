@@ -1,0 +1,22 @@
+{
+  "test_emulator.jevlike-targets-v2-e5-small-e3.jsonl": {
+    "n": 557,
+    "coverage": 1.0,
+    "accuracy": 0.44703770197486536,
+    "nll": 6.184723747895227,
+    "ece": 0.5001872926391383,
+    "false_trigger_rate": 0.08235294117647059,
+    "missed_command_rate": 0.5190677966101694,
+    "by_kind": {
+      "appearance": 0.45,
+      "casual": 0.22,
+      "function": 0.312,
+      "name": 0.305,
+      "near_none": 0.182,
+      "none": 0.918,
+      "position": 0.545
+    },
+    "latency_ms_p50": 9.35,
+    "latency_ms_p95": 11.39
+  }
+}

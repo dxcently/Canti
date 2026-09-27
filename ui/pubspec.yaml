@@ -1,5 +1,5 @@
 name: vox_ui
-description: "A new Flutter module project."
+description: "The VOX phone app's Flutter screens (Canti)."
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -23,10 +23,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  # No third-party packages: Material 3 (in the SDK) is the component kit, and the rest is small code in
+  # lib/src/theme. Why: README.md "Libraries".
 
 dev_dependencies:
   flutter_test:
@@ -37,43 +35,32 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 flutter:
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
   uses-material-design: true
 
-  # To add Flutter specific assets to your application, add an assets section,
-  # like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # Brand art: pixel-exact PNGs made by ../brand/tools/stipple.py (`app`), one per whole-pixel scale (`name@n.png`,
+  # n device px per dot); BrandArt (lib/src/theme/assets.dart) picks the one for the screen and draws it 1:1.
+  assets:
+    - assets/brand/
+    # The Canti character sheet and manifest (made by ../brand/tools/canti_sprite.py): the one copy. The header plays
+    # it, and the Android floating badge reads it from the APK's flutter_assets/ (test/sprite_test.dart checks it is here).
+    - assets/badge/
+    - assets/fonts/PressStart2P-OFL.txt
+    - assets/fonts/Tiny5-OFL.txt
 
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/to/resolution-aware-images
+  # The dot-field background (lib/src/theme/dither_background.dart).
+  shaders:
+    - shaders/dither_field.frag
 
-  # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/to/asset-from-package
-
-  # To add Flutter specific custom fonts to your application, add a fonts
-  # section here, in this "flutter" section. Each entry in this list should
-  # have a "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
-
+  # Pixel faces (SIL Open Font License 1.1, texts in assets/fonts): Press Start 2P (CodeMan38) for titles, labels
+  # and headlines; Tiny5 (Stefie Justprince) for body text with lowercase. Both are drawn on an 8-unit em, so they
+  # are only used at 8 x the pixel scale (lib/src/theme/pixel.dart). Bundled, never fetched at run time.
+  fonts:
+    - family: PressStart2P
+      fonts:
+        - asset: assets/fonts/PressStart2P-Regular.ttf
+    - family: Tiny5
+      fonts:
+        - asset: assets/fonts/Tiny5-Regular.ttf
 
   # This section identifies your Flutter project as a module meant for
   # embedding in a native host app.  These identifiers should _not_ ordinarily

@@ -16,8 +16,44 @@ These are the public audio sets used by the real-audio evaluation of the extract
 | `mlend_hums_whistles/` | 16 GB | none stated in the repository | 6598 of 6610 files |
 | `nonspeech7k/` | 2.5 GB zips, 2.7 GB unpacked | ambiguous: CC BY 4.0 or CC BY-NC-SA 4.0 | 7014 "original" clips |
 | `esc50/` | 616 MB zip, 846 MB unpacked | CC BY-NC 3.0 | all 2000 clips |
+| `vocalset/` | 2.1 GB zip, 2.5 GB unpacked | CC BY 4.0 | a/i/u files (voice cursor only) |
+| `hillenbrand/` | 22 MB zip (+ men/women/kids zips), 72 MB unpacked | repository MIT; data hosted with the author's permission | iy/ah/uw (voice cursor only) |
 
 The archives are still on disk next to the unpacked folders (about 13 GB in total). You can delete them.
+
+## VocalSet (Wilkins et al., ISMIR 2018): `vocalset/`
+
+- **Fetched:** 2026-09-27, for the voice-cursor multi-voice check (`wiki/voice-cursor.md`), not the gesture evaluation.
+- **URL:** https://zenodo.org/api/records/1193957/files/VocalSet.zip/content (record https://zenodo.org/records/1193957)
+- **Licence:** CC BY 4.0 (Zenodo record). Cite Wilkins, Seetharaman, Wahl, Pardo, "VocalSet: A Singing Voice Dataset", ISMIR 2018.
+- **Archive:** `VocalSet.zip`, 2,077,087,366 bytes, md5 `c44f60d34b8724b9a6f6d15e0a3158a9` (matches Zenodo), sha256 `2bf96b80abe57a23323fd8c78be8cb70503e35995e6bae94a6067197c88a61ae`.
+- **Content:** 3615 wavs (44.1 kHz) under `FULL/<female1-9|male1-11>/<exercise>/<technique>/`: arpeggios, scales and long tones on a/e/i/o/u, sung straight, with vibrato, belted, breathy, fry, trill and so on. The files carry no per-singer voice-type labels.
+- **Subset used:** files ending `_a/_i/_u.wav`, minus lip trill, vocal fry, inhaled and trill. `__MACOSX/` and `.DS_Store` were deleted after unpacking.
+
+```bash
+mkdir -p vocalset && cd vocalset
+curl -fL --retry 5 -C - -o VocalSet.zip https://zenodo.org/api/records/1193957/files/VocalSet.zip/content
+md5sum VocalSet.zip   # c44f60d34b8724b9a6f6d15e0a3158a9
+unzip -q VocalSet.zip && rm -rf __MACOSX && find . -name .DS_Store -delete
+```
+
+## Hillenbrand, Getty, Clark & Wheeler 1995 vowels: `hillenbrand/`
+
+- **Fetched:** 2026-09-27, for the voice-cursor formant-tracker check.
+- **URL:** the original https://homepages.wmich.edu/~hillenbr/voweldata.html now redirects to a university login. The copy used is the mirror https://github.com/santiagobarreda/hillenbrand_et_al_1995 (cloned to `repo/`), which says it is hosted with Jim Hillenbrand's permission.
+- **Licence:** the repository is MIT. The recordings are the authors' research data; cite Hillenbrand et al. (1995), JASA 97(5), 3099–3111.
+- **Archive:** `repo/h95-alldata.zip`, sha256 `2560548591e3a726c88549b6dc9d226995616c26874d601c69fee8b9eee9d730`.
+- **Content:** unpacked to `data/`:
+  - `men/`, `women/`, `kids/`: 1668 wavs at 16 kHz of /hVd/ words;
+  - file names: char 1 is m/w/b/g, chars 2–3 the talker, chars 4–5 the vowel (iy = heed, ah = hod, uw = who'd, …);
+  - `data/vowdata.dat`: hand-measured duration, steady-state F0 and F1–F4, and F1–F3 at 20/50/80 % (0 = not measurable).
+- **Subset used:** iy/ah/uw (ee/ah/oo), with `vowdata.dat` as ground truth.
+
+```bash
+mkdir -p hillenbrand && cd hillenbrand
+git clone https://github.com/santiagobarreda/hillenbrand_et_al_1995 repo
+unzip -q repo/h95-alldata.zip -d data
+```
 
 ## Deeply Nonverbal Vocalization Dataset (OpenSLR 99): `nonverbal/`
 

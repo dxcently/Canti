@@ -40,7 +40,7 @@ Prototype with **two or three generic INMP441 modules** (quality varies) and kee
 | Pico 2 W | $7 | [Raspberry Pi](https://www.raspberrypi.com/news/raspberry-pi-pico-2-w-on-sale-now/) |
 | I2S mic | $3–9 | table above |
 | Breadboard, headers, wires | ~$5–9 | [EST] |
-| Pushbutton + 3.5 mm mono switch jack (cursor mode, disarm/stop, pairing gate) | ~$1–2 | [EST]. Wire the jack's tip in parallel with the button to a GPIO with a pull-up. Standard assistive switches (head, foot, elbow) are simple contact closures, so either one works |
+| Pushbutton (cursor mode, disarm/stop, pairing gate) | ~$1 | [EST]. One button on GP14 with the internal pull-up. A 3.5 mm assistive-switch jack was planned but dropped ([D048](decisions.md#d048)); one could be wired in parallel with the button later, as a hardware-only add-on |
 | **Wired total** | **~$15–20** | [EST] |
 | 500 mAh LiPo + charger (optional) | ~$8–12 | [EST]; VSYS accepts 1.8–5.5 V ([Pico 2 W datasheet](https://datasheets.raspberrypi.com/picow/pico-2-w-datasheet.pdf)) |
 | **Battery total** | **~$25–32** | [EST] |

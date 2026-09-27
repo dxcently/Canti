@@ -139,9 +139,23 @@ def systemone(req: Request) -> dict:
             "usage": {"input_tokens": tokens}, "latency_ms": round((time.perf_counter() - t0) * 1000, 1)}
 
 
+def _option_format() -> str:
+    """Target option text format the served target model was trained on (the app's OptionFormat.kt keys on this).
+    VOX_VERDICT_RUN=<verdict run dir> reports that run's student.json "option_format"; otherwise, and for every model
+    served here today (all trained on v1 text), "v1". Only a model trained on v2 text may ever report "v2"."""
+    run = os.environ.get("VOX_VERDICT_RUN")
+    if not run:
+        return "v1"
+    try:
+        return "v2" if json.loads((Path(run) / "student.json").read_text()).get("option_format") == "v2" else "v1"
+    except (OSError, ValueError):
+        return "v1"
+
+
 @app.get("/health")
 def health() -> dict:
-    return {"device": DEVICE, "loaded": sorted(_models), "jevlike_ckpt": os.environ.get("VOX_JEVLIKE_CKPT")}
+    return {"device": DEVICE, "loaded": sorted(_models), "jevlike_ckpt": os.environ.get("VOX_JEVLIKE_CKPT"),
+            "option_format": _option_format()}
 
 
 for _name in filter(None, os.environ.get("VOX_PRELOAD", "").split(",")):

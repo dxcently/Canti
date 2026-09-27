@@ -1,0 +1,120 @@
+{
+ "set": "tv2-iid",
+ "gold": "data/targets-v2/test_iid.jsonl",
+ "rows_in_file": 2000,
+ "rows_scored": 100,
+ "sample": [
+  "random",
+  100
+ ],
+ "model": "deepseek-v4.1-flash",
+ "endpoint": "https://ollama.com",
+ "kinds_in_sample": {
+  "none": 22,
+  "name": 55,
+  "name_pos": 13,
+  "unlabeled": 2,
+  "item": 1,
+  "position": 7
+ },
+ "models": {
+  "ollama-dsv41flash": {
+   "n": 98,
+   "coverage": 0.98,
+   "accuracy": 0.9285714285714286,
+   "nll": 1.4802332740676007,
+   "ece": 0.0714285714285714,
+   "false_trigger_rate": 0.14285714285714285,
+   "missed_command_rate": 0.012987012987012988,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.926,
+    "name_pos": 1.0,
+    "none": 0.857,
+    "position": 1.0,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 655,
+   "latency_ms_p95": 868
+  },
+  "ollama-dsv41flash+jevlike-fallback@2500ms": {
+   "n": 100,
+   "coverage": 1.0,
+   "accuracy": 0.93,
+   "nll": 1.4506286185862536,
+   "ece": 0.06999999000000001,
+   "false_trigger_rate": 0.13636363636363635,
+   "missed_command_rate": 0.01282051282051282,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.927,
+    "name_pos": 1.0,
+    "none": 0.864,
+    "position": 1.0,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 467,
+   "latency_ms_p95": 868
+  },
+  "jevlike": {
+   "n": 100,
+   "coverage": 1.0,
+   "accuracy": 1.0,
+   "nll": 8.843602705667857e-05,
+   "ece": 8.823000000002246e-05,
+   "false_trigger_rate": 0.0,
+   "missed_command_rate": 0.0,
+   "by_kind": {
+    "item": 1.0,
+    "name": 1.0,
+    "name_pos": 1.0,
+    "none": 1.0,
+    "position": 1.0,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 9.02,
+   "latency_ms_p95": 10.54
+  },
+  "verdict": {
+   "n": 100,
+   "coverage": 1.0,
+   "accuracy": 1.0,
+   "nll": 0.0,
+   "ece": 0.0,
+   "false_trigger_rate": 0.0,
+   "missed_command_rate": 0.0,
+   "by_kind": {
+    "item": 1.0,
+    "name": 1.0,
+    "name_pos": 1.0,
+    "none": 1.0,
+    "position": 1.0,
+    "unlabeled": 1.0
+   }
+  }
+ },
+ "cloud_calls": {
+  "n": 100,
+  "ok": 98,
+  "error_rate": 0.02,
+  "errors": {
+   "invalid choice": 2
+  },
+  "latency_ms_p50": 655,
+  "latency_ms_p95": 868,
+  "latency_ms_max": 1080,
+  "server_ms_p50": 196,
+  "budget_ms": 2500,
+  "within_budget_rate": 0.98,
+  "fallback_rate": 0.02,
+  "tokens_prompt_total": 21646,
+  "tokens_eval_total": 338,
+  "tokens_prompt_mean": 216.5,
+  "tokens_eval_mean": 3.4,
+  "think": false,
+  "parse": {
+   "json/bare (run 1)": 95,
+   "echo": 3
+  }
+ }
+}

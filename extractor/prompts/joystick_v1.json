@@ -1,0 +1,229 @@
+{
+ "version": "joystick_v1",
+ "about": "Relative 360-degree voice joystick with snap-to-elements (wiki/voice-cursor.md, 'Joystick cursor'). ONE source of truth for the desktop prototype (extractor/joystick.py, extractor/joystick_core.py) and later the app's mover. Pitch relative to the note each sound STARTED on steers up/down, the vowel steers sideways (ee right, oo left, ah none), and mixing the two gives any direction. The cursor moves only while the sound lasts, stops where it is when the sound ends, and then snaps to a clickable element within a finger's width. No calibration anchors: the per-frame analysis is voice_cursor_v2's (pitch, the F2 tracker with the broad-F2 and continuity fixes).",
+ "analysis_from": "voice_cursor_v2",
+ "units_note": "Screen distances are in dp (1 dp = 1/160 inch). The prototype's phone is 1080 x 2400 px at 420 dpi = 411 x 914 dp, the emulator the harvested screens came from.",
+ "tick": {
+  "tick_ms": 20,
+  "note": "one analysis step per 20 ms of audio on the newest 512-sample (32 ms) window: pitch, clarity, level, F1/F2. The Pico would stream at this rate."
+ },
+ "voicing": {
+  "clarity_min": 0.8,
+  "level_over_floor_db": 6,
+  "floor_window_s": 5.0,
+  "floor_pct": 10,
+  "start_ticks": 3,
+  "end_gap_ms": 200,
+  "note": "A sound starts after start_ticks CLEAR voiced ticks in a row (clarity >= clarity_min, the person's own from the setup when there is one; 60 ms: a pop or a thump never starts one). It continues through ticks that are loud (level_over_floor_db), have a pitch within continue_near_st of the sound's, and have clarity >= clarity_continue (hysteresis: those move like voiced ticks), and ends after end_gap_ms with neither. A shorter gap does not end the sound, and the speed ramp carries across it; the cursor does not move during the gap. The floor is the floor_pct percentile of the levels of the NON-periodic ticks (clarity < the start threshold) over the last floor_window_s, so a long note never raises its own floor.",
+  "clarity_continue": 0.6,
+  "continue_near_st": 3.0,
+  "why": "Live test 2 (2026-09-27, trace-20260927-035310): with a single 0.8 threshold and end_gap 100 ms, 131 hums in 435 s with a median of 420 ms; 243 voice gaps of 200 ms or less, 280 of 289 short-gap ticks 'unclear' (loud, clarity p50 0.74). The dropouts cluster where the user goes down into creak (the pitch before a gap: median 4 st, about 70 Hz). clarity_continue 0.6 is the extractor's own voiced_clarity (vox_extract Config) and sits under the creak ticks (p50 0.66-0.74); a loud tick far from any voice reaches 0.76 (p95), which is why it may only CONTINUE, never start, and only near the sound's pitch. end_gap 200 ms: with the continue rule the gaps between the user's voiced ticks split into <= 200 ms (195) and > 300 ms (104), with only 7 in 220-300 ms: 200 ms keeps a hum whole and still ends it within 0.2 s. Replay: 131 hums -> 91, median 420 -> 660 ms, hums under 200 ms 41 -> 8. Cost: the snap and the pop come 100 ms later, and two deliberate hums need 0.2 s of silence between them.",
+  "person_note": "The setup's relaxed hum sets clarity_min for the person: the 10th percentile of its loud pitched ticks' clarity minus person_margin, within person_clarity. Not below 0.78: a loud tick far from any voice reached clarity 0.76 (p95) and 0.77 (p99) in live test 2, and must not start a sound. Not above 0.82: a held hum is clearer than a moving pitch (a glide lowers the clarity within the 32 ms window), so a threshold from a very clean hum (a synthetic one gave 0.88) chops glides; this user's live-test-2 setup vowels give 0.81 (default 0.80), so for them it changes little: the hysteresis is what keeps their hums whole.",
+  "person_clarity": [
+   0.78,
+   0.82
+  ],
+  "person_margin": 0.05
+ },
+ "pitch": {
+  "smooth_ms": 100,
+  "attack_ms": 60,
+  "settle_ms": 120,
+  "settle_tol_st": 0.5,
+  "settle_max_ms": 500,
+  "reanchor_grace_ms": 600,
+  "reanchor_min_st": 6.0,
+  "jump_guard_st": 5.0,
+  "jump_persist_ms": 100,
+  "dead_zone_st": 1.0,
+  "full_speed_st": 4.0,
+  "note": "The reference ('the note you started on') is the median of the first settle_ms window, at least attack_ms after onset, whose pitch stays within settle_tol_st; after settle_max_ms without one, the last settle_ms median is taken. Nothing moves before the reference exists. Within reanchor_grace_ms of onset, a new settled note more than reanchor_min_st away replaces the reference and undoes the motion since (an onset blip: vcursor-2's blind takes show 0.2-0.5 s of creak 7-18 st below the note; a deliberate early step of a few st must not be taken for one, hence 6 st; on those takes 600 ms cut the p90 vertical drift of a held note from 985 to 360 dp of travel vs 400 ms). A frame more than jump_guard_st from the running pitch is ignored unless jump_persist_ms in a row agree (octave errors). Vertical speed fraction = clamp((|offset| - dead_zone_st) / (full_speed_st - dead_zone_st), 0, 1), up when above the reference.",
+  "dead_zone_why": "vcursor-2's final pitch error with the meter was 0.32 st RMS: dead_zone_st = 3 x 0.32 ~ 1.0 st keeps a held start note still (and swallows vibrato, about +-0.5 st raw) while a deliberate step of a tone or more moves"
+ },
+ "vertical": {
+  "mode": "home",
+  "modes_note": "What 'up' and 'down' are measured against; the prototype switches them live (keys 1 / 2 / 3). The pitch section's smoothing, jump guard and dead zone apply to all three.",
+  "home": {
+   "range_st": [
+    9.0,
+    21.9
+   ],
+   "full_frac": 0.7,
+   "adapt_hums": 9,
+   "adapt_bound_st": 2.0,
+   "note": "Key 1, the default. Up/down is measured from the person's RELAXED HUM ('home'): above = up, below = down, further = faster. Full speed at full_frac of the room between home and the range's end on that side (at least dead_zone_st + 1), so both directions reach full speed inside the range. Home is the setup's relaxed hum (3 s of 'mm'), then the median start pitch of the last adapt_hums hums (3 or more, each at least 200 ms long and inside the range +-1 st, so creak never counts), bounded to +-adapt_bound_st of the setup's. Without a setup hum: the range's middle (the first version of this mode, 'mid'). The range comes from the setup's 5 s glide, --range, or a voice_cursor score (person.range lo_st / hi_st); range_st is only the fallback.",
+   "why": "Live test 1: from the note each sound started on, a voice whose home is 1.2 st above its lowest note could not go down. Live test 2 (mid = the range's middle, 13.4 st): the user's pitch while moving was median 11.2 st, so 55% of the moving ticks went down and 36% up; the setup's vowels were sung at 11.3 st. Replayed against home 11.3 (adaptive): 46% down, 42% up. The user's own words: 'I just wish it was more calibrated for my voice'.",
+   "creak_note": "Pitch far below the range (live test 2: 1-4 st, about 60-65 Hz, 18% of the voiced ticks while moving) is creak (vocal fry), not an octave error: only 1 of 39 such runs sat an octave under its neighbours, and its tick-to-tick jitter is 0.4 st against 0.06 st for a steady hum. It still reads as full speed down, which is what the user meant; it no longer chops the sound (clarity_continue), never adapts home, and the range setup drops jittery ticks."
+  },
+  "glide": {
+   "window_ms": 150,
+   "min_st": 0.8,
+   "full_st": 2.5,
+   "dead": 0.5,
+   "note": "Key 2. The DIRECTION the pitch moves steers: a glide up adds up, a glide down adds down, a held note keeps whatever it has (momentum). momentum = clamp(momentum + change / full_st, -1, 1), with the change of the smoothed pitch counted only while it moves at least min_st per window_ms (vibrato and slow drift do not count), and never across a jump-guard jump or during attack_ms. So: glide up 2.5 st = full speed up and hold it; glide back down 2.5 st = vertical stop; 2.5 st more = down. Relative: no range, no calibration. Momentum starts at 0 with each sound. Vertical speed fraction = sign(m) * clamp((|m| - dead) / (1 - dead), 0, 1): the momentum is clamped at +-1, so a glide back never lands exactly on 0 (up 3 st then back 3 st leaves -0.2); dead makes 'roughly back' a stop.",
+   "tuning": "vcursor-2 held takes (the user meant ONE steady note; 12 level + 18 vowel takes), glide mode, vertical travel of the whole take: min_st 0.6 / dead 0.3 / full 2.0 moved p50 6 / 127 dp, p90 965 / 858 dp; 0.8 / 0.5 / 2.5 moved p50 0 / 38, p90 31 / 812 dp, 10 of 12 level takes still (<10 dp). The vowel-take tail is onset scoops of a few st, which a glide mode reads as a deliberate glide by design."
+  },
+  "start": {
+   "note": "Key 3, the first prototype, kept to compare: relative to the note the sound started on (the pitch section's reference, settle and re-anchor)."
+  },
+  "onset_undo": {
+   "grace_ms": 600,
+   "min_below_st": 6.0,
+   "clarity_max": null,
+   "note": "mid and glide modes: when, within grace_ms of onset, the pitch settles min_below_st or more ABOVE what came before it (the onset was a creak or a scoop from far below), the motion up to that point is undone and glide momentum is reset. Only an onset from BELOW counts, and only a change this large: a deliberate early step (a few st, either way) never undoes anything. clarity_max: also require the onset segment's median clarity below this (null = no clarity condition).",
+   "why": "vcursor-2's blind takes: 4 of 12 start with 0.2-0.5 s of creak 7-18 st below the note. The coordinator's rule was 'only if the early segment was low clarity'; on vcursor-2 it would never fire: the far-below onset frames have clarity p50 0.92, the steady note 0.94 (both pass the 0.8 voicing gate). The direction (from below) and the size (6 st) separate them instead, hence clarity_max null."
+  }
+ },
+ "vowel": {
+  "smooth_ms": 100,
+  "sigma_bark": 1.0,
+  "reject_bark": 3.5,
+  "dead_zone": 0.35,
+  "full": 0.8,
+  "centroids_bark": {
+   "ee": [
+    3.92,
+    14.61
+   ],
+   "ah": [
+    7.59,
+    10.83
+   ],
+   "oo": [
+    4.18,
+    8.83
+   ],
+   "note": "(F1, F2) in Bark. Default: the mean of Hillenbrand et al. 1995 adult men and women for /i/, /a/, /u/ (F1 390/852/418 Hz, F2 2541/1442/1051 Hz). A per-person file (--vowels) replaces them; it stays local."
+  },
+  "note": "Soft vowel weights w_v ~ exp(-d_v^2 / (2 sigma^2)) over the three centres in (F1, F2) Bark; x = w_ee - w_oo, averaged over smooth_ms of frames with formants. No formants, or every centre farther than reject_bark, means x = 0. Sideways speed fraction = sign(x) * clamp((|x| - dead_zone) / (full - dead_zone), 0, 1): ee right, oo left, ah none."
+ },
+ "speed": {
+  "mode": "ramp",
+  "start_dp_s": 80,
+  "max_dp_s": 600,
+  "ramp_s": 1.2,
+  "ramp_reset_ms": 150,
+  "note": "speed = (start_dp_s + (max_dp_s - start_dp_s) * min(1, t_moving / ramp_s)) * the direction's length (at most 1). t_moving counts time with a non-zero direction in this sound and resets after ramp_reset_ms of no direction. So a short nudge moves ~10-25 dp, a 1 s hold ~300 dp, and the 914 dp screen height takes ~2 s.",
+  "why": "Constant speed forces one trade-off for every move (Sporka's fixed-speed melodic mode: everyone overshot). Loudness couples with pitch (louder notes go sharp), with mic distance and with the Pico's gain, so it is a poor second control. A ramp while held is the MouseKeys pattern: short sounds are precise, long ones travel, and the user needs no second control."
+ },
+ "release": {
+  "rewind_ms": 80,
+  "note": "when a sound ends, the cursor goes back to where it was rewind_ms before the last voiced tick: the release's pitch fall would otherwise add a downward jerk (voice_cursor_v2's release_skip_ms)"
+ },
+ "magnet": {
+  "snap_dp": 48,
+  "max_area_frac": 0.5,
+  "centre_max_dp": 96,
+  "centre_note": "the cursor jumps to the element's centre only when neither side exceeds centre_max_dp (two finger widths: buttons, icons, chips). A larger element (a list row, a panel) is highlighted; a cursor already on it stays exactly where it stopped, one just outside moves onto it (8 dp inside its nearest edge). Why: in the fake-singer task, stopping inside a 411 x 394 dp list 15 dp below a 48 dp toolbar button threw the cursor ~190 dp to the list's centre, and every correction started from there again (the target was never reached). null = always the centre (the user's literal rule).",
+  "note": "when a sound ends, the clickable element whose bounds are nearest to the cursor (0 when inside) is chosen if that distance is <= snap_dp; ties (e.g. inside a row and a button in it) go to the smaller element. The cursor jumps to its centre and it is highlighted. Elements covering more than max_area_frac of the screen never catch the magnet (containers). Nothing within reach: the cursor stays exactly where it stopped.",
+  "why": "48 dp is Android's minimum touch target (Material), about 7.6 mm, the width of an adult fingertip pad (8-10 mm = 50-63 dp): the reach of a finger placed at the cursor"
+ },
+ "click": {
+  "pop_seq_gap_ms": 600,
+  "note": "a pop clicks at the cursor (the highlighted element's centre when snapped) once pop_seq_gap_ms pass without a second pop: pop pop stays 'listen' (the intent cursor's numbered targets, unchanged; the prototype only logs it)"
+ },
+ "pop": {
+  "loud_db": 5.0,
+  "peak_db": 8.0,
+  "rise_db": 5.0,
+  "lead_db": 20.0,
+  "peak_within": 2,
+  "core_db": 15.0,
+  "core_ticks": 5,
+  "max_ticks": 15,
+  "max_voiced": 2,
+  "quiet_ticks": 3,
+  "after_voice_ms": 150,
+  "confirm_ms": 150,
+  "confirm_db": 12.0,
+  "merge_ms": 300,
+  "warmup_ms": 1000,
+  "calibrate": {
+   "peak_frac": 0.5,
+   "peak_db": [
+    8.0,
+    20.0
+   ],
+   "rise_frac": 0.5,
+   "rise_db": [
+    5.0,
+    12.0
+   ],
+   "core_ticks": [
+    3,
+    7
+   ],
+   "find_peak_db": 6.0,
+   "find_rise_db": 3.0,
+   "note": "The pop setup takes the 3 strongest bursts that look like pops at find_peak_db / find_rise_db (looser than any threshold) and sets peak_db and rise_db to half the weakest one's (a pop in use can be softer than one asked for), core_ticks to its widest + 1, within these bounds. The lower bounds are the defaults: a calibration only makes it stricter, never looser than the rules that heard the live attempts.",
+   "why": "Replay (live test 2 trace; the user's guided-1 takes). Defaults 8 / 5: all 7 pop-shaped bursts of the live trace, 10/11 guided pop takes, but also tongue clicks (click_click 10/10), 5/11 'clean' phrases, whistle onsets (4/42) and 2/70 vcursor-2 hum takes. Calibrated from loud pops like guided-1's (38-42 dB): 19 / 8 -> 9/11 guided pops, false: clean 0/11, tongue click 1/10 (click_click 4/10), whistles 1/42, vcursor-2 0/70; but of the live attempts only the two over 30 dB (the soft 9-16 dB ones are missed: SPACE, or a softer setup). Looser than the defaults (6 / 3) adds 6 more detections inside the live trace's creak stream: not allowed."
+  },
+  "note": "A second pop detector on the ticks (joystick_core.PopDetector), beside the extractor's (vox_extract, label 'pop'); either one pops, and the two hearing the same pop (starts within merge_ms + 100 ms) count once. A pop = a burst from quiet (quiet_ticks below loud_db, after_voice_ms after any voiced run, not in the first warmup_ms) that rises at least rise_db in one tick, peaks at least peak_db over the floor within peak_within ticks of coming within lead_db of that peak, has at most core_ticks within core_db of its peak (one impulse with a decaying tail), is at most max_ticks long and has at most max_voiced voiced ticks, and is followed by confirm_ms with no voiced tick and nothing over confirm_db (a plosive starting a word or a hum is not a pop). Bursts within merge_ms of a pop are the same pop. The setup's 3 pops set peak_db, rise_db and core_ticks for the person (the weakest pop minus a margin, within the calibrate bounds), and the extractor labels ('pop' or 'click') that at least 2 of the user's pops got are accepted as pops too.",
+  "why": "Live test 2: the user 'tried popping but didnt seem to work'. In the trace, 2 pops clicked (peak 34 and 9 dB over the floor); bursts of the same shape that did not click peaked 32, 12-16, 10 and 9 dB (46.8 s: 32 dB, 5 ticks, while snapped to an element). The extractor's rules (gate 9 dB AND 2.5 spreads over its floor, at most 200 ms gated and 60 ms within 15 dB of the peak, centroid < 1800 Hz for 'pop') are strict for a desk mic; the trace cannot say which rule each attempt failed (no audio), so the session now logs every extractor event. Defaults from that trace: the attempts rise 5.4-30 dB in a tick and peak 9-34 dB; hum and creak bursts from quiet rise under 5 dB."
+ },
+ "position": {
+  "note": "Never reset by a sound, a pop, or leaving and re-entering cursor mode. Only an explicit recentre moves it to the screen centre, and a rotation clamps it into the new bounds (same px coordinates)."
+ },
+ "task": {
+  "targets": 12,
+  "min_side_dp": 24,
+  "max_area_frac": 0.25,
+  "min_start_dist_dp": 150,
+  "timeout_s": 30,
+  "note": "N random clickable elements of the current screen, one at a time. Per target: time from showing it to the click on it; misses (a click on no element), false clicks (a click on another element), overshoot (per sound that came within snap_dp of the target: how much farther from it the cursor stopped than its closest point, dp), sounds used, and not reached (timeout)."
+ },
+ "calib_v2": {
+  "clicks": {
+   "window_ms": 8000,
+   "ask": 3,
+   "need": 2,
+   "max_dur_ms": 250,
+   "settle_ms": 700
+  },
+  "whistle": {
+   "glide_ms": 5000,
+   "min_range_st": 3.0,
+   "min_steady_ticks": 50,
+   "tick_f0_max_hz": 2600,
+   "voice_tick_f0_max_hz": 1100
+  },
+  "hiss": {
+   "window_ms": 8000,
+   "ask": 2,
+   "need": 2,
+   "settle_ms": 700
+  },
+  "room": {
+   "window_ms": 3000,
+   "settle_ms": 500,
+   "max_voiced_run_ticks": 3
+  },
+  "note": "Calibration v2's steps after pops, in order: clicks (3 tongue clicks, 2 needed; extractor pop / click / hiss events <= max_dur_ms, as the guided single clicks come out as any of the three), whistle (a 5 s whistle glide: ticks at tick_f0_max_hz, because at voice_tick_f0_max_hz only 251 of 1243 guided whistle ticks were within 0.5 st, 954 octave or twelfth errors; at 2600 98% are right and 26 of 8112 voice ticks change), hiss (2 'tss'), room (3 s quiet: the floor and the loudest transient; fails on a voiced run over max_voiced_run_ticks or a transient as loud as the quietest calibrated sound). Each keeps the fail -> retry / skip rule. See wiki/voice-cursor.md 'Calibration v2'."
+ },
+ "level_gate": {
+  "margin_snr_db": 8.0,
+  "margin_level_db": 8.0,
+  "room_margin_db": 3.0,
+  "cap_below_weakest_db": 1.0,
+  "default": {
+   "min_snr_db": 12.0,
+   "min_level_dbfs": -45.0
+  },
+  "offset_db": [
+   -10,
+   10
+  ],
+  "note": "App-side gate for the extractor's pop / click / hiss on the phone and USB mics (never the Pico; the app also gates `unknown` there, and before its personalization, so a gated sound never reaches the trained-gesture relabel): a sound needs snr_db >= min_snr_db AND level_db >= min_level_dbfs. From calibration (only once the clicks step has examples): min = weakest calibrated pop / click / hiss minus margin, raised to the room's loudest transient + room_margin_db, but at most weakest - cap_below_weakest_db. Margins 8 / 8 from eval_real/level_gate.py: held-out real sounds sit below the weakest calibrated one by p99 5.5 dB, max 8.6 dB; 8 keeps 2.5 dB over that p99 (the pool is only 13 attempts), and 400 leave-out setups lose 0.26% of real sounds (an SNR margin of 6 loses the same here but sits 0.5 dB over the p99). Default (uncalibrated mic) 12 dB / -45 dBFS: the r5 phone log's live sounds are SNR p50 13.2 dB, level p50 -50.4 dBFS; it drops 243 of 245 quiet (< 15 dB) events and 0 of 15 real pops (>= 40 dB), and 1 of 49 guided desktop sounds (an 8.6 dB click). offset_db: the user's setting, added to both thresholds (+ = stricter)."
+ },
+ "click_pop": {
+  "min_gap": {
+   "dur_ms": 20.0,
+   "snr_db": 3.0,
+   "level_db": 3.0,
+   "lf_ratio": 0.03
+  },
+  "min_each": 2,
+  "min_votes": 2,
+  "note": "Per-person pop <-> click relabel from the pops and clicks steps: a feature separates when every pops-step example and every clicks-step example sit on opposite sides at least min_gap apart (threshold: the midpoint); a rule needs min_each examples a side and min_votes separating features, and a sound is relabelled only when every separating feature it has agrees. On 400 leave-out setups from the guided takes: 967 right, 0 wrong (all click_run pop -> click)."
+ }
+}

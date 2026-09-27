@@ -27,23 +27,40 @@ interface FeatureSource {
 }
 
 /**
- * Speech-to-text for the listening window. STUB: real ASR is out of scope. Today a phrase arrives in the feature
- * message's `phrase` field (from the device, or injected through a debug source). A phone-side recognizer (Android
- * SpeechRecognizer, or an on-device model) would implement this; the service opens it with the listening window and
- * feeds its text into the same path as a phrase message.
+ * Speech-to-text for the listening window (ListenWindow.kt). An engine only turns audio into a transcript plus its
+ * n-best ([Heard]); what the words mean is PhraseGrammar's job, whatever the engine (`asr_engine`). Main thread:
+ * [start] once per window, callbacks on the main thread, [cancel] ends it for good (idempotent, frees the engine).
  */
 interface PhraseRecognizer {
     val name: String
-    /** Listen for up to [windowMs]; call [onPhrase] once on the main thread with the text, or null if nothing was heard. */
-    fun listen(windowMs: Long, onPhrase: (String?) -> Unit)
+    /** Whether it records from the phone's mic (Canti's own capture then pauses for the window). */
+    val usesMic: Boolean get() = true
+    /** Why it cannot listen now, shown to the user ("offline speech pack missing"), or null when it can. */
+    fun status(): String? = null
+    fun start(listener: Listener)
+    /** The window is over: finish with what was heard so far (a final result or an error follows). */
+    fun stop()
     fun cancel()
+
+    interface Listener {
+        fun onReady() {}
+        fun onPartial(text: String) {}
+        /** The audio level (dB, engine-defined scale): the log keeps the peak, to tell silence from a blocked mic. */
+        fun onLevel(db: Float) {}
+        fun onFinal(heard: Heard)
+        /** [code]: the engine's error; [status]: a problem the user must fix, shown; null for an ordinary miss. */
+        fun onError(code: Int, what: String, status: String?)
+    }
 }
 
+/** `asr_engine` off: no phone-side recognition; a phrase comes only in a feature message's `phrase` (device, debug). */
 class StubPhraseRecognizer : PhraseRecognizer {
-    override val name = "stub"
-    override fun listen(windowMs: Long, onPhrase: (String?) -> Unit) {
-        EventLog.ev("asr", "state" to "stub: no phone-side speech recognition; waiting for a phrase message", "window_ms" to windowMs)
+    override val name = "off"
+    override val usesMic = false
+    override fun start(listener: PhraseRecognizer.Listener) {
+        EventLog.ev("asr", "state" to "off: no phone-side speech recognition; waiting for a phrase message")
     }
+    override fun stop() {}
     override fun cancel() {}
 }
 

@@ -17,15 +17,19 @@ It is written to be ported to C on the Pico 2 W (Cortex-M33, 150 MHz, 520 KB SRA
 | `vox_extract/resample.py` | `Decimator3` (reference 48 kHz → 16 kHz: a 63-tap FIR, evaluated only at every 3rd sample). Also `to_16k` for other file rates (not part of the port). |
 | `vox_extract/frontend.py` | `FrameProcessor`: runs the high-pass filter, then per 10 ms hop computes energy, ZCR, spectral centroid / flatness / flux / band ratios, and MPM pitch with clarity. |
 | `vox_extract/segmenter.py` | `NoiseFloor` (minimum statistics), the gate (hysteresis, pre-roll, hangover, 4 s cap) and `SegmentStats` (what is kept per sound). |
+| `vox_extract/hold.py` | Hold messages for hold-to-scroll: `hold start` while a steady tone is still going, `hold end` when it ends (before its event). `HoldTracker` also numbers the sounds (`Event.sound`, `Event.held`). |
 | `vox_extract/classify.py` | One sound → `Event`: pop/click/hiss/contour, excursion and duration buckets, tone, loudness, and "sounds like". |
 | `vox_extract/lines.py` | Builds lines exactly like generate.py, plus a strict parser. |
 | `vox_extract/vocab.py` | A pinned copy of the schema vocabulary and a digest. A test fails if it drifts from `finetune/vox/schema.py`. |
 | `vox_extract/extractor.py` | `Extractor(cfg, input_rate=16000 or 48000)`, with `push(samples)` → events and `flush()`. |
 | `vox_extract/protocol.py` | Builds PROTOCOL.md v1 messages; `DebugSocket` talks to the app's `vox-debug` socket. |
 | `vox_extract/policy.py` | Mirrors the app's not-deliberate gate, the default bindings and the 600 ms grouping. Used only for scoring. |
+| `vox_extract/sequencer_sim.py` | Mirrors the app's Sequencer (act at once), its current bindings, MicPopGate and PhoneGate: would-act per minute as the app counts it. Used only for scoring (`android/tools/mic_live.py`, `eval_real/aec_desktop.py`). |
 | `vox_extract/fingerprint.py` | `fp1` (24 floats per sound) and `pitch16`, the optional `features` of the message. Spec: `FINGERPRINT.md`. |
 | `vox_extract/personal.py` | Python mirror of the app's enrollment `Matcher` (Personal.kt), for `record.py --enroll` and `eval_real/enroll_sim.py`. |
 | `record.py` | Mic or WAV → live event lines, WAV + JSONL, a guided labelled session (`--prompt`), and enrollment takes (`--enroll`). |
+| `guided_session.py` | Guided, resumable recording session on the desk mic: spoken phrases, whistles (quiet + with a video), clicks / pops; one prompt at a time, auto-stop on silence, `--score` replays whistle / click takes with and without the eval-only `eval_real/wstrong.py` patch. |
+| `prompts/` | Tracked, non-personal prompt lists: `phrases_v1.json` (60 spoken commands with the expected `SpeechCommand`), `sounds_v1.json` (whistle and click / pop takes with expected actions). |
 | `eval_real/` | The REAL-audio evaluation (six public datasets + the live recordings). See its README. |
 | `FINGERPRINT.md` | The `fp1` / `pitch16` field spec, cost on the RP2350, per-feature scales. |
 | `synth.py` | Generates labelled SYNTHETIC clips (gestures, click-pop, negatives, 4 backgrounds). |
@@ -110,6 +114,24 @@ The venv at `.venv` was built with `nix shell nixpkgs#python313 nixpkgs#uv` (num
    8. Otherwise → hum.
 
 The device does not decide anything. It describes each sound, and the phone groups sounds (gap ≤ 600 ms) and decides. Junk is still emitted, with an honest "sounds like", because the phone's gate and model are trained to ignore it.
+
+## Hold messages
+
+`Extractor.push_stream` / `flush_stream` return the events plus live hold messages (`hold.py`); `push` / `flush`
+return the events only, unchanged except for the new `sound` / `held` fields. Wire format and phone rules:
+`android/PROTOCOL.md`, "Hold messages".
+
+- **Test** (every frame above the close threshold, over the sound's last `hold_start_ms` = 300 ms): at least 80 %
+  voiced frames, median clarity at least 0.85, drift between the window's halves at most 1 st, median absolute pitch
+  deviation at most 0.5 st, and a pitch std of at least `machine_max_pitch_std_st`. The first frame that passes
+  sends `hold start` (once per sound). The sound's close sends `hold end` just before its event.
+- **Synthetic check (SYNTHETIC ONLY, 30 clips per class at 20 dB SNR, pink noise):** a hold on 30/30 hummed and
+  30/30 whistled flats (300 ms to `hold start`); 0/30 for laugh, cough, music, air, hiss, pop and click. False holds:
+  talk 23/30, fan motor 11/30, talk_short 6/30, rise 8/30 (slow rises look steady over 300 ms), fall/dip 4/30,
+  arch 1/30. The phone therefore acts on a hold only right after a swipe (PROTOCOL.md).
+- **Limits.** A sound is force-closed at 4 s, so a hold lasts at most 4 s. The rest of a longer hum usually does not
+  open a new sound, because the floor has risen towards it. At the earliest point the window is the whole sound, so
+  `flat` is always true there.
 
 ## Configuration
 

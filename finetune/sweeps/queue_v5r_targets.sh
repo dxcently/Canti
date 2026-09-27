@@ -78,6 +78,7 @@ if [ -n "$WAIT_PID" ]; then
   while kill -0 "$WAIT_PID" 2>/dev/null; do sleep 60; done
 fi
 log "queue start"
-sweep data/v5 v5r-e5-small-e3
+# already done 13:24-14:01 (Verdict-first reorder): skip when its evals exist
+if [ -s sweeps/eval/v5r-e5-small-e3.test_unseen_apps.json ]; then log "skip v5r-e5-small-e3 (already evaluated)"; else sweep data/v5 v5r-e5-small-e3; fi
 sweep data/targets-v2 targets-v2-e5-small-e3
 log "queue done"

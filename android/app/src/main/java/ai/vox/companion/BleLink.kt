@@ -191,9 +191,97 @@ class AuthFailures {
     }
 }
 
+/**
+ * How late a device message arrived, from the device's own clock (PROTOCOL.md: `timing[].t_end_ms`, a hold's `t_ms`).
+ * The clocks are never compared directly: lag = (arrival - device time) - the smallest such offset over the last
+ * [window] messages (the clock offset plus the fastest delivery), so it is the delay above the best recent one. A
+ * device clock that goes backwards (a reboot) starts over. Pure; BleFeatureSource logs it per message (`ble_rx`).
+ */
+class ArrivalLag(private val window: Int = 16) {
+    private val offsets = ArrayDeque<Long>()
+    private var lastDevice: Long? = null
+
+    fun lag(arrivalMs: Long, deviceMs: Long): Long {
+        if (lastDevice?.let { deviceMs < it } == true) offsets.clear()
+        lastDevice = deviceMs
+        val o = arrivalMs - deviceMs
+        offsets.addLast(o)
+        while (offsets.size > window) offsets.removeFirst()
+        return o - offsets.min()
+    }
+
+    companion object {
+        /** The message's latest device time: a hold's `t_ms`, else the last `timing` entry's `t_end_ms`; null = none. */
+        fun deviceMs(m: org.json.JSONObject): Long? {
+            if (m.has("t_ms") && !m.isNull("t_ms")) return m.optLong("t_ms")
+            val t = m.optJSONArray("timing") ?: return null
+            for (i in t.length() - 1 downTo 0) {
+                val o = t.optJSONObject(i) ?: continue
+                if (o.has("t_end_ms")) return o.getLong("t_end_ms")
+            }
+            return null
+        }
+    }
+}
+
 /** Reconnect delays: base, 2x each failure, capped; [reset] after a good connection. */
 class Backoff(private val baseMs: Long = 1000, private val maxMs: Long = 30_000) {
     var failures = 0; private set
     fun next(): Long { val d = minOf(maxMs, baseMs shl minOf(failures, 20)); failures++; return d }
     fun reset() { failures = 0 }
+}
+
+/**
+ * How the BLE client retries (pure; BleTest). BleFeatureSource reports each failure's kind and asks before each attempt.
+ *
+ *  - [Failure.DROP]: no link came up, or an up link went away (device off or away, connect timeout). [Backoff] 1 s
+ *    doubling to 30 s; after [autoAfter] in a row the stack's background auto-connect takes over.
+ *  - [Failure.SETUP]: a link came up but could not be made ready (INFO / CCCD refused, VOX service or EVENT missing,
+ *    setup/subscribe timeout). Seen after a service restart: the phone's stack still had the old link up, the new
+ *    client got the cached database within 60 ms, then its read and CCCD write were refused. Retrying on that link
+ *    fails the same way, so the client is closed fully (disconnect + close), the next attempt waits at least
+ *    [settleMs] (the backoff still doubles), refreshes the GATT cache, and never auto-connects (it would reattach).
+ *
+ * A link the stack already has up to the device while this client has none (left by a previous service instance or
+ * process) is waited out before connecting: up to [staleWaitMs], once per streak (again after each SETUP failure), so
+ * a link someone else holds for good does not stall reconnecting.
+ */
+class LinkRecovery(
+    private val backoff: Backoff = Backoff(),
+    private val autoAfter: Int = 5,
+    private val settleMs: Long = 2_000,
+    private val staleWaitMs: Long = 4_000,
+) {
+    enum class Failure { DROP, SETUP }
+
+    sealed interface Plan {
+        /** The stack still has a link to the device that is not ours: poll up to [ms] for it to drop, then ask again. */
+        data class WaitForRelease(val ms: Long) : Plan
+        /** connectGatt(autoConnect = [autoConnect]); [refreshCache] = clear the GATT cache once connected, before discovery. */
+        data class Connect(val autoConnect: Boolean, val refreshCache: Boolean) : Plan
+    }
+
+    val failures: Int get() = backoff.failures
+    /** SETUP failures in a row (a DROP or ready ends the streak). */
+    var setupFailures = 0; private set
+    private var waited = false
+
+    /** [staleLink] = the stack has a GATT link to the device and this client none; [asleep] = the device said it sleeps. */
+    fun attempt(staleLink: Boolean, asleep: Boolean): Plan {
+        if (staleLink && !waited) { waited = true; return Plan.WaitForRelease(staleWaitMs) }
+        val auto = setupFailures == 0 && (asleep || backoff.failures >= autoAfter)
+        return Plan.Connect(autoConnect = auto, refreshCache = setupFailures > 0 || staleLink)
+    }
+
+    /** The attempt failed; returns the delay before the next one. */
+    fun failed(f: Failure): Long {
+        val d = backoff.next()
+        return when (f) {
+            Failure.DROP -> { setupFailures = 0; d }
+            Failure.SETUP -> { setupFailures++; waited = false; maxOf(settleMs, d) }
+        }
+    }
+
+    /** The link is ready (or a new connection was asked for): start over. */
+    fun reset() { backoff.reset(); setupFailures = 0; waited = false }
 }

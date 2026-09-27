@@ -203,11 +203,29 @@ def ui_texts(xml: str) -> dict[str, str]:
     return out
 
 
+def _raw_header_at(raw: bytes) -> int:
+    """Offset of the raw screencap header. Foldables (several displays, no -d) print a text warning first; the header
+    (w, h, format[, colorspace]: 12 or 16 bytes) starts right after one of its newlines."""
+    for off in [0] + [i + 1 for i in range(min(len(raw), 4096)) if raw[i] == 0x0A]:
+        if len(raw) < off + 12:
+            break
+        w, h = int.from_bytes(raw[off:off + 4], "little"), int.from_bytes(raw[off + 4:off + 8], "little")
+        if 0 < w <= 10000 and 0 < h <= 10000 and len(raw) - off - w * h * 4 in (12, 16):
+            return off
+    raise RuntimeError("screencap: no raw header found")
+
+
 def screenshot() -> tuple[int, int, bytes]:
     raw = adb("exec-out", "screencap", binary=True, timeout=30)
-    w, h = int.from_bytes(raw[0:4], "little"), int.from_bytes(raw[4:8], "little")
-    header = len(raw) - w * h * 4
-    return w, h, raw[header:]
+    off = _raw_header_at(raw)
+    w, h = int.from_bytes(raw[off:off + 4], "little"), int.from_bytes(raw[off + 4:off + 8], "little")
+    return w, h, raw[len(raw) - w * h * 4:]
+
+
+def screenshot_png() -> bytes:
+    """PNG of the current screen, with the foldable multi-display warning (text before the PNG) stripped."""
+    png = adb("exec-out", "screencap", "-p", binary=True, timeout=30)
+    return png[png.find(b"\x89PNG"):] if b"\x89PNG" in png else png
 
 
 def screen_diff(a: tuple[int, int, bytes], b: tuple[int, int, bytes], skip_top: int = 150) -> float:

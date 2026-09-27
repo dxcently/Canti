@@ -12,8 +12,38 @@ data class ChoiceAnswer(
     val confidence: Double,
     val ms: Long,
     val serverMs: Double? = null,
+    /** A cloud answer: [confidence] is 0 and [probabilities] empty, so Targets.resolve asks for a confirm pop. */
+    val unscored: Boolean = false,
 ) {
     fun top(n: Int): List<Pair<String, Double>> = probabilities.entries.sortedByDescending { it.value }.take(n).map { it.key to it.value }
+}
+
+/**
+ * The request headers both model clients send, and how an HTTP error reads. ollama.com answers 403 with an HTML page
+ * to the default "Dalvik/..." user agent whatever the key, so every request names itself as Canti ([userAgent]).
+ */
+object CantiHttp {
+    fun userAgent(version: String = BuildConfig.VERSION_NAME) = "Canti/$version (Android)"
+
+    /** Content-Type, User-Agent and, with a non-blank key, Authorization (never logged). */
+    fun headers(apiKey: String?): Map<String, String> {
+        val h = linkedMapOf("Content-Type" to "application/json", "User-Agent" to userAgent())
+        apiKey?.trim()?.takeIf { it.isNotEmpty() }?.let { h["Authorization"] = "Bearer $it" }
+        return h
+    }
+
+    fun apply(conn: HttpURLConnection, apiKey: String?) { for ((k, v) in headers(apiKey)) conn.setRequestProperty(k, v) }
+
+    /** An HTML body is a proxy or block page, not the API answering: say so instead of blaming the key. */
+    fun isHtml(contentType: String?, body: String?): Boolean =
+        contentType?.contains("html", ignoreCase = true) == true || body?.trimStart()?.startsWith("<") == true
+
+    /** "HTTP 403 (auth): ..." for an API refusal, "HTTP 403 blocked by server (not an API reply)" for an HTML page. */
+    fun errorText(code: Int, contentType: String?, body: String?): String = when {
+        isHtml(contentType, body) -> "HTTP $code blocked by server (not an API reply)"
+        code == 401 || code == 403 -> "HTTP $code (auth): ${body.orEmpty()}"
+        else -> "HTTP $code: ${body.orEmpty()}"
+    }
 }
 
 /**
@@ -46,13 +76,12 @@ class SystemOneClient(
             conn.connectTimeout = timeoutMs
             conn.readTimeout = timeoutMs
             conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/json")
-            apiKey()?.takeIf { it.isNotBlank() }?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
+            CantiHttp.apply(conn, apiKey())   // Content-Type, User-Agent (not Dalvik: ollama.com 403s it), Authorization
             conn.outputStream.use { it.write(requestBody(state, qid, instructions, options).toString().toByteArray()) }
             val code = conn.responseCode
             if (code != 200) {
                 val err = (conn.errorStream ?: conn.inputStream)?.bufferedReader()?.use { it.readText() }?.take(200)
-                throw IOException("HTTP $code ${if (code == 401 || code == 403) "(auth)" else ""} $err")
+                throw IOException(CantiHttp.errorText(code, conn.contentType, err))
             }
             val body = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             val ans = body.getJSONObject("answers").getJSONObject(qid)
@@ -98,8 +127,11 @@ class HttpDecider(
 /**
  * Decider modes (setting "decider"):
  *  rules  - RuleDecider only (deterministic; the test suite uses this).
- *  model  - every event goes to the model; the rule table answers if the model call fails.
+ *  model  - every event goes to the model (except app-only bindings, e.g. click hiss = forward, which are not model
+ *           options); the rule table answers if the model call fails.
  *  hybrid - wiki "Design A": explicit bindings resolve locally at once; everything else asks the model.
+ *  escalate - EscalatingDecider (OllamaDecider.kt): hybrid plus a cloud model for the cases the local path can't settle
+ *             and for intent cursor target picking.
  */
 class ChainDecider(private val mode: String, private val model: Decider?, private val rules: Decider = RuleDecider()) : Decider {
     override val name = mode
@@ -108,15 +140,26 @@ class ChainDecider(private val mode: String, private val model: Decider?, privat
         // Custom and ignore sounds (personalization) never reach the model unless a plain-language rule asks for it.
         Personal.localReason(input)?.let { why -> val d = rules.decide(input); return d.copy(source = "personal:$why -> ${d.source}") }
         if (mode == "rules" || model == null) return rules.decide(input)
-        if (mode == "hybrid") {
-            val local = rules.decide(input)
-            if (local.explicit) return local
-        }
+        val local = rules.decide(input)
+        // App-only bindings (e.g. click hiss = forward) are not model options: local in every mode.
+        if (local.source == RuleDecider.APP_ONLY) return local
+        if (mode == "hybrid" && local.explicit) return local
         return try {
             model.decide(input)
         } catch (e: Exception) {
             val d = rules.decide(input)
             d.copy(source = "model-fallback:${e.javaClass.simpleName}:${e.message?.take(80)} -> ${d.source}")
         }
+    }
+
+    /** [decide]'s answer when it never reaches the model (a gesture: phrases may read the screen). */
+    override fun local(input: DecisionInput): Decision? {
+        if (input.scene.phrase != null) return null
+        Personal.localReason(input)?.let { why -> val d = rules.decide(input); return d.copy(source = "personal:$why -> ${d.source}") }
+        if (mode == "rules" || model == null) return rules.decide(input)
+        val local = rules.decide(input)
+        if (local.source == RuleDecider.APP_ONLY) return local
+        if (mode == "hybrid" && local.explicit) return local
+        return null
     }
 }

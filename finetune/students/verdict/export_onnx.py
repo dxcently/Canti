@@ -70,6 +70,20 @@ def export(run: str):
     q8 = out / f"{name}_int8.onnx"
     # per-channel: mean cosine to fp32 0.967 vs 0.918 per-tensor on VOX contexts (min is poor for both, see README)
     quantize_dynamic(str(f32), str(q8), weight_type=QuantType.QInt8, per_channel=True)
+    # model metadata the app keys on (OptionFormat.kt): the option text format it was trained on; absent = v1
+    import onnx
+    fmt = meta.get("option_format", "v1")
+    info = {"option_format": fmt, "arch": arch, "temperature": meta.get("temperature"), "scale": meta.get("scale"),
+            "q_prefix": meta.get("q_prefix"), "p_prefix": meta.get("p_prefix"), "vocab_kept": meta.get("vocab_kept")}
+    for p in (f32, q8):
+        mp = onnx.load(str(p))
+        del mp.metadata_props[:]
+        for k, v in info.items():
+            if v is not None:
+                mp.metadata_props.add(key=k, value=str(v))
+        onnx.save(mp, str(p))
+    (out / "model_meta.json").write_text(json.dumps(info, indent=2))
+    print(f"option_format {fmt}{'' if 'option_format' in meta else ' (not declared in student.json: v1 assumed)'}")
     # parity check against torch
     import onnxruntime as ort
     feeds = {n: x.numpy() for n, x in zip(names, args)}

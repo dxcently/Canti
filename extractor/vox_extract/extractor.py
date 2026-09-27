@@ -8,6 +8,13 @@
 
 Events are returned when a sound ENDS (after the hangover), so latency after the end of a sound
 is hangover_frames * 10 ms + the 16 ms half-window.
+
+push_stream / flush_stream return the same events plus the live hold messages (hold.py), in emission order:
+a sound's `hold start` while it is still going, its `hold end` just before its event.
+
+    for item in ex.push_stream(chunk):
+        if isinstance(item, Hold): ...   # item.kind "start" | "end", item.sound
+        else: ...                         # an Event; event.sound is the same id, event.held
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ from .classify import Event, classify
 from .config import Config
 from .fingerprint import CONTOUR_LABELS, FP_VERSION, fingerprint
 from .frontend import Frame, FrameProcessor
+from .hold import Hold, HoldTracker
 from .resample import Decimator3, to_16k
 from .segmenter import Segmenter
 
@@ -39,12 +47,21 @@ class Extractor:
         self.floors: list[float] = []
         self.last_end_ms: float | None = None   # context for the next sound (speech trains)
         self.last_talky = False
+        self.hold = HoldTracker(self.cfg)
 
     def push(self, samples: np.ndarray) -> list[Event]:
+        """Finished sounds only (as before hold messages existed)."""
+        return [e for e in self.push_stream(samples) if isinstance(e, Event)]
+
+    def flush(self) -> list[Event]:
+        return [e for e in self.flush_stream() if isinstance(e, Event)]
+
+    def push_stream(self, samples: np.ndarray) -> list[Event | Hold]:
+        """Events and hold messages, in the order they happen."""
         x = np.asarray(samples, dtype=np.float32)
         if self.decim is not None:
             x = self.decim.push(x)
-        out: list[Event] = []
+        out: list[Event | Hold] = []
         for f in self.fp.push_iter(x):   # frame by frame: the floor update below reaches the next frame's flux
             if self.keep_frames:
                 self.frames.append(f)
@@ -53,22 +70,25 @@ class Extractor:
             self.fp.floor_db = self.seg.floor_db
             if s is not None:
                 self._emit(s, out)
+            self.hold.frame(self.seg.seg, self.seg.seg is not None and not self.seg.pending, out)
         return out
 
-    def flush(self) -> list[Event]:
-        out: list[Event] = []
+    def flush_stream(self) -> list[Event | Hold]:
+        out: list[Event | Hold] = []
         s = self.seg.flush()
         if s is not None:
             self._emit(s, out)
         return out
 
-    def _emit(self, s, out: list[Event]) -> None:
+    def _emit(self, s, out: list) -> None:
+        sound, held = self.hold.closed(s, out)   # hold end (if held) goes out before the event
         if s.n < self.cfg.min_segment_frames:
             return
         ctx = {}
         if self.last_end_ms is not None:
             ctx = {"gap_ms": s.t_start_ms - self.last_end_ms, "prev_talky": self.last_talky}
         ev = classify(s, self.cfg, ctx)
+        ev.sound, ev.held = sound, held
         ev.raw["fp_version"] = FP_VERSION
         ev.raw["fp"] = fingerprint(s, ev.raw)
         if ev.label not in CONTOUR_LABELS:

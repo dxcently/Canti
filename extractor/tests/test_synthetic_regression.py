@@ -56,3 +56,23 @@ def test_gesture_lines_are_in_the_training_distribution():
             evs, _ = actions(clip)
             for e in evs:
                 assert e["text"] in seen, e["text"]
+
+
+def _glide_tone(freqs_hz, sr=48000, dur_s=0.9, seed=0):
+    """A pure tone whose frequency moves linearly through freqs_hz, with 1 s of faint noise either side."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(dur_s * sr)) / sr
+    f = np.interp(t, np.linspace(0.0, dur_s, len(freqs_hz)), freqs_hz)
+    x = 0.2 * np.sin(2 * np.pi * np.cumsum(f) / sr) * np.minimum(1.0, np.minimum(t, dur_s - t) / 0.03)
+    pad = lambda: rng.normal(0.0, 1e-3, sr)  # noqa: E731
+    return np.concatenate([pad(), x, pad()]).astype(np.float32)
+
+
+@pytest.mark.parametrize("shape,freqs", [("arch", [1300, 2200, 1300]), ("dip", [2000, 1200, 2000]),
+                                         ("rise", [1200, 2000]), ("fall", [2000, 1200])])
+def test_whistle_shapes_are_not_inverted_at_48k(shape, freqs):
+    """Guided session khoa-guided-1: the user's whistled arches read as dip and dips as rise. That was checked
+    against an independent FFT-peak pitch track and is how they were whistled (wiki/calibration-gestures.md);
+    this pins that the pipeline itself (48 kHz decimator, MPM up to 2.6 kHz, contour sign) keeps the shape."""
+    evs = [e for e in extract_array(_glide_tone(freqs), 48000, Config()) if e.emit]
+    assert [e.label for e in evs] == [shape]

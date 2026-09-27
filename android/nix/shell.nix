@@ -10,7 +10,9 @@ pkgs.mkShell {
   name = "vox-android";
   # pkgs.flutter is nixpkgs' wrapped Flutter SDK: it carries its own clang, cmake, ninja, pkg-config and the GTK 3
   # libraries for `flutter build linux`, and the engine artifacts for Android and Linux.
-  packages = [ sdk.androidsdk jdk gradle pkgs.python3 pkgs.jq pkgs.curl pkgs.unzip pkgs.flutter ];
+  # cmake + ninja: the NDK build of the phone-mic extractor (app/src/main/cpp; AGP finds them on PATH, at the
+  # version in VOX_CMAKE_VERSION).
+  packages = [ sdk.androidsdk jdk gradle pkgs.python3 pkgs.jq pkgs.curl pkgs.unzip pkgs.flutter pkgs.cmake pkgs.ninja ];
 
   JAVA_HOME = jdk.home;
   ANDROID_HOME = sdk.sdkRoot;
@@ -19,6 +21,7 @@ pkgs.mkShell {
   VOX_ANDROID_BUILD_TOOLS = sdk.versions.buildTools;
   VOX_ANDROID_IMAGE = "system-images;android-${sdk.versions.platform};${sdk.versions.image};${sdk.versions.abi}";
   VOX_ANDROID_NDK = sdk.versions.ndk;
+  VOX_CMAKE_VERSION = pkgs.cmake.version;
   LANG = "C.UTF-8";
 
   shellHook = ''

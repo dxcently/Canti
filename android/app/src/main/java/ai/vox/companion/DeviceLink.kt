@@ -17,7 +17,8 @@ import org.json.JSONObject
  *   device is awake again as soon as a connection is made ([connected]); its state-on-connect message then says
  *   `armed: true` (woken with 5 presses), which the app follows like any other message.
  * - **Disconnect**: the device comes back disarmed and the app never arms it by itself: nothing here writes unless
- *   asked by [command].
+ *   asked by [command]. [pauseCause] tells that link-drop pause from a user's pause; the former is [wakeable] (the
+ *   badge's tap-to-wake and the notification's Wake send the arm command).
  * - **Pairing**: [authFailure] counts failures and, at the limit, sets [hint] (never while the device sleeps).
  */
 class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOUT_MS) {
@@ -28,7 +29,23 @@ class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOU
         fun later(ms: Long, r: () -> Unit): () -> Unit
         fun now(): Long
         fun log(ev: String, vararg fields: Pair<String, Any?>)
+        /** Keeps "the user paused the device" across a service restart ([PauseCause.USER]); the default keeps nothing. */
+        fun saveUserPaused(paused: Boolean) {}
+        fun loadUserPaused(): Boolean = false
     }
+
+    /**
+     * Why a connected device is disarmed. The device's state message doesn't say (PROTOCOL.md *Disconnect*), so the app
+     * works it out from when the disarm showed up:
+     * - [LINK_DROP]: the link's first message (state-on-connect) says `armed: false`. The device pauses itself on every
+     *   unexpected disconnect (out of range, a service restart, Bluetooth toggled) and stays paused. One arm command
+     *   wakes it ([wakeable]: the badge's tap-to-wake).
+     * - [USER]: someone chose it: `armed` went true -> false on a live link (the app's Pause command, the device's
+     *   button, a stay-awake build's sleep), or an `armed: false` command was confirmed. It survives a later link drop
+     *   and a service restart ([Io.saveUserPaused]), so a deliberate pause never turns into tap-to-wake.
+     * Cleared by any `armed: true` message and by the device going to sleep (5 presses wake it armed).
+     */
+    enum class PauseCause { LINK_DROP, USER }
 
     /** One app command. `armed` and `mode` may go together; `sleep` goes alone. */
     data class Command(val armed: Boolean? = null, val mode: String? = null, val sleep: Boolean = false) {
@@ -76,6 +93,21 @@ class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOU
     /** What the user must do to pair again; null unless pairing failed [AuthFailures.LIMIT] times in a row. */
     var hint: String? = null; private set
     val authFailures = AuthFailures()
+    /** Why the device is disarmed ([PauseCause]); null while armed, asleep or not known. */
+    var pauseCause: PauseCause? = if (io.loadUserPaused()) PauseCause.USER else null; private set
+    /** A connection is up (from [connected] to [lost]); the next device message is its state-on-connect message. */
+    private var linkUp = false
+    private var firstOfLink = false
+
+    /** Connected, awake, and paused only by a link drop: an arm command ([Command] `armed = true`) wakes it. */
+    val wakeable: Boolean get() = linkUp && !firstOfLink && !asleep && armed == false && pauseCause == PauseCause.LINK_DROP
+
+    private fun setCause(c: PauseCause?, why: String) {
+        if (c == pauseCause) return
+        pauseCause = c
+        io.saveUserPaused(c == PauseCause.USER)
+        io.log("device_pause", "cause" to (c?.name?.lowercase()?.replace('_', '-') ?: "none"), "why" to why)
+    }
 
     private class Pending(val cmd: Command, val t0: Long, val done: (JSONObject) -> Unit) { var cancel: () -> Unit = {} }
     private var pending: Pending? = null
@@ -98,6 +130,7 @@ class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOU
 
     /** A connection was made: whatever it said before, the device is awake now. */
     fun connected() {
+        linkUp = true; firstOfLink = true
         if (asleep) { asleep = false; io.log("ble", "what" to "awake") }
     }
 
@@ -112,7 +145,7 @@ class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOU
      * sleep: reconnect quietly, and do not disarm again (its `sleeping` message already did).
      */
     fun lost(reason: String): Boolean {
-        ready = false
+        ready = false; linkUp = false; firstOfLink = false
         pending?.let { fail(it, "the link dropped ($reason)") }
         return asleep
     }
@@ -120,7 +153,15 @@ class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOU
     /** Every decoded device message, before the service handles it. */
     fun message(m: JSONObject) {
         val sleeping = m.optBoolean("sleeping", false)
+        val was = armed
+        val first = firstOfLink; firstOfLink = false
         armed = !sleeping && m.optBoolean("armed", true)
+        when {
+            sleeping -> setCause(null, "asleep")
+            armed == true -> setCause(null, "armed")
+            first -> if (pauseCause != PauseCause.USER) setCause(PauseCause.LINK_DROP, "paused on connect")
+            was != false || pauseCause == null -> setCause(PauseCause.USER, "paused on a live link")
+        }
         m.optString("mode").takeIf { it in Command.MODES }?.let { mode = it }
         if (sleeping && !asleep) { asleep = true; io.log("ble", "what" to "asleep") }
         val stateMessage = (m.optJSONArray("sounds")?.length() ?: 0) == 0 && (!m.has("phrase") || m.isNull("phrase"))
@@ -158,6 +199,8 @@ class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOU
     private fun confirm(p: Pending, m: JSONObject) {
         val applied = p.cmd.appliedIn(m)
         error = null
+        // Pause pressed while the device already sat paused after a drop: now it is the user's pause.
+        if (p.cmd.armed == false && applied && armed == false) setCause(PauseCause.USER, "pause command")
         finish(p, true, "confirmed", null, m, applied)
     }
 
@@ -196,6 +239,7 @@ class DeviceLink(private val io: Io, val confirmTimeoutMs: Long = CONFIRM_TIMEOU
     fun status(): JSONObject = JSONObject().put("presence", presence()).put("ready", ready).put("asleep", asleep)
         .put("armed", armed ?: JSONObject.NULL).put("mode", mode ?: JSONObject.NULL)
         .put("waiting_for", waitingFor?.label ?: JSONObject.NULL).put("error", error ?: JSONObject.NULL)
+        .put("pause_cause", pauseCause?.name?.lowercase()?.replace('_', '-') ?: JSONObject.NULL).put("wakeable", wakeable)
 
     companion object {
         const val CONFIRM_TIMEOUT_MS = 1500L

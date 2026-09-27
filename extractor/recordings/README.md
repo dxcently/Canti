@@ -10,6 +10,8 @@ Each session folder `live-YYYYMMDD-HHMMSS/` (or `--session <name>`) holds:
 - `session.json`: capture source and rates, the full config, vocabulary digest, command-line arguments, the start-up signal check, duration and the `synthetic` flag;
 - with `--prompt` only: `takes/NNN_<class>_<rep>.wav` and `labels.jsonl` (the prompted class, GO/stop times, expected and detected lines, verdict per take). A free recording has no labels; its by-ear notes live in `eval_real/live_replay.py` (`NOTES`) and `tests/live_regressions.json`.
 
+`guided_session.py --session <name>` sessions hold `labels.jsonl` (one line per take, append-only; the last line per prompt id wins), `takes/<block>/*.wav`, one `run-NN/` folder per sitting (session.wav, events.jsonl, messages.jsonl, config.json), `session.json`, and `score.json` after `--score`.
+
 Enrollment takes (`record.py --enroll custom|ignore|gesture`) go to `enroll/<kind>/<name>/`: `examples.jsonl` (push format of `android/suite/enroll.py`), `takes/`, `takes.jsonl` and one `run-<time>/` session folder per run.
 
 ```bash

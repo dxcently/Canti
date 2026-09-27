@@ -139,6 +139,38 @@ class Config:
     max_gesture_ms: int = 3000        # a voiced sound longer than this (or truncated) is not a gesture:
                                       # "background noise" if steady, else "background music"
 
+    # ---- hold (hold-to-scroll: a message while a steady tone is still going; hold.py) -----------
+    # A sound that has lasted hold_start_ms and whose last hold_start_ms look like one steady tone sends
+    # `hold start` once; its end sends `hold end` (before its event). Tested on frames above the close
+    # threshold, over the sound's last hold_start_ms of frames; voiced = as classify.
+    # See README "Hold messages" (and android/PROTOCOL.md) for the measured hold / false-hold rates.
+    hold_start_ms: int = 300          # window and earliest time; 0 = no hold messages
+    hold_min_voiced_frac: float = 0.8 # voiced frames in the window (speech windows: median 0.77)
+    hold_min_clarity: float = 0.85    # median clarity of the window (motor hum / chords: ~0.7)
+    hold_max_drift_st: float = 1.0    # |median pitch of the later half - earlier half| of the voiced frames
+    hold_max_mad_st: float = 0.5      # median |pitch - median pitch| (wobble, vibrato, intonation); a pitch
+                                      # std below machine_max_pitch_std_st is a machine: no hold either
+    hold_flat_st: float = 1.5         # `flat` in the message: the window's median pitch is within this of the
+                                      # sound's start pitch (median of its first edge_frames voiced frames)
+    hold_pitch_ms: int = 200          # while held: a `hold pitch` report every this many ms of the sound (after
+                                      # `hold start`), for the phone's pitch throttle; 0 = none
+    hold_pitch_min_voiced_frac: float = 0.5   # a report needs this share of voiced frames in its window, else
+                                      # it is skipped (the next one tries again)
+    hold_glide_ms: int = 250          # glide-and-hold: a rise / fall whose END note is then held steady this long
+                                      # (same steadiness test as above, over the last hold_glide_ms) sends `hold
+                                      # start` with from = "glide" and dir = up / down, before the flat test; 0 = off
+    hold_glide_min_st: float = 2.0    # ... if the held note is at least this far from the sound's start pitch (a
+                                      # glide, not a wobble; arch / dip back to the start fail it)
+    hold_glide_peak_st: float = 1.5   # ... and within this of the sound's highest (up) / lowest (down) voiced pitch so
+                                      # far: the held note is where the glide went, not the way back of an arch / dip
+                                      # that ends off its start pitch; 0 = no such test
+    hold_glide_quiet_ms: int = 700    # ... only for a sound after at least this much quiet (from the previous sound's
+                                      # end; a stream's first sound counts as quiet): talk and music run sounds
+                                      # together, a deliberate glide starts from silence; 0 = no such test
+    hold_glide_delay_ms: int = 300    # ... and only once the test has passed on every frame for this much longer (late
+                                      # start): released sooner, the sound is a plain rise / fall (a full swipe,
+                                      # no hold, held = False); 0 = at once
+
     # ---- output ---------------------------------------------------------------------------------
     cooldown_ms: int = 0              # optional refractory time after an emitted event (wiki: ~300)
 

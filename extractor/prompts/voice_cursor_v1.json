@@ -1,0 +1,53 @@
+{
+ "version": "voice_cursor_v1",
+ "about": "Voice-cursor calibration / feasibility spec (wiki/voice-cursor.md). ONE source of truth for the steps, the analysis settings and the per-person rules: the desktop test (extractor/voice_cursor_test.py), its scorer, and later the app's calibration all read this file. Everything is relative to the person: heights are anchored to their own low end, home note and high end, never to absolute notes.",
+ "analysis": {
+  "fs": 16000, "win": 512, "hop": 160,
+  "f0_min_hz": 60, "f0_max_hz": 1100, "mpm_k": 0.88, "clarity_min": 0.8, "level_over_floor_db": 10,
+  "lpc_order": 18, "preemph": 0.97, "f1_hz": [200, 1100], "f2_hz": [600, 3600], "f2_min_gap_hz": 150, "max_bw_hz": 500,
+  "attack_skip_ms": 150, "release_skip_ms": 80, "max_steady_ms": 1500,
+  "smooth_ms": 200,
+  "smooth_note": "pitch and formants are averaged over >= one vibrato cycle (vibrato is 5-7 Hz, so 143-200 ms) before any steadiness test",
+  "vowel_window_ms": 250, "vowel_window_min_formant_frac": 0.5,
+  "lock_window_ms": 300, "lock_pitch_st": 0.5, "lock_f2_frac_of_ee_oo": 0.25
+ },
+ "blocks": [
+  {"id": "range", "intro": ["Your comfortable pitch range: first two slow glides on an open “ah”, low to high,",
+                            "then hold your lowest and your highest note you could hold for a while WITHOUT straining.",
+                            "Comfortable, not extreme: this becomes the top and bottom of the screen."]},
+  {"id": "home", "intro": ["Your “home note”: the note you hum most easily, without thinking. Hum it 3 times, about 2 s each.",
+                           "It is the middle of your screen, and in daily use a 3 s home note re-centres your range."]},
+  {"id": "levels", "intro": ["Five heights, like a staircase: 1 = your comfortable low end, 3 = your home note,",
+                             "5 = your comfortable high end, 2 and 4 halfway between. Each prompt shows a number: start",
+                             "from silence and go straight to that height, no warm-up slide, and hold it about 1.5 s.",
+                             "Hum or “ah”, whichever you like. No feedback on purpose: this measures whether you land on",
+                             "the same note each time."]},
+  {"id": "vowels", "intro": ["Hold a vowel, mouth open, for about 2 s at the height shown: LOW = near your low end,",
+                             "HOME = your home note, HIGH = near your high end. Keep the vowel clean and steady;",
+                             "the height doesn't have to be exact."]}
+ ],
+ "steps": [
+  {"id": "rg_glide", "block": "range", "kind": "glide", "repeats": 2, "text": "Glide “ah”: LOW → HIGH", "sub": "slowly, over about 3 s", "max_s": 7.0},
+  {"id": "rg_low", "block": "range", "kind": "anchor", "anchor": "low", "repeats": 1, "text": "Hold your LOWEST comfortable note", "sub": "about 2 s, “ah” or hum", "max_s": 4.0},
+  {"id": "rg_high", "block": "range", "kind": "anchor", "anchor": "high", "repeats": 1, "text": "Hold your HIGHEST comfortable note", "sub": "about 2 s, no straining", "max_s": 4.0},
+  {"id": "hm", "block": "home", "kind": "anchor", "anchor": "home", "repeats": 3, "text": "Hum your HOME note", "sub": "the easiest one, about 2 s", "max_s": 4.0},
+  {"id": "lv", "block": "levels", "kind": "level", "shuffle": true, "repeats": 3,
+   "levels": [{"level": 1, "pos": 0.0, "anchor": "low"}, {"level": 2, "pos": 0.25}, {"level": 3, "pos": 0.5, "anchor": "home"},
+              {"level": 4, "pos": 0.75}, {"level": 5, "pos": 1.0, "anchor": "high"}],
+   "pos_note": "pos is the place on the person's own low..home..high scale: 0 = low, 0.5 = home, 1 = high (piecewise, so an off-centre home note is fine)",
+   "text": "Level {level}", "sub": "{stairs}   from silence, hold ~1.5 s", "max_s": 3.5},
+  {"id": "vw", "block": "vowels", "kind": "vowel", "shuffle": true, "repeats": 2,
+   "vowels": [{"vowel": "ee", "hint": "as in “see”"}, {"vowel": "ah", "hint": "as in “father”"}, {"vowel": "oo", "hint": "as in “food”"}],
+   "bands": [{"band": "low", "pos": 0.1, "label": "LOW"}, {"band": "home", "pos": 0.5, "label": "HOME"}, {"band": "high", "pos": 0.9, "label": "HIGH"}],
+   "text": "“{VOWEL}”  at your {LABEL} note", "sub": "{hint}, mouth open, hold ~2 s", "max_s": 4.0}
+ ],
+ "take": {"silence_s": 0.6, "no_sound_s": 4.0},
+ "rules": {
+  "rows": "floor(range_st / (rows_sd_factor * repeat_sd_st)), capped at max_rows: the number of pitch rows this person hits reliably; range_st = high anchor - low anchor",
+  "rows_sd_factor": 4.0, "max_rows": 9, "min_rows": 2,
+  "columns": "per pitch band: 'vowel' (3 columns: oo left, ah centre, ee right) if that band's leave-one-take-out vowel accuracy >= vowel_acc_min, else 'snap' (height picks a screen band, short hums step through the tappable elements in it)",
+  "vowel_acc_min": 0.9,
+  "verdict": "GO if rows >= min_rows and at least one band uses 'vowel'; SNAP-ONLY if rows >= min_rows but every band snaps; NO-GO if rows < min_rows",
+  "report_only": {"lock_ms_p90_max": 400, "f2_wobble_max_frac_of_ee_oo": 0.25}
+ }
+}

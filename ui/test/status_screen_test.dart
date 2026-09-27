@@ -27,7 +27,7 @@ void main() {
     expect(find.text('gesture'), findsOneWidget);
     expect(find.text('org.schabi.newpipe'), findsOneWidget);
     expect(find.text('ready, D8:3A:DD:00:00:01'), findsOneWidget);
-    expect(find.text('Pause VOX'), findsOneWidget);
+    expect(find.text('Pause Canti'), findsOneWidget);
     expect(find.text('Gesture'), findsOneWidget);
     expect(find.text('Cursor'), findsOneWidget);
     expect(find.text('Sleep device'), findsOneWidget);
@@ -40,13 +40,13 @@ void main() {
     expect(find.text('armed'), findsOneWidget);
     expect(find.text('Sleep device'), findsNothing);
     expect(find.byKey(const Key('mode')), findsNothing);
-    await tester.tap(find.text('Pause VOX'));
+    await tester.tap(find.text('Pause Canti'));
     await tester.pumpAndSettle();
     expect(b.current.paused, isTrue);
     expect(find.text('Paused'), findsOneWidget);
-    expect(find.text('Resume VOX'), findsOneWidget);
+    expect(find.text('Resume Canti'), findsOneWidget);
     expect(find.text('pause'), findsOneWidget); // the backend's pause event is in the live list
-    await tester.tap(find.text('Resume VOX'));
+    await tester.tap(find.text('Resume Canti'));
     await tester.pumpAndSettle();
     expect(b.current.paused, isFalse);
     expect(find.text('Listening for sounds'), findsOneWidget);
@@ -55,7 +55,7 @@ void main() {
 
   testWidgets('with a device, the main button pauses and arms the device', (tester) async {
     final b = await pumpApp(tester);
-    await tester.tap(find.text('Pause VOX'));
+    await tester.tap(find.text('Pause Canti'));
     await tester.pumpAndSettle();
     expect(b.commands, [
       {'v': 1, 'armed': false},
@@ -63,7 +63,7 @@ void main() {
     expect(b.current.paused, isFalse); // the device, not the app-side pause
     expect(find.text('Device paused'), findsOneWidget);
     expect(find.text('awake – paused'), findsOneWidget);
-    await tester.tap(find.text('Resume VOX'));
+    await tester.tap(find.text('Resume Canti'));
     await tester.pumpAndSettle();
     expect(b.commands.last, {'v': 1, 'armed': true});
     expect(find.text('Listening for sounds'), findsOneWidget);
@@ -76,7 +76,7 @@ void main() {
             initial: device({'armed': false, 'paused': true, 'device_state': 'awake – paused', 'device_ready': true,
                 'device_armed': false, 'device_mode': 'gesture'})));
     expect(find.text('Paused'), findsOneWidget);
-    await tester.tap(find.text('Resume VOX'));
+    await tester.tap(find.text('Resume Canti'));
     await tester.pumpAndSettle();
     expect(b.current.paused, isFalse);
     expect(b.commands, [
@@ -87,10 +87,13 @@ void main() {
 
   testWidgets('the mode toggle and Sleep device command the device; asleep is not an error', (tester) async {
     final b = await pumpApp(tester);
+    // the wide layout's left column scrolls; with the 56-art-px badge in the header the controls start near the fold
+    await tester.ensureVisible(find.text('Cursor'));
     await tester.tap(find.text('Cursor'));
     await tester.pumpAndSettle();
     expect(b.commands.last, {'v': 1, 'mode': 'cursor'});
     expect(find.text('cursor'), findsOneWidget); // the mode row
+    await tester.ensureVisible(find.text('Sleep device'));
     await tester.tap(find.text('Sleep device'));
     await tester.pumpAndSettle();
     expect(b.commands.last, {'v': 1, 'sleep': true});
@@ -101,6 +104,19 @@ void main() {
     expect(find.byKey(const Key('mode')), findsNothing);
     expect(find.byKey(const Key('ble_hint')), findsNothing);
     expect(find.byKey(const Key('device_error')), findsNothing);
+  });
+
+  testWidgets('spoken phrases: a missing offline speech pack is shown', (tester) async {
+    await pumpApp(tester, backend: FakeBackend(initial: device({'asr_engine': 'android', 'asr_status': 'offline speech pack missing'})));
+    expect(find.text('Spoken phrases: offline speech pack missing'), findsOneWidget);
+    expect(find.byKey(const Key('asr_status')), findsOneWidget);
+  });
+
+  testWidgets('spoken phrases: ready or off is no note', (tester) async {
+    await pumpApp(tester, backend: FakeBackend(initial: device({'asr_engine': 'android', 'asr_status': 'ready'})));
+    expect(find.byKey(const Key('asr_status')), findsNothing);
+    expect(find.text('ready'), findsOneWidget);   // the Speech row
+    expect(const VoxStatus(service: true, armed: true, paused: false, mode: 'gesture', asrStatus: 'off').asrProblem, isFalse);
   });
 
   testWidgets('a device that is asleep (from the service) shows as asleep, not as an error', (tester) async {
@@ -114,7 +130,7 @@ void main() {
 
   testWidgets('a command the device never confirms fails visibly', (tester) async {
     final b = await pumpApp(tester, backend: FakeBackend(confirmDevice: false));
-    await tester.tap(find.text('Pause VOX'));
+    await tester.tap(find.text('Pause Canti'));
     await tester.pump();
     expect(tester.widget<ButtonStyleButton>(find.byKey(const Key('pause'))).onPressed, isNull); // busy meanwhile
     await tester.pump(const Duration(milliseconds: 1500));
@@ -164,6 +180,8 @@ void main() {
     expect(find.text('pairing needed'), findsOneWidget);
     expect(find.text('Sleep device'), findsNothing);
     await expectLater(tester, meetsGuideline(textContrastGuideline));
+    await tester.ensureVisible(find.text('Connect'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
     expect(b.connects, 1);
@@ -180,7 +198,7 @@ void main() {
       await expectLater(tester, meetsGuideline(textContrastGuideline));
       // The labels Android will see on the controls (Targets.kt reads them as button labels).
       expect(tester.getSemantics(find.byKey(const Key('pause'))),
-          matchesSemantics(label: 'Pause VOX', isButton: true, hasTapAction: true, isEnabled: true,
+          matchesSemantics(label: 'Pause Canti', isButton: true, hasTapAction: true, isEnabled: true,
               hasEnabledState: true, isFocusable: true, hasFocusAction: true));
       expect(tester.getSemantics(find.byKey(const Key('refresh'))),
           matchesSemantics(tooltip: 'Refresh status', isButton: true, hasTapAction: true, isEnabled: true,
@@ -192,6 +210,8 @@ void main() {
         expect(tester.getSemantics(find.text(seg)), isSemantics(label: seg, isButton: true, hasTapAction: true));
       }
     }
+    await tester.ensureVisible(find.byKey(const Key('legacy')));
+    await tester.pumpAndSettle();
     expect(tester.getSemantics(find.byKey(const Key('legacy'))),
         matchesSemantics(label: 'Legacy settings', isButton: true, hasTapAction: true, isEnabled: true,
             hasEnabledState: true, isFocusable: true, hasFocusAction: true));
@@ -210,6 +230,8 @@ void main() {
   testWidgets('legacy settings button calls the backend', (tester) async {
     final b = _WithLegacy();
     await pumpApp(tester, backend: b);
+    await tester.ensureVisible(find.text('Legacy settings'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Legacy settings'));
     await tester.pump();
     expect(b.legacyOpened, 1);

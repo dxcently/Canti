@@ -38,7 +38,9 @@ import org.json.JSONObject
  * message of each link, where the service forgets the last message id: the device's ids restart on every boot). A
  * dropped link disarms the app (a synthetic `armed:false` message, source "ble-disconnect") and is retried with
  * backoff (1 s doubling to 30 s; after 5 failed attempts the stack's background auto-connect takes over, which waits
- * for the device without a timeout). Pairing/encryption failures are not retried forever ([AuthFailures]): the state
+ * for the device without a timeout). A link that comes up but cannot be set up (INFO or the CCCD write refused: a stale
+ * link the stack kept from before a service restart) is closed fully and replaced by a fresh one, with the GATT cache
+ * refreshed ([LinkRecovery]). Pairing/encryption failures are not retried forever ([AuthFailures]): the state
  * becomes `needs_pairing` with a [hint] (hold the button 5 s to open the pairing window; forget a stale bond).
  *
  * The device side of things (its arm state, mode and sleep, the app's CONFIG commands and their confirmation, the
@@ -71,7 +73,13 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
     private var mtu = BleProtocol.MTU_DEFAULT
     private var info: BleInfo? = null
     private var readySince = 0L
-    private val backoff = Backoff()
+    private val recovery = LinkRecovery()
+    /** Clear the GATT cache when the next link comes up ([LinkRecovery.Plan.Connect.refreshCache]). */
+    private var refreshOnConnect = false
+    private var started = false
+    private val arrival = ArrivalLag()
+    /** HIGH priority asked again this link after a slow interval (once per link). */
+    private var reRequested = false
     private var retry: Runnable? = null
     private var retryAt = 0L
     private var watchdog: Runnable? = null
@@ -86,6 +94,10 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         override fun later(ms: Long, r: () -> Unit): () -> Unit { val x = Runnable(r); main.postDelayed(x, ms); return { main.removeCallbacks(x) } }
         override fun now() = SystemClock.elapsedRealtime()
         override fun log(ev: String, vararg fields: Pair<String, Any?>) { EventLog.ev(ev, *fields) }
+        // A user's pause of the device outlives the service (a restart must not make it look like a link-drop pause).
+        private val prefs get() = ctx.getSharedPreferences("canti_device", Context.MODE_PRIVATE)
+        override fun saveUserPaused(paused: Boolean) { prefs.edit().putBoolean("user_paused", paused).apply() }
+        override fun loadUserPaused() = prefs.getBoolean("user_paused", false)
     })
     /** Shown to the user while [State.NEEDS_PAIRING]. */
     val hint: String? get() = link.hint
@@ -95,10 +107,17 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
     private val found = LinkedHashMap<String, Found>()
     private var scanning: ScanCallback? = null
     private var connectAfterScan = false
+    // The first-run search's outcome for the pairing screen: "none found" when a search ended without a device.
+    private var scanOutcome: String? = null
 
     // --- lifecycle ---------------------------------------------------------------------------------------------------
 
     override fun start(sink: Sink) {
+        // One live client per process: a previous service instance that was never stopped would hold the device's
+        // single link (the Pico takes one central). Starting twice is a restart.
+        live?.takeIf { it !== this }?.let { log("start", "note" to "stopping a previous instance"); it.stop() }
+        if (started) stop()
+        live = this; started = true
         this.sink = sink
         val filter = IntentFilter().apply { addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED); addAction(BluetoothAdapter.ACTION_STATE_CHANGED) }
         // System broadcasts only; NOT_EXPORTED still receives them.
@@ -109,6 +128,8 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
     }
 
     override fun stop() {
+        if (live === this) live = null
+        started = false
         try { ctx.unregisterReceiver(receiver) } catch (_: Exception) {}
         stopScan("stopped")
         target = null
@@ -122,7 +143,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
     /** MainActivity calls this after the permission dialog; retries whatever was wanted. */
     fun permissionsChanged() {
         log("permissions", "permissions" to permissions())
-        if (target != null && gatt == null && state != State.NEEDS_PAIRING) attempt()
+        if (target != null && gatt == null && retry == null && state != State.NEEDS_PAIRING) attempt()
     }
 
     // --- control -----------------------------------------------------------------------------------------------------
@@ -130,11 +151,12 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
     /** Scan for [ms] with the VOX service UUID filter; results are logged (`ble_found`) and kept for [status]. */
     fun scan(ms: Long = 10_000, thenConnect: Boolean = false): JSONObject {
         val a = usableAdapter() ?: return error("bluetooth unavailable: ${adapterState()}")
-        if (!hasScan()) return error("no Bluetooth scan permission: open the VOX app and press 'Allow Bluetooth'")
+        if (!hasScan()) return error("no Bluetooth scan permission: open the Canti app and press 'Allow Bluetooth'")
         stopScan("restart")
         val scanner = a.bluetoothLeScanner ?: return error("no LE scanner")
         found.clear()
         connectAfterScan = thenConnect
+        scanOutcome = null
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, r: ScanResult) { main.post { onFound(r) } }
             override fun onBatchScanResults(results: MutableList<ScanResult>) { main.post { results.forEach { onFound(it) } } }
@@ -166,6 +188,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         scanning = null
         try { if (hasScan()) adapter?.bluetoothLeScanner?.stopScan(cb) } catch (_: Exception) {}
         log("scan", "result" to "stopped", "why" to why, "found" to found.size)
+        if (why == "done" && connectAfterScan && found.isEmpty()) scanOutcome = "none found"
         if (state == State.SCANNING) setState(State.IDLE, "scan $why")
     }
 
@@ -181,10 +204,11 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         cancelTimers()
         // The target is kept even when Bluetooth is off or not permitted yet: turning it on / granting connects.
         target = addr
-        backoff.reset()
+        scanOutcome = null
+        recovery.reset()
         attempt()
         if (usableAdapter() == null) return error("bluetooth unavailable (${adapterState()}): will connect to $addr when it is turned on")
-        if (!hasConnect()) return error("no Bluetooth connect permission: open the VOX app and press 'Allow Bluetooth'; will connect to $addr then")
+        if (!hasConnect()) return error("no Bluetooth connect permission: open the Canti app and press 'Allow Bluetooth'; will connect to $addr then")
         return ok().put("address", addr)
     }
 
@@ -240,6 +264,20 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         else -> link.presence()
     }
 
+    /**
+     * For the first-run pairing screen (VoxService.uiStatus): Bluetooth on/off, the device being connected and its
+     * advertised name (`VOX-2807`), and the search (`scanning`, `none found`, or null).
+     */
+    fun setup(): Map<String, Any?> = mapOf(
+        "ble_adapter" to adapterState(),
+        "ble_target" to target,
+        "ble_target_name" to target?.let { targetName(it) },
+        "ble_scan" to if (scanning != null) "scanning" else scanOutcome,
+    )
+
+    private fun targetName(addr: String): String? = found[addr]?.name
+        ?: try { if (hasConnect()) adapter?.getRemoteDevice(addr)?.name else null } catch (_: Exception) { null }
+
     fun status(): JSONObject = JSONObject()
         .put("state", state.name.lowercase()).put("why", why).put("adapter", adapterState()).put("permissions", permissions())
         .put("remembered", settings.bleDevice ?: JSONObject.NULL).put("target", target ?: JSONObject.NULL)
@@ -247,7 +285,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         .put("info", info?.raw ?: JSONObject.NULL)
         .put("ready_ms", if (state == State.READY) SystemClock.elapsedRealtime() - readySince else JSONObject.NULL)
         .put("reconnect_in_ms", if (retry != null) maxOf(0, retryAt - SystemClock.elapsedRealtime()) else JSONObject.NULL)
-        .put("failures", backoff.failures).put("messages", messages).put("fragments", reasm.fragments).put("gaps", gaps).put("bad", bad)
+        .put("failures", recovery.failures).put("setup_failures", recovery.setupFailures).put("messages", messages).put("fragments", reasm.fragments).put("gaps", gaps).put("bad", bad)
         .put("auth_failures", link.authFailures.count).put("hint", hint ?: JSONObject.NULL)
         .put("device", link.status().put("presence", deviceState() ?: JSONObject.NULL))
         .put("found", JSONArray(found.map { (a, f) -> JSONObject().put("address", a).put("name", f.name ?: JSONObject.NULL).put("rssi", f.rssi) }))
@@ -255,20 +293,55 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
     // --- connection state machine -------------------------------------------------------------------------------------
 
     private fun attempt() {
+        retry?.let { main.removeCallbacks(it) }   // single flight: whoever calls, one pending attempt at most
         retry = null
         val addr = target ?: return
         val a = usableAdapter() ?: run { setState(State.OFF, "bluetooth ${adapterState()}"); return }
         if (!hasConnect()) { setState(State.OFF, "no connect permission"); return }
         closeGatt()
-        reasm.reset(); info = null; mtu = BleProtocol.MTU_DEFAULT; firstOfLink = true
-        // A sleeping device is waited for in the background from the start: it may sleep for hours.
-        val auto = link.asleep || backoff.failures >= AUTO_CONNECT_AFTER
+        reasm.reset(); info = null; mtu = BleProtocol.MTU_DEFAULT; firstOfLink = true; reRequested = false
         val dev = a.getRemoteDevice(addr)
-        setState(State.CONNECTING, if (link.asleep) "device asleep: waiting for it to wake" else if (auto) "background auto-connect" else "attempt ${backoff.failures + 1}")
-        gatt = dev.connectGatt(ctx, auto, Callback(), BluetoothDevice.TRANSPORT_LE)
-        // A direct attempt that hangs is abandoned; the background auto-connect waits for as long as it takes.
-        if (!auto) arm(CONNECT_TIMEOUT_MS, "connect timeout")
+        val stale = stackConnected(dev)
+        // A sleeping device is waited for in the background from the start: it may sleep for hours ([LinkRecovery]).
+        when (val plan = recovery.attempt(stale, link.asleep)) {
+            is LinkRecovery.Plan.WaitForRelease -> {
+                log("stale_link", "address" to addr, "action" to "wait", "ms" to plan.ms)
+                setState(State.CONNECTING, "waiting for the old link to drop")
+                waitForRelease(dev, SystemClock.elapsedRealtime() + plan.ms)
+            }
+            is LinkRecovery.Plan.Connect -> {
+                val auto = plan.autoConnect
+                refreshOnConnect = plan.refreshCache
+                setState(State.CONNECTING, if (link.asleep && auto) "device asleep: waiting for it to wake" else if (auto) "background auto-connect"
+                    else "attempt ${recovery.failures + 1}" + (if (recovery.setupFailures > 0) " (fresh link after ${recovery.setupFailures} setup failures)" else "") + (if (stale) " (stale link still up)" else ""))
+                gatt = dev.connectGatt(ctx, auto, Callback(), BluetoothDevice.TRANSPORT_LE)
+                // A direct attempt that hangs is abandoned; the background auto-connect waits for as long as it takes.
+                if (!auto) arm(CONNECT_TIMEOUT_MS, "connect timeout")
+            }
+        }
     }
+
+    /** True if the phone's stack has a GATT link to [dev] (any client's). Ours is closed when this is asked. */
+    private fun stackConnected(dev: BluetoothDevice): Boolean = try {
+        manager?.getConnectedDevices(BluetoothProfile.GATT)?.any { it.address == dev.address } == true
+    } catch (_: Exception) { false }
+
+    /** Poll until the stack's old link to [dev] is gone or [until], then attempt again (a cancellable [retry]). */
+    private fun waitForRelease(dev: BluetoothDevice, until: Long) {
+        val r = Runnable {
+            retry = null
+            val up = stackConnected(dev)
+            if (!up || SystemClock.elapsedRealtime() >= until) { log("stale_link", "action" to if (up) "gave up waiting" else "released"); attempt() }
+            else waitForRelease(dev, until)
+        }
+        retry = r; retryAt = until
+        main.postDelayed(r, STALE_POLL_MS)
+    }
+
+    /** BluetoothGatt.refresh() (hidden): drops the stack's cached database so discovery asks the device. */
+    private fun refreshCache(g: BluetoothGatt): Boolean = try {
+        g.javaClass.getMethod("refresh").invoke(g) as? Boolean ?: false
+    } catch (_: Exception) { false }
 
     private inner class Callback : BluetoothGattCallback() {
         private fun on(g: BluetoothGatt, f: () -> Unit) = main.post { if (g === gatt) f() }
@@ -277,7 +350,8 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 link.connected()
                 setState(State.DISCOVERING, "connected")
-                arm(SETUP_TIMEOUT_MS, "setup timeout")
+                arm(SETUP_TIMEOUT_MS, "setup timeout", LinkRecovery.Failure.SETUP)
+                if (refreshOnConnect) { refreshOnConnect = false; log("gatt_refresh", "ok" to refreshCache(g)) }
                 // The device asks for a 7.5-30 ms interval; Android's default "balanced" priority adds latency.
                 log("priority", "high" to g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH))
                 if (!g.requestMtu(BleProtocol.MTU_REQUEST)) g.discoverServices()
@@ -298,15 +372,18 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         override fun onMtuChanged(g: BluetoothGatt, m: Int, status: Int) { on(g) {
             if (status == BluetoothGatt.GATT_SUCCESS) mtu = m
             log("mtu", "mtu" to mtu, "status" to status)
-            if (state == State.DISCOVERING && !g.discoverServices()) lost("discoverServices failed")
+            if (state == State.DISCOVERING && !g.discoverServices()) lost("discoverServices failed", LinkRecovery.Failure.SETUP)
         } }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) { on(g) {
             val svc = g.getService(BleProtocol.SERVICE)
-            if (status != BluetoothGatt.GATT_SUCCESS || svc == null) { lost("no VOX service (status $status)"); return@on }
-            if (svc.getCharacteristic(BleProtocol.EVENT) == null) { lost("no EVENT characteristic"); return@on }
+            log("services", "status" to status, "count" to g.services.size, "vox" to (svc != null))
+            if (status != BluetoothGatt.GATT_SUCCESS || svc == null) { lost("no VOX service (status $status)", LinkRecovery.Failure.SETUP); return@on }
+            if (svc.getCharacteristic(BleProtocol.EVENT) == null) { lost("no EVENT characteristic", LinkRecovery.Failure.SETUP); return@on }
             val infoC = svc.getCharacteristic(BleProtocol.INFO)
-            if (infoC == null || !g.readCharacteristic(infoC)) { log("info", "error" to "INFO not readable"); secure(g) }
+            if (infoC == null) { log("info", "error" to "no INFO characteristic"); secure(g); return@on }
+            // A refused read on a fresh link is the stale-link symptom; the CCCD write after it decides (SETUP failure).
+            if (!g.readCharacteristic(infoC)) { log("info", "error" to "INFO read not started", "properties" to infoC.properties, "bond" to bondName(g.device.bondState)); secure(g) }
         } }
 
         @Deprecated("API < 33")
@@ -337,7 +414,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
                 // Android starts pairing itself on these; the bond receiver subscribes again once bonded.
                 status == GATT_INSUFFICIENT_AUTHENTICATION || status == GATT_INSUFFICIENT_ENCRYPTION ->
                     { setState(State.BONDING, "encryption required (status $status)"); arm(BOND_TIMEOUT_MS, "bond timeout") }
-                else -> lost("enabling notifications failed (status $status)")
+                else -> lost("enabling notifications failed (status $status)", LinkRecovery.Failure.SETUP)
             }
         } }
 
@@ -349,8 +426,24 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
 
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) = changed(g, c, value.copyOf())
 
-        private fun changed(g: BluetoothGatt, c: BluetoothGattCharacteristic, v: ByteArray) { on(g) {
-            if (c.uuid == BleProtocol.EVENT) notification(v)
+        // Stamped on the Binder thread: the wait for the main thread shows as ble_rx.queue_ms.
+        private fun changed(g: BluetoothGatt, c: BluetoothGattCharacteristic, v: ByteArray) {
+            val at = SystemClock.elapsedRealtime()
+            on(g) { if (c.uuid == BleProtocol.EVENT) notification(v, at) }
+        }
+
+        /**
+         * Hidden in the SDK but called by the stack (BluetoothGattCallback.onConnectionUpdated, API 26+): the link's
+         * actual parameters (interval in 1.25 ms units, timeout in 10 ms units). The device's own parameter request
+         * (7.5-30 ms) may replace HIGH priority's 11.25-15 ms; then HIGH is asked for again, once per link.
+         */
+        @Suppress("unused")
+        fun onConnectionUpdated(g: BluetoothGatt, interval: Int, latency: Int, timeout: Int, status: Int) { on(g) {
+            log("conn_params", "interval_ms" to interval * 1.25, "latency" to latency, "timeout_ms" to timeout * 10, "status" to status)
+            if (state == State.READY && interval > HIGH_MAX_INTERVAL && !reRequested) {
+                reRequested = true
+                log("priority", "high" to g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH), "when" to "slow interval")
+            }
         } }
     }
 
@@ -370,36 +463,43 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
     }
 
     private fun subscribe(g: BluetoothGatt) {
-        val c = g.getService(BleProtocol.SERVICE)?.getCharacteristic(BleProtocol.EVENT) ?: run { lost("no EVENT characteristic"); return }
-        val d = c.getDescriptor(BleProtocol.CCCD) ?: run { lost("EVENT has no CCCD"); return }
+        val c = g.getService(BleProtocol.SERVICE)?.getCharacteristic(BleProtocol.EVENT) ?: run { lost("no EVENT characteristic", LinkRecovery.Failure.SETUP); return }
+        val d = c.getDescriptor(BleProtocol.CCCD) ?: run { lost("EVENT has no CCCD", LinkRecovery.Failure.SETUP); return }
         setState(State.SUBSCRIBING, "enabling notifications")
-        arm(SETUP_TIMEOUT_MS, "subscribe timeout")
-        g.setCharacteristicNotification(c, true)
+        arm(SETUP_TIMEOUT_MS, "subscribe timeout", LinkRecovery.Failure.SETUP)
+        val local = g.setCharacteristicNotification(c, true)
         val v = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-        val started = if (Build.VERSION.SDK_INT >= 33) g.writeDescriptor(d, v) == BluetoothStatusCodes.SUCCESS
-            else @Suppress("DEPRECATION") run { d.value = v; g.writeDescriptor(d) }
-        if (!started) lost("CCCD write not started")
+        // API 33+ says why a write did not start (BluetoothStatusCodes: 201 = busy, 6 = not allowed...).
+        val code = if (Build.VERSION.SDK_INT >= 33) g.writeDescriptor(d, v)
+            else @Suppress("DEPRECATION") run { d.value = v; if (g.writeDescriptor(d)) BluetoothStatusCodes.SUCCESS else -1 }
+        log("cccd_write", "started" to (code == BluetoothStatusCodes.SUCCESS), "code" to code, "local_notify" to local)
+        if (code != BluetoothStatusCodes.SUCCESS) lost("CCCD write not started (code $code)", LinkRecovery.Failure.SETUP)
     }
 
     private fun ready() {
         cancelWatchdog()
-        backoff.reset()
+        recovery.reset()
         link.ready()
         // No reasm.reset() here: attempt() already reset it for this connection, and the device's state message
         // (counter 0, sent as soon as the CCCD is written) may be delivered before this callback.
         readySince = SystemClock.elapsedRealtime()
         val addr = target
         if (addr != null && settings.bleDevice != addr) { settings.bleDevice = addr; log("remember", "address" to addr) }
+        // Asked once after connect; setup (MTU, encryption, the device's parameter request) may have changed it since.
+        gatt?.let { g -> log("priority", "high" to g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH), "when" to "ready") }
         setState(State.READY, "notifications on, mtu $mtu")
     }
 
-    private fun notification(v: ByteArray) {
+    private fun notification(v: ByteArray, at: Long = SystemClock.elapsedRealtime()) {
         for (o in reasm.feed(v)) when (o) {
             is Reassembler.Out.Gap -> { gaps++; EventLog.ev("ble_gap", "expected" to o.expected, "got" to o.got, "dropped_bytes" to o.dropped) }
             is Reassembler.Out.Bad -> { bad++; EventLog.ev("ble_bad", "reason" to o.reason) }
             is Reassembler.Out.Message -> try {
                 val msg = BleMessages.decode(o.bytes)
                 messages++
+                val now = SystemClock.elapsedRealtime()
+                EventLog.ev("ble_rx", "id" to msg.opt("id"), "bytes" to o.bytes.size, "queue_ms" to now - at,
+                    "lag_ms" to ArrivalLag.deviceMs(msg)?.let { arrival.lag(at, it) })
                 link.message(msg)
                 val src = if (firstOfLink) CONNECT_SOURCE else name
                 firstOfLink = false
@@ -416,7 +516,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
      * The link is gone or failed: disarm if it was up, and retry while a device is wanted. After the device's `sleeping`
      * message the drop is expected: no second disarm, and the device is waited for quietly in the background.
      */
-    private fun lost(reason: String) {
+    private fun lost(reason: String, failure: LinkRecovery.Failure = LinkRecovery.Failure.DROP) {
         val wasReady = state == State.READY
         cancelWatchdog()
         closeGatt()
@@ -430,7 +530,8 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
             main.postDelayed(r, ASLEEP_RETRY_MS)
             return
         }
-        val d = backoff.next()
+        val d = recovery.failed(failure)
+        if (failure == LinkRecovery.Failure.SETUP) log("setup_failed", "reason" to reason, "streak" to recovery.setupFailures, "retry_ms" to d)
         setState(State.WAITING, "$reason; retry in $d ms")
         val r = Runnable { attempt() }
         retry = r; retryAt = SystemClock.elapsedRealtime() + d
@@ -474,16 +575,21 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         if (wasReady) disarm(reason)
     }
 
+    /**
+     * Disconnect, then close: close() alone only unregisters this client and can leave the link up in the stack (the
+     * next client then attaches to it and has its setup refused). Idempotent.
+     */
     private fun closeGatt() {
         val g = gatt ?: return
         gatt = null
+        try { g.disconnect() } catch (_: Exception) {}
         try { g.close() } catch (_: Exception) {}
     }
 
-    private fun arm(ms: Long, reason: String) {
+    private fun arm(ms: Long, reason: String, failure: LinkRecovery.Failure = LinkRecovery.Failure.DROP) {
         cancelWatchdog()
         val g = gatt
-        val r = Runnable { if (gatt === g && gatt != null) { try { gatt?.disconnect() } catch (_: Exception) {}; lost(reason) } }
+        val r = Runnable { if (gatt === g && gatt != null) { try { gatt?.disconnect() } catch (_: Exception) {}; lost(reason, failure) } }
         watchdog = r
         main.postDelayed(r, ms)
     }
@@ -503,7 +609,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
                     log("bond", "state" to bondName(s), "previous" to bondName(prev))
                     // The user removed the stale bond (the hint's advice): pair again from scratch.
                     if (state == State.NEEDS_PAIRING && s == BluetoothDevice.BOND_NONE) {
-                        link.clearPairing(); backoff.reset(); attempt(); return
+                        link.clearPairing(); recovery.reset(); attempt(); return
                     }
                     val g = gatt ?: return
                     if (state != State.BONDING) return
@@ -522,7 +628,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
                         link.lost("bluetooth off")
                         setState(State.OFF, "bluetooth off")
                     }
-                    if (s == BluetoothAdapter.STATE_ON && target != null && gatt == null && state != State.NEEDS_PAIRING) { backoff.reset(); attempt() }
+                    if (s == BluetoothAdapter.STATE_ON && target != null && gatt == null && state != State.NEEDS_PAIRING) { recovery.reset(); attempt() }
                 }
             }
         }
@@ -534,6 +640,7 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         if (s == state && reason == why) return
         state = s; why = reason
         log("state", "state" to s.name.lowercase(), "why" to reason, "address" to target)
+        LauncherIcon.update(ctx, s == State.READY)
     }
 
     private fun log(what: String, vararg f: Pair<String, Any?>) { EventLog.ev("ble", "what" to what, *f) }
@@ -560,13 +667,23 @@ class BleFeatureSource(private val ctx: Context, private val settings: Settings)
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val SETUP_TIMEOUT_MS = 15_000L
         const val BOND_TIMEOUT_MS = 60_000L
-        const val AUTO_CONNECT_AFTER = 5
+        /** How often a stale link is checked while waiting for it to drop ([LinkRecovery.Plan.WaitForRelease]). */
+        const val STALE_POLL_MS = 250L
+        /** HIGH priority means an 11.25-15 ms interval (1.25 ms units); slower than this, it is asked for again. */
+        const val HIGH_MAX_INTERVAL = 12
+
+        /** The started instance; a new one stops it (see [start]). */
+        private var live: BleFeatureSource? = null
         /** Between background auto-connect attempts while the device sleeps (one attempt normally waits until it wakes). */
         const val ASLEEP_RETRY_MS = 2_000L
         const val GATT_INSUFFICIENT_AUTHENTICATION = 5
         const val GATT_INSUFFICIENT_ENCRYPTION = 15
 
-        /** The permissions MainActivity asks for. */
+        /** The runtime permissions still missing (the pairing screen names them and asks). */
+        fun missingPermissions(ctx: Context): List<String> =
+            runtimePermissions().filter { ctx.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+
+        /** The permissions the app asks for (the pairing screen, the legacy settings screen). */
         fun runtimePermissions(): Array<String> = if (Build.VERSION.SDK_INT >= 31)
             arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
             else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)

@@ -2,6 +2,8 @@
 
 [Index](index.md) · [Hardware](hardware.md) · [Signal processing](signal-processing.md) · [Gestures and phrases](gesture-vocabulary.md) · [Decision models](decision-models.md) · [Phone control](phone-control.md) · [Prior art](prior-art.md) · [Latency and risks](latency-and-risks.md) · [Roadmap](roadmap.md) · [Sources](sources.md)
 
+See also: the bindings as built in [architecture.md](architecture.md#default-bindings-vocabkt), and the history of the gesture decisions in [decisions.md](decisions.md).
+
 **Summary.** VOX ships seven default hum, pop and hiss gestures (a single pop always fires at once, because no default phrase starts with a pop), measured in semitones relative to each hum's start. Each can be re-recorded with 3–5 examples and matched by banded DTW with a reject threshold. Gestures combine into **sound phrases**, which are bound to actions in a **global profile plus per-app overrides**. A binding is either **fixed** (resolved locally) or a **plain-language rule** (resolved by Jev or the VOX student). Spoken phrases are an opt-in extra ([Phone control](phone-control.md#spoken-phrases-opt-in-module)).
 
 ## Default gestures
@@ -14,16 +16,16 @@ Contours are 12·log2(f/f_start). Absolute pitch lost to relative pitch in the p
 | **Fall** | ≤ −4 st | Swipe down | Button-drag down |
 | **Arch** | Peak ≥ +4 st above both ends | Swipe right | Button-drag right |
 | **Dip** | Trough ≤ −4 st below both ends | Swipe left | Button-drag left |
-| **Pop** | Flux spike, low clarity, short. Fires immediately: nothing in the default profile starts with a pop | Tap | Button-1 click |
+| **Pop** | Flux spike, low clarity, short. Since 2026-09-27 a lone pop taps after the sequence gap (~0.6–0.75 s), because pop-pop is bound (listen) | Tap | Button-1 click |
 | **Hiss** | Unvoiced broadband noise, no pitch, 150–1000 ms. A steady hiss over ~1 s, or one flagged as background noise, is rejected (fans, air conditioning, traffic) | Back | Consumer key 0x224 ([Generic.kl](https://github.com/aosp-mirror/platform_frameworks_base/blob/main/data/keyboards/Generic.kl)) |
 | **Long flat hum** | Excursion < ~2 st, longer than ~800 ms, audible tick at threshold | Long-press / hold | Hold button 1 |
-| **Device button** (not a sound) | Tactile button on a GPIO, plus a 3.5 mm mono jack so any assistive switch (head, foot, elbow) works the same | Press: cursor mode on/off. Hold: disarm / emergency stop (the Pico stops sending) | Same |
+| **Device button** (not a sound) | Tactile button on a GPIO (one button, no switch jack: [D048](decisions.md#d048)) | Press: cursor mode on/off. Hold: disarm / emergency stop (the Pico stops sending) | Same |
 
 **Decided 2026-09-26:**
 - Cursor mode and disarm live on the button or switch, not a sound. A sound can't reliably stop the thing that's misreading sounds.
 - Back moved from pop-pop to **hiss**, so taps have no wait.
-- **Pop-pop and click-click are unbound by default.** Users can bind them per app. The phone waits for a follow-up sound only when the active profile binds a sequence that starts with the sound just heard.
-- Click-pop stays "listen for a spoken phrase".
+- **Pop-pop and click-click are unbound by default.** Users can bind them per app. *(Superseded 2026-09-27: pop-pop is listen, and click-click is home since the 2026-09-26 bindings decision.)* The phone waits for a follow-up sound only when the active profile binds a sequence that starts with the sound just heard.
+- ~~Click-pop stays "listen for a spoken phrase".~~ **Changed 2026-09-27 (user):** pop-pop is "listen for a spoken phrase" (gesture and cursor mode) and click-pop is unbound. The cost, accepted: a single pop waits the sequence gap before it taps. The trained gesture models still assume click-pop, so the app handles pop-pop itself until the data is regenerated.
 - Sequences are grouped on the phone using the Pico's per-sound timestamps, not arrival time, so Bluetooth jitter can't split or merge a sequence.
 
 The audible tick copies Sporka's fix for short/long confusion ("a short soft click") ([Sporka et al., ASSETS'06](https://dcgi.fel.cvut.cz/wp-content/wpallimport-dist/publications/pdf/publications-2006-sporka-sigaccess-nsi-paper.pdf)).
@@ -105,7 +107,7 @@ In Phase 1 (HID only), fixed phrases can be compiled on the Pico into keys or mo
 
 ## Open questions / to verify on hardware
 
-- **Resolved:** arm/disarm and cursor mode are on the button or switch jack; long flat hum = long-press; the tap delay is gone because Back is on hiss.
+- **Resolved:** arm/disarm and cursor mode are on the device button (no switch jack, [D048](decisions.md#d048)); long flat hum = long-press; the tap delay is gone because Back is on hiss.
 - **Hiss false triggers.** Measure how often fans, AC, breath and sibilant speech ("s", "sh") pass the hiss detector. Back is fairly safe to misfire, but it still costs a screen.
 - Is the **4-semitone** excursion floor too high for some users, or too low to reject expressive speech? Measure on negatives.
 - Does the **600 ms phrase gap** suit users with slower breath control? It should be adjustable per user.

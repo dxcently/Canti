@@ -1,0 +1,3034 @@
+{
+ "voice_dir": "/home/khoa/VOX/extractor/recordings/joystick",
+ "candidates": {
+  "voicing": {
+   "overrides": {
+    "voiced_clarity": 0.82
+   },
+   "formula": {
+    "voiced_clarity": "range.json clarity_on (the setup hum's own voicing threshold)"
+   }
+  },
+  "f0_floor": {
+   "overrides": {
+    "f0_min_hz": 82.1
+   },
+   "formula": {
+    "f0_min_hz": "55 * 2^((lo_st - 3) / 12): 3 st under the range's bottom; creak further down stays unvoiced"
+   }
+  },
+  "excursion": {
+   "overrides": {
+    "flat_max_range_st": 1.11,
+    "shape_min_st": 0.74,
+    "exc_medium_st": 1.48,
+    "exc_large_st": 2.96
+   },
+   "formula": {
+    "flat_max_range_st": "default x clip((hi_st - lo_st) / 12, 0.5, 1.5)",
+    "shape_min_st": "default x clip((hi_st - lo_st) / 12, 0.5, 1.5)",
+    "exc_medium_st": "default x clip((hi_st - lo_st) / 12, 0.5, 1.5)",
+    "exc_large_st": "default x clip((hi_st - lo_st) / 12, 0.5, 1.5)"
+   }
+  },
+  "pop_core": {
+   "overrides": {
+    "discrete_core_ms": 100
+   },
+   "formula": {
+    "discrete_core_ms": "20 ms x pops.json pop.core_ticks (the widest setup pop's ticks within 15 dB of its peak, + 1)"
+   }
+  },
+  "pop_rise": {
+   "overrides": {
+    "pop_onset_flux_db": 11.92
+   },
+   "formula": {
+    "pop_onset_flux_db": "6 x pops.json pop.rise_db / 5 (the extractor's default over the tick detector's default)"
+   }
+  },
+  "whatif_hangover200": {
+   "overrides": {
+    "hangover_frames": 20
+   }
+  },
+  "whatif_discrete300": {
+   "overrides": {
+    "discrete_max_ms": 300
+   }
+  }
+ },
+ "results": {
+  "default": {
+   "acc": 0.367816091954023,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "merged": 4
+     },
+     "got": {
+      "pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 6,
+     "seg": {
+      "count ok": 6,
+      "missed": 6
+     },
+     "got": {
+      "pop": 6,
+      "-": 6
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "count ok": 3,
+      "missed": 1
+     },
+     "got": {
+      "fall dip": 1,
+      "rise": 1,
+      "-": 1,
+      "dip": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 3,
+      "missed": 1,
+      "count ok": 1
+     },
+     "got": {
+      "arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise": 1,
+      "arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 1,
+      "count ok": 7
+     },
+     "got": {
+      "rise": 6,
+      "-": 1,
+      "flat": 1
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 29,
+     "talking": 3,
+     "split": 3,
+     "missed": 3,
+     "labels": {
+      "fall": 11,
+      "flat": 29,
+      "rise": 34,
+      "dip": 5,
+      "-": 3,
+      "arch": 9
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 48,
+     "act": 39
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 1
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 7,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 6,
+     "act": 4
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 8,
+     "act": 3
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 12,
+     "act": 7
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 4,
+     "act": 4
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 5,
+     "act": 5
+    }
+   }
+  },
+  "voicing": {
+   "acc": 0.367816091954023,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "count ok": 1,
+      "merged": 3
+     },
+     "got": {
+      "pop pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 6,
+     "seg": {
+      "count ok": 6,
+      "missed": 6
+     },
+     "got": {
+      "pop": 6,
+      "-": 6
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "count ok": 4,
+      "missed": 1
+     },
+     "got": {
+      "dip": 2,
+      "rise": 1,
+      "-": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 3,
+      "missed": 1,
+      "count ok": 1
+     },
+     "got": {
+      "arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise": 1,
+      "arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 1,
+      "count ok": 7
+     },
+     "got": {
+      "rise": 6,
+      "-": 1,
+      "flat": 1
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 28,
+     "talking": 2,
+     "split": 2,
+     "missed": 5,
+     "labels": {
+      "fall": 8,
+      "flat": 28,
+      "rise": 34,
+      "dip": 7,
+      "arch": 9,
+      "-": 5
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 31,
+     "act": 19
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 0
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 4,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 6,
+     "act": 4
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 8,
+     "act": 3
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 12,
+     "act": 7
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 4,
+     "act": 4
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 6,
+     "act": 6
+    }
+   }
+  },
+  "f0_floor": {
+   "acc": 0.367816091954023,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "merged": 4
+     },
+     "got": {
+      "pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 6,
+     "seg": {
+      "count ok": 6,
+      "missed": 6
+     },
+     "got": {
+      "pop": 6,
+      "-": 6
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "count ok": 3,
+      "missed": 1
+     },
+     "got": {
+      "fall dip": 1,
+      "rise": 1,
+      "-": 1,
+      "dip": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 3,
+      "missed": 1,
+      "count ok": 1
+     },
+     "got": {
+      "arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise": 1,
+      "arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 1,
+      "count ok": 7
+     },
+     "got": {
+      "rise": 6,
+      "-": 1,
+      "flat": 1
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 28,
+     "talking": 3,
+     "split": 3,
+     "missed": 3,
+     "labels": {
+      "fall": 10,
+      "flat": 28,
+      "rise": 36,
+      "dip": 6,
+      "-": 3,
+      "arch": 8
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 48,
+     "act": 39
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 1
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 7,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 6,
+     "act": 4
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 8,
+     "act": 3
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 12,
+     "act": 7
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 4,
+     "act": 4
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 5,
+     "act": 5
+    }
+   }
+  },
+  "excursion": {
+   "acc": 0.367816091954023,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "merged": 4
+     },
+     "got": {
+      "pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 6,
+     "seg": {
+      "count ok": 6,
+      "missed": 6
+     },
+     "got": {
+      "pop": 6,
+      "-": 6
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "count ok": 3,
+      "missed": 1
+     },
+     "got": {
+      "fall dip": 1,
+      "rise": 1,
+      "-": 1,
+      "dip": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 3,
+      "missed": 1,
+      "count ok": 1
+     },
+     "got": {
+      "arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise": 1,
+      "arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 2,
+      "count ok": 6
+     },
+     "got": {
+      "rise": 6,
+      "-": 2
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 23,
+     "talking": 3,
+     "split": 3,
+     "missed": 3,
+     "labels": {
+      "fall": 13,
+      "flat": 23,
+      "rise": 35,
+      "arch": 10,
+      "dip": 7,
+      "-": 3
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 50,
+     "act": 41
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 2
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 7,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 5,
+     "act": 3
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 8,
+     "act": 3
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 11,
+     "act": 6
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 3,
+     "act": 3
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 5,
+     "act": 5
+    }
+   }
+  },
+  "pop_core": {
+   "acc": 0.3793103448275862,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "merged": 4
+     },
+     "got": {
+      "pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 7,
+     "seg": {
+      "count ok": 7,
+      "missed": 5
+     },
+     "got": {
+      "pop": 7,
+      "-": 5
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "count ok": 3,
+      "missed": 1
+     },
+     "got": {
+      "fall dip": 1,
+      "rise": 1,
+      "-": 1,
+      "dip": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 4,
+      "missed": 1
+     },
+     "got": {
+      "pop arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise": 1,
+      "pop fall arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall pop": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 1,
+      "count ok": 7
+     },
+     "got": {
+      "rise": 6,
+      "-": 1,
+      "flat": 1
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "pop rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 29,
+     "talking": 3,
+     "split": 3,
+     "missed": 3,
+     "labels": {
+      "fall": 11,
+      "flat": 29,
+      "rise": 34,
+      "dip": 5,
+      "-": 3,
+      "arch": 9
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 62,
+     "act": 41
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 2,
+     "act": 1
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 4,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 1
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 9,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 17,
+     "act": 5
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 11,
+     "act": 3
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 17,
+     "act": 8
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 4,
+     "act": 4
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 5,
+     "act": 5
+    }
+   }
+  },
+  "pop_rise": {
+   "acc": 0.367816091954023,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "merged": 4
+     },
+     "got": {
+      "pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 6,
+     "seg": {
+      "count ok": 6,
+      "missed": 6
+     },
+     "got": {
+      "pop": 6,
+      "-": 6
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "count ok": 3,
+      "missed": 1
+     },
+     "got": {
+      "fall dip": 1,
+      "rise": 1,
+      "-": 1,
+      "dip": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 3,
+      "missed": 1,
+      "count ok": 1
+     },
+     "got": {
+      "arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise": 1,
+      "arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 1,
+      "count ok": 7
+     },
+     "got": {
+      "rise": 6,
+      "-": 1,
+      "flat": 1
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 29,
+     "talking": 3,
+     "split": 3,
+     "missed": 3,
+     "labels": {
+      "fall": 11,
+      "flat": 29,
+      "rise": 34,
+      "dip": 5,
+      "-": 3,
+      "arch": 9
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 48,
+     "act": 39
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 1
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 7,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 6,
+     "act": 4
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 8,
+     "act": 3
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 12,
+     "act": 7
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 4,
+     "act": 4
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 5,
+     "act": 5
+    }
+   }
+  },
+  "whatif_hangover200": {
+   "acc": 0.27586206896551724,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 0,
+     "seg": {
+      "merged": 7,
+      "missed": 1
+     },
+     "got": {
+      "hiss": 5,
+      "click": 2,
+      "-": 1
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 4,
+      "merged": 1
+     },
+     "got": {
+      "-": 4,
+      "click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "merged": 3,
+      "missed": 1
+     },
+     "got": {
+      "pop pop": 1,
+      "-": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "missed": 7
+     },
+     "got": {
+      "-": 7,
+      "pop": 5
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 1,
+     "seg": {
+      "missed": 4,
+      "count ok": 1
+     },
+     "got": {
+      "-": 4,
+      "pop click": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 6,
+      "missed": 1
+     },
+     "got": {
+      "dip": 5,
+      "fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "count ok": 4,
+      "missed": 1
+     },
+     "got": {
+      "dip": 2,
+      "rise": 1,
+      "-": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "count ok": 2,
+      "missed": 3
+     },
+     "got": {
+      "-": 3,
+      "arch": 1,
+      "rise": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall dip": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 7,
+     "seg": {
+      "missed": 1,
+      "count ok": 7
+     },
+     "got": {
+      "rise": 7,
+      "-": 1
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 1,
+     "seg": {
+      "count ok": 1,
+      "missed": 1
+     },
+     "got": {
+      "rise": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 5,
+     "talking": 2,
+     "split": 0,
+     "missed": 1,
+     "labels": {
+      "rise": 5,
+      "-": 1
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 28,
+     "talking": 3,
+     "split": 2,
+     "missed": 5,
+     "labels": {
+      "fall": 10,
+      "flat": 28,
+      "rise": 34,
+      "dip": 5,
+      "-": 5,
+      "arch": 9
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 26,
+     "act": 23
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 0
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 4,
+     "act": 4
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 1
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 8,
+     "act": 4
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 4,
+     "act": 4
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 5,
+     "act": 5
+    }
+   }
+  },
+  "whatif_discrete300": {
+   "acc": 0.3793103448275862,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "merged": 4
+     },
+     "got": {
+      "pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 7,
+     "seg": {
+      "count ok": 7,
+      "missed": 5
+     },
+     "got": {
+      "pop": 7,
+      "-": 5
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "count ok": 3,
+      "missed": 1
+     },
+     "got": {
+      "fall dip": 1,
+      "rise": 1,
+      "-": 1,
+      "dip": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 3,
+      "missed": 1,
+      "count ok": 1
+     },
+     "got": {
+      "arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise": 1,
+      "arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 1,
+      "count ok": 7
+     },
+     "got": {
+      "rise": 6,
+      "-": 1,
+      "flat": 1
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 29,
+     "talking": 3,
+     "split": 3,
+     "missed": 3,
+     "labels": {
+      "fall": 11,
+      "flat": 29,
+      "rise": 34,
+      "dip": 5,
+      "-": 3,
+      "arch": 9
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 48,
+     "act": 39
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 2,
+     "act": 1
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 7,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 6,
+     "act": 4
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 8,
+     "act": 3
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 12,
+     "act": 7
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 4,
+     "act": 4
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 5,
+     "act": 5
+    }
+   }
+  },
+  "all_person": {
+   "acc": 0.3793103448275862,
+   "per_kind": {
+    "click": {
+     "n": 7,
+     "ok": 1,
+     "seg": {
+      "missed": 3,
+      "count ok": 4
+     },
+     "got": {
+      "-": 3,
+      "hiss": 3,
+      "click": 1
+     }
+    },
+    "click_click": {
+     "n": 8,
+     "ok": 8,
+     "seg": {
+      "count ok": 8
+     },
+     "got": {
+      "click click": 8
+     }
+    },
+    "click_pop": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "missed": 3,
+      "merged": 1,
+      "count ok": 1
+     },
+     "got": {
+      "-": 3,
+      "click": 1,
+      "pop click": 1
+     }
+    },
+    "click_run": {
+     "n": 4,
+     "ok": 1,
+     "seg": {
+      "count ok": 1,
+      "merged": 3
+     },
+     "got": {
+      "pop pop pop": 1,
+      "pop": 1,
+      "click": 1,
+      "click click click": 1
+     }
+    },
+    "pop": {
+     "n": 12,
+     "ok": 7,
+     "seg": {
+      "count ok": 7,
+      "missed": 5
+     },
+     "got": {
+      "pop": 7,
+      "-": 5
+     }
+    },
+    "pop_click": {
+     "n": 5,
+     "ok": 2,
+     "seg": {
+      "count ok": 3,
+      "missed": 1,
+      "merged": 1
+     },
+     "got": {
+      "pop click": 2,
+      "pop pop": 1,
+      "-": 1,
+      "pop": 1
+     }
+    },
+    "whistle_arch": {
+     "n": 7,
+     "ok": 0,
+     "seg": {
+      "count ok": 7
+     },
+     "got": {
+      "dip": 6,
+      "fall": 1
+     }
+    },
+    "whistle_arch (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "count ok": 4,
+      "missed": 1
+     },
+     "got": {
+      "dip": 2,
+      "rise": 1,
+      "-": 1,
+      "fall": 1
+     }
+    },
+    "whistle_dip": {
+     "n": 6,
+     "ok": 0,
+     "seg": {
+      "count ok": 6
+     },
+     "got": {
+      "rise": 5,
+      "arch": 1
+     }
+    },
+    "whistle_dip (video)": {
+     "n": 5,
+     "ok": 0,
+     "seg": {
+      "split": 4,
+      "missed": 1
+     },
+     "got": {
+      "pop arch rise": 1,
+      "-": 1,
+      "rise fall": 1,
+      "pop rise rise pop": 1,
+      "pop arch": 1
+     }
+    },
+    "whistle_fall": {
+     "n": 7,
+     "ok": 5,
+     "seg": {
+      "count ok": 5,
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "fall": 5,
+      "flat fall pop": 1,
+      "-": 1
+     }
+    },
+    "whistle_fall (video)": {
+     "n": 6,
+     "ok": 3,
+     "seg": {
+      "missed": 2,
+      "count ok": 3,
+      "split": 1
+     },
+     "got": {
+      "fall": 3,
+      "-": 2,
+      "pop fall fall": 1
+     }
+    },
+    "whistle_rise": {
+     "n": 8,
+     "ok": 6,
+     "seg": {
+      "missed": 2,
+      "count ok": 6
+     },
+     "got": {
+      "rise": 6,
+      "-": 2
+     }
+    },
+    "whistle_rise (video)": {
+     "n": 2,
+     "ok": 0,
+     "seg": {
+      "split": 1,
+      "missed": 1
+     },
+     "got": {
+      "pop rise fall": 1,
+      "-": 1
+     }
+    }
+   },
+   "voiced": {
+    "glide": {
+     "n": 6,
+     "label_ok": 6,
+     "talking": 1,
+     "split": 0,
+     "missed": 0,
+     "labels": {
+      "rise": 6
+     }
+    },
+    "held": {
+     "n": 91,
+     "label_ok": 23,
+     "talking": 2,
+     "split": 2,
+     "missed": 5,
+     "labels": {
+      "fall": 9,
+      "flat": 23,
+      "rise": 37,
+      "dip": 8,
+      "arch": 9,
+      "-": 5
+     }
+    }
+   },
+   "neg": {
+    "guided speech takes": {
+     "minutes": 7.57,
+     "fa": 51,
+     "act": 27
+    },
+    "room (aec-desktop-1)": {
+     "minutes": 1.58,
+     "fa": 1,
+     "act": 0
+    },
+    "sim-desk room": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 0
+    },
+    "sim-desk music_vocals": {
+     "minutes": 1.06,
+     "fa": 4,
+     "act": 0
+    },
+    "sim-desk podcast": {
+     "minutes": 1.06,
+     "fa": 3,
+     "act": 2
+    },
+    "sim-desk shortvideo": {
+     "minutes": 1.06,
+     "fa": 7,
+     "act": 2
+    },
+    "sim-desk gesturelike": {
+     "minutes": 1.06,
+     "fa": 16,
+     "act": 4
+    },
+    "sim-phone room": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 0
+    },
+    "sim-phone music_vocals": {
+     "minutes": 1.06,
+     "fa": 0,
+     "act": 0
+    },
+    "sim-phone podcast": {
+     "minutes": 1.06,
+     "fa": 1,
+     "act": 1
+    },
+    "sim-phone shortvideo": {
+     "minutes": 1.06,
+     "fa": 10,
+     "act": 2
+    },
+    "sim-phone gesturelike": {
+     "minutes": 1.06,
+     "fa": 16,
+     "act": 6
+    },
+    "live meow (105946)": {
+     "minutes": 0.19,
+     "fa": 2,
+     "act": 2
+    },
+    "live yell (110107)": {
+     "minutes": 0.19,
+     "fa": 6,
+     "act": 6
+    }
+   }
+  }
+ },
+ "compare": {
+  "voicing": {
+   "acc": 0.367816091954023,
+   "acc_base": 0.367816091954023,
+   "gained": 0,
+   "lost": 0,
+   "d_acc": {
+    "mean": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "p_pos": 0.0
+   },
+   "voiced_gained": 3,
+   "voiced_lost": 2,
+   "d_fa": {
+    "per_min": -0.9941637067670452,
+    "lo": -1.6334919651373956,
+    "hi": -0.42435795554315364,
+    "events": -20,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": -0.9941637067670452,
+    "lo": -1.6832978388098028,
+    "hi": -0.39858434615376986,
+    "events": -20,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": -17,
+    "room (aec-desktop-1)": 0,
+    "sim-desk room": 0,
+    "sim-desk music_vocals": 0,
+    "sim-desk podcast": -1,
+    "sim-desk shortvideo": -3,
+    "sim-desk gesturelike": 0,
+    "sim-phone room": 0,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": 0,
+    "sim-phone shortvideo": 0,
+    "sim-phone gesturelike": 0,
+    "live meow (105946)": 0,
+    "live yell (110107)": 1
+   }
+  },
+  "f0_floor": {
+   "acc": 0.367816091954023,
+   "acc_base": 0.367816091954023,
+   "gained": 0,
+   "lost": 0,
+   "d_acc": {
+    "mean": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "p_pos": 0.0
+   },
+   "voiced_gained": 0,
+   "voiced_lost": 1,
+   "d_fa": {
+    "per_min": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "events": 0,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "events": 0,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": 0,
+    "room (aec-desktop-1)": 0,
+    "sim-desk room": 0,
+    "sim-desk music_vocals": 0,
+    "sim-desk podcast": 0,
+    "sim-desk shortvideo": 0,
+    "sim-desk gesturelike": 0,
+    "sim-phone room": 0,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": 0,
+    "sim-phone shortvideo": 0,
+    "sim-phone gesturelike": 0,
+    "live meow (105946)": 0,
+    "live yell (110107)": 0
+   }
+  },
+  "excursion": {
+   "acc": 0.367816091954023,
+   "acc_base": 0.367816091954023,
+   "gained": 0,
+   "lost": 0,
+   "d_acc": {
+    "mean": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "p_pos": 0.0
+   },
+   "voiced_gained": 0,
+   "voiced_lost": 4,
+   "d_fa": {
+    "per_min": -0.04970818533835226,
+    "lo": -0.37843907323909665,
+    "hi": 0.3056689217946147,
+    "events": -1,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": -0.04970818533835226,
+    "lo": -0.37843907323909665,
+    "hi": 0.3056689217946147,
+    "events": -1,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": 2,
+    "room (aec-desktop-1)": -1,
+    "sim-desk room": 0,
+    "sim-desk music_vocals": 0,
+    "sim-desk podcast": 1,
+    "sim-desk shortvideo": 0,
+    "sim-desk gesturelike": -1,
+    "sim-phone room": 0,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": 0,
+    "sim-phone shortvideo": 0,
+    "sim-phone gesturelike": -1,
+    "live meow (105946)": -1,
+    "live yell (110107)": 0
+   }
+  },
+  "pop_core": {
+   "acc": 0.3793103448275862,
+   "acc_base": 0.367816091954023,
+   "gained": 1,
+   "lost": 0,
+   "d_acc": {
+    "mean": 0.011494252873563218,
+    "lo": 0.0,
+    "hi": 0.034482758620689655,
+    "p_pos": 0.6275
+   },
+   "voiced_gained": 0,
+   "voiced_lost": 0,
+   "d_fa": {
+    "per_min": 1.9386192281957382,
+    "lo": 1.1835014780010524,
+    "hi": 2.75717086015162,
+    "events": 39,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": 0.19883274135340903,
+    "lo": 0.0473370246123056,
+    "hi": 0.417246437415457,
+    "events": 4,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": 14,
+    "room (aec-desktop-1)": 1,
+    "sim-desk room": 1,
+    "sim-desk music_vocals": 1,
+    "sim-desk podcast": 0,
+    "sim-desk shortvideo": 2,
+    "sim-desk gesturelike": 11,
+    "sim-phone room": 1,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": 0,
+    "sim-phone shortvideo": 3,
+    "sim-phone gesturelike": 5,
+    "live meow (105946)": 0,
+    "live yell (110107)": 0
+   }
+  },
+  "pop_rise": {
+   "acc": 0.367816091954023,
+   "acc_base": 0.367816091954023,
+   "gained": 0,
+   "lost": 0,
+   "d_acc": {
+    "mean": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "p_pos": 0.0
+   },
+   "voiced_gained": 0,
+   "voiced_lost": 0,
+   "d_fa": {
+    "per_min": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "events": 0,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "events": 0,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": 0,
+    "room (aec-desktop-1)": 0,
+    "sim-desk room": 0,
+    "sim-desk music_vocals": 0,
+    "sim-desk podcast": 0,
+    "sim-desk shortvideo": 0,
+    "sim-desk gesturelike": 0,
+    "sim-phone room": 0,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": 0,
+    "sim-phone shortvideo": 0,
+    "sim-phone gesturelike": 0,
+    "live meow (105946)": 0,
+    "live yell (110107)": 0
+   }
+  },
+  "whatif_hangover200": {
+   "acc": 0.27586206896551724,
+   "acc_base": 0.367816091954023,
+   "gained": 2,
+   "lost": 10,
+   "d_acc": {
+    "mean": -0.09195402298850575,
+    "lo": -0.1724137931034483,
+    "hi": -0.011494252873563218,
+    "p_pos": 0.005
+   },
+   "voiced_gained": 1,
+   "voiced_lost": 3,
+   "d_fa": {
+    "per_min": -2.137451969549147,
+    "lo": -2.9292101422211765,
+    "hi": -1.4792845544354178,
+    "events": -43,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": -1.2427046334588066,
+    "lo": -1.8431631264080386,
+    "hi": -0.7470173696902526,
+    "events": -25,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": -22,
+    "room (aec-desktop-1)": 0,
+    "sim-desk room": 0,
+    "sim-desk music_vocals": -1,
+    "sim-desk podcast": -2,
+    "sim-desk shortvideo": -5,
+    "sim-desk gesturelike": -2,
+    "sim-phone room": 0,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": -1,
+    "sim-phone shortvideo": -6,
+    "sim-phone gesturelike": -4,
+    "live meow (105946)": 0,
+    "live yell (110107)": 0
+   }
+  },
+  "whatif_discrete300": {
+   "acc": 0.3793103448275862,
+   "acc_base": 0.367816091954023,
+   "gained": 1,
+   "lost": 0,
+   "d_acc": {
+    "mean": 0.011494252873563218,
+    "lo": 0.0,
+    "hi": 0.034482758620689655,
+    "p_pos": 0.618
+   },
+   "voiced_gained": 0,
+   "voiced_lost": 0,
+   "d_fa": {
+    "per_min": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "events": 0,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "events": 0,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": 0,
+    "room (aec-desktop-1)": 0,
+    "sim-desk room": 0,
+    "sim-desk music_vocals": 0,
+    "sim-desk podcast": 0,
+    "sim-desk shortvideo": 0,
+    "sim-desk gesturelike": 0,
+    "sim-phone room": 0,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": 0,
+    "sim-phone shortvideo": 0,
+    "sim-phone gesturelike": 0,
+    "live meow (105946)": 0,
+    "live yell (110107)": 0
+   }
+  },
+  "all_person": {
+   "acc": 0.3793103448275862,
+   "acc_base": 0.367816091954023,
+   "gained": 1,
+   "lost": 0,
+   "d_acc": {
+    "mean": 0.011494252873563218,
+    "lo": 0.0,
+    "hi": 0.034482758620689655,
+    "p_pos": 0.6275
+   },
+   "voiced_gained": 1,
+   "voiced_lost": 5,
+   "d_fa": {
+    "per_min": 1.0935800774437496,
+    "lo": 0.20054306779310774,
+    "hi": 1.9624410588186234,
+    "events": 22,
+    "minutes": 20.117411110327776
+   },
+   "d_act": {
+    "per_min": -0.7456227800752839,
+    "lo": -1.365840430501759,
+    "hi": -0.2058930061512033,
+    "events": -15,
+    "minutes": 20.117411110327776
+   },
+   "fa_by_set": {
+    "guided speech takes": 3,
+    "room (aec-desktop-1)": 0,
+    "sim-desk room": 1,
+    "sim-desk music_vocals": 1,
+    "sim-desk podcast": 1,
+    "sim-desk shortvideo": 0,
+    "sim-desk gesturelike": 10,
+    "sim-phone room": 1,
+    "sim-phone music_vocals": 0,
+    "sim-phone podcast": 0,
+    "sim-phone shortvideo": 2,
+    "sim-phone gesturelike": 4,
+    "live meow (105946)": -2,
+    "live yell (110107)": 1
+   }
+  }
+ },
+ "verdicts": {
+  "voicing": [
+   "NO-GO",
+   "accuracy 0 gained / 0 lost, P(delta>0) 0.00"
+  ],
+  "f0_floor": [
+   "NO-GO",
+   "accuracy 0 gained / 0 lost, P(delta>0) 0.00; voice-cursor glides / held notes 0 gained / 1 lost"
+  ],
+  "excursion": [
+   "NO-GO",
+   "accuracy 0 gained / 0 lost, P(delta>0) 0.00; guided speech takes +2; voice-cursor glides / held notes 0 gained / 4 lost"
+  ],
+  "pop_core": [
+   "NO-GO",
+   "accuracy 1 gained / 0 lost, P(delta>0) 0.63; false triggers +39 pooled; guided speech takes +14"
+  ],
+  "pop_rise": [
+   "NO-GO",
+   "accuracy 0 gained / 0 lost, P(delta>0) 0.00"
+  ],
+  "whatif_hangover200": [
+   "what-if",
+   "not derivable: never GO"
+  ],
+  "whatif_discrete300": [
+   "what-if",
+   "not derivable: never GO"
+  ],
+  "all_person": [
+   "NO-GO",
+   "accuracy 1 gained / 0 lost, P(delta>0) 0.63; false triggers +22 pooled; sim-desk gesturelike +10; voice-cursor glides / held notes 1 gained / 5 lost"
+  ]
+ },
+ "go_fields": {}
+}

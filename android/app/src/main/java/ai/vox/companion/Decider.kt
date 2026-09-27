@@ -18,12 +18,21 @@ data class Decision(
     val explicit: Boolean = false, // resolved by an explicit binding (fixed default, profile binding or phrase rule)
     val top: List<Pair<String, Double>> = emptyList(),   // model only: the 3 most probable option texts
     val serverMs: Double? = null,                         // model only: the server's own latency_ms
+    /** A cloud answer (EscalatingDecider): no calibrated confidence, so risky actions ask for a confirm pop (Risk). */
+    val unscored: Boolean = false,
 )
 
 /** Decision interface. Implementations must be safe to call from a worker thread. */
 interface Decider {
     val name: String
     fun decide(input: DecisionInput): Decision
+
+    /**
+     * The decision [decide] would return for [input] without reading the screen or calling a model, or null when it
+     * needs either. Must equal [decide] whenever it is non-null: the service acts on it at once on the main thread,
+     * with no screen line in the state (VoxService fast path). The default is null (always the full path).
+     */
+    fun local(input: DecisionInput): Decision? = null
 }
 
 /**
@@ -45,6 +54,9 @@ class RuleDecider : Decider {
         }
     }
 
+    /** Gestures and cursor sounds never read the screen; a phrase may (the tie-breaker). */
+    override fun local(input: DecisionInput): Decision? = if (input.scene.phrase != null) null else decide(input)
+
     private fun gesture(s: Scene, p: Profile): Decision {
         notDeliberate(s)?.let { return Decision("none", "rules:not-deliberate:$it") }
         val seq = s.sequence
@@ -57,6 +69,7 @@ class RuleDecider : Decider {
                 ?: Decision("none", "rules:global-rule-needs-model")
         }
         Vocab.DEFAULT_BINDINGS[seq]?.let { return Decision(it, "rules:default", explicit = true) }
+        Vocab.APP_ONLY_BINDINGS[seq]?.let { return Decision(it, APP_ONLY, explicit = true) }
         return Decision("none", "rules:unbound")
     }
 
@@ -95,6 +108,9 @@ class RuleDecider : Decider {
     }
 
     companion object {
+        /** Source of an app-only binding (schema.APP_ONLY_BINDINGS, e.g. click hiss = forward): never asks a model. */
+        const val APP_ONLY = "rules:app-only"
+
         /** generate.py Generator.phrase_answer: resolve a screen-dependent phrase. */
         fun screenTieBreak(phrase: String, base: String, screen: ScreenContext?): String {
             if (screen == null) return base

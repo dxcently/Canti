@@ -1,0 +1,2160 @@
+{
+ "name": "sounds_v1",
+ "version": 1,
+ "about": "Whistle and click/pop prompts for extractor/guided_session.py (blocks 'whistles' and 'clicks'). Not personal: prompts only. expect_now = the app's default bindings today (Vocab.DEFAULT_BINDINGS, Sequencer); expect_intent = what the user means (a click run should do nothing: the proposed click train guard). fake = synth.py classes + offsets (s) for --source fake. Retired prompts (\"retired\") are no longer asked; their recorded takes keep the labels they were recorded with, and --score judges every take by today's bindings (expected_now).",
+ "whistle_video_note": "the 'video' takes are whistled with a video playing on the COMPUTER speakers (not the phone), normal volume, about 1 m from the mic",
+ "blocks": {
+  "whistles": [
+   {
+    "id": "wh_quiet_rise_1",
+    "cls": "whistle_rise",
+    "cond": "quiet",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_fall_1",
+    "cls": "whistle_fall",
+    "cond": "quiet",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_arch_1",
+    "cls": "whistle_arch",
+    "cond": "quiet",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_dip_1",
+    "cls": "whistle_dip",
+    "cond": "quiet",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_rise_2",
+    "cls": "whistle_rise",
+    "cond": "quiet",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_fall_2",
+    "cls": "whistle_fall",
+    "cond": "quiet",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_arch_2",
+    "cls": "whistle_arch",
+    "cond": "quiet",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_dip_2",
+    "cls": "whistle_dip",
+    "cond": "quiet",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_rise_3",
+    "cls": "whistle_rise",
+    "cond": "quiet",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_fall_3",
+    "cls": "whistle_fall",
+    "cond": "quiet",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_arch_3",
+    "cls": "whistle_arch",
+    "cond": "quiet",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_dip_3",
+    "cls": "whistle_dip",
+    "cond": "quiet",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_rise_4",
+    "cls": "whistle_rise",
+    "cond": "quiet",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_fall_4",
+    "cls": "whistle_fall",
+    "cond": "quiet",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_arch_4",
+    "cls": "whistle_arch",
+    "cond": "quiet",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_dip_4",
+    "cls": "whistle_dip",
+    "cond": "quiet",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_rise_5",
+    "cls": "whistle_rise",
+    "cond": "quiet",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_fall_5",
+    "cls": "whistle_fall",
+    "cond": "quiet",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_arch_5",
+    "cls": "whistle_arch",
+    "cond": "quiet",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_quiet_dip_5",
+    "cls": "whistle_dip",
+    "cond": "quiet",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_rise_1",
+    "cls": "whistle_rise",
+    "cond": "video",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_fall_1",
+    "cls": "whistle_fall",
+    "cond": "video",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_arch_1",
+    "cls": "whistle_arch",
+    "cond": "video",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_dip_1",
+    "cls": "whistle_dip",
+    "cond": "video",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_rise_2",
+    "cls": "whistle_rise",
+    "cond": "video",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_fall_2",
+    "cls": "whistle_fall",
+    "cond": "video",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_arch_2",
+    "cls": "whistle_arch",
+    "cond": "video",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_dip_2",
+    "cls": "whistle_dip",
+    "cond": "video",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_rise_3",
+    "cls": "whistle_rise",
+    "cond": "video",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_fall_3",
+    "cls": "whistle_fall",
+    "cond": "video",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_arch_3",
+    "cls": "whistle_arch",
+    "cond": "video",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_dip_3",
+    "cls": "whistle_dip",
+    "cond": "video",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_rise_4",
+    "cls": "whistle_rise",
+    "cond": "video",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_fall_4",
+    "cls": "whistle_fall",
+    "cond": "video",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_arch_4",
+    "cls": "whistle_arch",
+    "cond": "video",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_dip_4",
+    "cls": "whistle_dip",
+    "cond": "video",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_rise_5",
+    "cls": "whistle_rise",
+    "cond": "video",
+    "instruction": "Whistle going UP: low to high, about 0.7 s.",
+    "expect_sounds": [
+     "rise"
+    ],
+    "expect_now": [
+     "swipe_up"
+    ],
+    "expect_intent": [
+     "swipe_up"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_rise",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_fall_5",
+    "cls": "whistle_fall",
+    "cond": "video",
+    "instruction": "Whistle going DOWN: start HIGH and fall a lot (at least half an octave), about 0.7 s.",
+    "expect_sounds": [
+     "fall"
+    ],
+    "expect_now": [
+     "swipe_down"
+    ],
+    "expect_intent": [
+     "swipe_down"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_fall",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_arch_5",
+    "cls": "whistle_arch",
+    "cond": "video",
+    "instruction": "Whistle UP then DOWN (an arch), under a second.",
+    "expect_sounds": [
+     "arch"
+    ],
+    "expect_now": [
+     "swipe_right"
+    ],
+    "expect_intent": [
+     "swipe_right"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_arch",
+      0.0
+     ]
+    ]
+   },
+   {
+    "id": "wh_video_dip_5",
+    "cls": "whistle_dip",
+    "cond": "video",
+    "instruction": "Whistle DOWN then UP (a dip), under a second.",
+    "expect_sounds": [
+     "dip"
+    ],
+    "expect_now": [
+     "swipe_left"
+    ],
+    "expect_intent": [
+     "swipe_left"
+    ],
+    "max_s": 4.0,
+    "fake": [
+     [
+      "whistle_dip",
+      0.0
+     ]
+    ]
+   }
+  ],
+  "clicks": [
+   {
+    "id": "ck_click_1",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_2",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_3",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_4",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_5",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_6",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_7",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_8",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_9",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_10",
+    "cls": "click",
+    "cond": "quiet",
+    "instruction": "ONE tongue click ('tsk' / cluck), nothing else.",
+    "expect_sounds": [
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ]
+    ],
+    "note": "a lone click is unbound: the app waits ~600 ms for a follow-up, then does nothing"
+   },
+   {
+    "id": "ck_click_click_1",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_2",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_3",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_4",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_5",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_6",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_7",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_8",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_9",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_click_click_10",
+    "cls": "click_click",
+    "cond": "quiet",
+    "instruction": "TWO tongue clicks, quickly (click-click), then stop.",
+    "expect_sounds": [
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [
+     "home"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ]
+    ]
+   },
+   {
+    "id": "ck_run3_1",
+    "cls": "click_run",
+    "run_len": 3,
+    "cond": "quiet",
+    "instruction": "A RUN of 3 tongue clicks in a row, about 4 per second (like tapping a rhythm).",
+    "expect_sounds": [
+     "click",
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [],
+    "max_s": 4.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ],
+     [
+      "click",
+      0.5
+     ]
+    ],
+    "note": "today the Sequencer chops a run into click-click pairs (home each); the proposed train guard makes a run do nothing"
+   },
+   {
+    "id": "ck_run4_2",
+    "cls": "click_run",
+    "run_len": 4,
+    "cond": "quiet",
+    "instruction": "A RUN of 4 tongue clicks in a row, about 4 per second (like tapping a rhythm).",
+    "expect_sounds": [
+     "click",
+     "click",
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home",
+     "home"
+    ],
+    "expect_intent": [],
+    "max_s": 4.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ],
+     [
+      "click",
+      0.5
+     ],
+     [
+      "click",
+      0.75
+     ]
+    ],
+    "note": "today the Sequencer chops a run into click-click pairs (home each); the proposed train guard makes a run do nothing"
+   },
+   {
+    "id": "ck_run5_3",
+    "cls": "click_run",
+    "run_len": 5,
+    "cond": "quiet",
+    "instruction": "A RUN of 5 tongue clicks in a row, about 4 per second (like tapping a rhythm).",
+    "expect_sounds": [
+     "click",
+     "click",
+     "click",
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home",
+     "home"
+    ],
+    "expect_intent": [],
+    "max_s": 4.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ],
+     [
+      "click",
+      0.5
+     ],
+     [
+      "click",
+      0.75
+     ],
+     [
+      "click",
+      1.0
+     ]
+    ],
+    "note": "today the Sequencer chops a run into click-click pairs (home each); the proposed train guard makes a run do nothing"
+   },
+   {
+    "id": "ck_run3_4",
+    "cls": "click_run",
+    "run_len": 3,
+    "cond": "quiet",
+    "instruction": "A RUN of 3 tongue clicks in a row, about 4 per second (like tapping a rhythm).",
+    "expect_sounds": [
+     "click",
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home"
+    ],
+    "expect_intent": [],
+    "max_s": 4.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ],
+     [
+      "click",
+      0.5
+     ]
+    ],
+    "note": "today the Sequencer chops a run into click-click pairs (home each); the proposed train guard makes a run do nothing"
+   },
+   {
+    "id": "ck_run4_5",
+    "cls": "click_run",
+    "run_len": 4,
+    "cond": "quiet",
+    "instruction": "A RUN of 4 tongue clicks in a row, about 4 per second (like tapping a rhythm).",
+    "expect_sounds": [
+     "click",
+     "click",
+     "click",
+     "click"
+    ],
+    "expect_now": [
+     "home",
+     "home"
+    ],
+    "expect_intent": [],
+    "max_s": 4.5,
+    "fake": [
+     [
+      "click",
+      0.0
+     ],
+     [
+      "click",
+      0.25
+     ],
+     [
+      "click",
+      0.5
+     ],
+     [
+      "click",
+      0.75
+     ]
+    ],
+    "note": "today the Sequencer chops a run into click-click pairs (home each); the proposed train guard makes a run do nothing"
+   },
+   {
+    "id": "ck_pop_1",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_2",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_3",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_4",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_5",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_6",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_7",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_8",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_9",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_10",
+    "cls": "pop",
+    "cond": "quiet",
+    "instruction": "ONE lip pop ('p' with closed lips, no voice).",
+    "expect_sounds": [
+     "pop"
+    ],
+    "expect_now": [
+     "tap"
+    ],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ]
+    ],
+    "note": "a lone pop taps after the sequence gap (~0.6-0.75 s): it waits for pop pop (listen) first"
+   },
+   {
+    "id": "ck_pop_click_1",
+    "cls": "pop_click",
+    "cond": "quiet",
+    "instruction": "A lip POP, then quickly a tongue CLICK (pop first).",
+    "expect_sounds": [
+     "pop",
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "click",
+      0.3
+     ]
+    ],
+    "note": "since 2026-09-27 a pop waits for pop pop, so a quick click after it joins it: pop click is unbound and nothing happens (before: tap)"
+   },
+   {
+    "id": "ck_pop_click_2",
+    "cls": "pop_click",
+    "cond": "quiet",
+    "instruction": "A lip POP, then quickly a tongue CLICK (pop first).",
+    "expect_sounds": [
+     "pop",
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "click",
+      0.3
+     ]
+    ],
+    "note": "since 2026-09-27 a pop waits for pop pop, so a quick click after it joins it: pop click is unbound and nothing happens (before: tap)"
+   },
+   {
+    "id": "ck_pop_click_3",
+    "cls": "pop_click",
+    "cond": "quiet",
+    "instruction": "A lip POP, then quickly a tongue CLICK (pop first).",
+    "expect_sounds": [
+     "pop",
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "click",
+      0.3
+     ]
+    ],
+    "note": "since 2026-09-27 a pop waits for pop pop, so a quick click after it joins it: pop click is unbound and nothing happens (before: tap)"
+   },
+   {
+    "id": "ck_pop_click_4",
+    "cls": "pop_click",
+    "cond": "quiet",
+    "instruction": "A lip POP, then quickly a tongue CLICK (pop first).",
+    "expect_sounds": [
+     "pop",
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "click",
+      0.3
+     ]
+    ],
+    "note": "since 2026-09-27 a pop waits for pop pop, so a quick click after it joins it: pop click is unbound and nothing happens (before: tap)"
+   },
+   {
+    "id": "ck_pop_click_5",
+    "cls": "pop_click",
+    "cond": "quiet",
+    "instruction": "A lip POP, then quickly a tongue CLICK (pop first).",
+    "expect_sounds": [
+     "pop",
+     "click"
+    ],
+    "expect_now": [],
+    "expect_intent": [
+     "tap"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "click",
+      0.3
+     ]
+    ],
+    "note": "since 2026-09-27 a pop waits for pop pop, so a quick click after it joins it: pop click is unbound and nothing happens (before: tap)"
+   },
+   {
+    "id": "ck_click_pop_1",
+    "cls": "click_pop",
+    "cond": "quiet",
+    "instruction": "A tongue CLICK, then quickly a lip POP (click first: 'listen for a phrase').",
+    "expect_sounds": [
+     "click",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click_pop",
+      0.0
+     ]
+    ],
+    "note": "the bound click-pop sequence; opens the phrase window on the phone",
+    "retired": "2026-09-27 (user): pop pop replaced click pop as listen-for-phrase; click pop is unbound"
+   },
+   {
+    "id": "ck_click_pop_2",
+    "cls": "click_pop",
+    "cond": "quiet",
+    "instruction": "A tongue CLICK, then quickly a lip POP (click first: 'listen for a phrase').",
+    "expect_sounds": [
+     "click",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click_pop",
+      0.0
+     ]
+    ],
+    "note": "the bound click-pop sequence; opens the phrase window on the phone",
+    "retired": "2026-09-27 (user): pop pop replaced click pop as listen-for-phrase; click pop is unbound"
+   },
+   {
+    "id": "ck_click_pop_3",
+    "cls": "click_pop",
+    "cond": "quiet",
+    "instruction": "A tongue CLICK, then quickly a lip POP (click first: 'listen for a phrase').",
+    "expect_sounds": [
+     "click",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click_pop",
+      0.0
+     ]
+    ],
+    "note": "the bound click-pop sequence; opens the phrase window on the phone",
+    "retired": "2026-09-27 (user): pop pop replaced click pop as listen-for-phrase; click pop is unbound"
+   },
+   {
+    "id": "ck_click_pop_4",
+    "cls": "click_pop",
+    "cond": "quiet",
+    "instruction": "A tongue CLICK, then quickly a lip POP (click first: 'listen for a phrase').",
+    "expect_sounds": [
+     "click",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click_pop",
+      0.0
+     ]
+    ],
+    "note": "the bound click-pop sequence; opens the phrase window on the phone",
+    "retired": "2026-09-27 (user): pop pop replaced click pop as listen-for-phrase; click pop is unbound"
+   },
+   {
+    "id": "ck_click_pop_5",
+    "cls": "click_pop",
+    "cond": "quiet",
+    "instruction": "A tongue CLICK, then quickly a lip POP (click first: 'listen for a phrase').",
+    "expect_sounds": [
+     "click",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "click_pop",
+      0.0
+     ]
+    ],
+    "note": "the bound click-pop sequence; opens the phrase window on the phone",
+    "retired": "2026-09-27 (user): pop pop replaced click pop as listen-for-phrase; click pop is unbound"
+   },
+   {
+    "id": "ck_pop_pop_1",
+    "cls": "pop_pop",
+    "cond": "quiet",
+    "instruction": "Two lip POPs, quickly (about a quarter second apart): 'listen for a phrase'.",
+    "expect_sounds": [
+     "pop",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "pop",
+      0.25
+     ]
+    ],
+    "note": "the listen gesture since 2026-09-27; opens the phrase window on the phone"
+   },
+   {
+    "id": "ck_pop_pop_2",
+    "cls": "pop_pop",
+    "cond": "quiet",
+    "instruction": "Two lip POPs, quickly (about a quarter second apart): 'listen for a phrase'.",
+    "expect_sounds": [
+     "pop",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "pop",
+      0.25
+     ]
+    ],
+    "note": "the listen gesture since 2026-09-27; opens the phrase window on the phone"
+   },
+   {
+    "id": "ck_pop_pop_3",
+    "cls": "pop_pop",
+    "cond": "quiet",
+    "instruction": "Two lip POPs, quickly (about a quarter second apart): 'listen for a phrase'.",
+    "expect_sounds": [
+     "pop",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "pop",
+      0.25
+     ]
+    ],
+    "note": "the listen gesture since 2026-09-27; opens the phrase window on the phone"
+   },
+   {
+    "id": "ck_pop_pop_4",
+    "cls": "pop_pop",
+    "cond": "quiet",
+    "instruction": "Two lip POPs, quickly (about a quarter second apart): 'listen for a phrase'.",
+    "expect_sounds": [
+     "pop",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "pop",
+      0.25
+     ]
+    ],
+    "note": "the listen gesture since 2026-09-27; opens the phrase window on the phone"
+   },
+   {
+    "id": "ck_pop_pop_5",
+    "cls": "pop_pop",
+    "cond": "quiet",
+    "instruction": "Two lip POPs, quickly (about a quarter second apart): 'listen for a phrase'.",
+    "expect_sounds": [
+     "pop",
+     "pop"
+    ],
+    "expect_now": [
+     "listen_for_phrase"
+    ],
+    "expect_intent": [
+     "listen_for_phrase"
+    ],
+    "max_s": 3.5,
+    "fake": [
+     [
+      "pop",
+      0.0
+     ],
+     [
+      "pop",
+      0.25
+     ]
+    ],
+    "note": "the listen gesture since 2026-09-27; opens the phrase window on the phone"
+   }
+  ]
+ }
+}

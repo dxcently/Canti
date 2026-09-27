@@ -58,6 +58,15 @@ CASES = [
     ("pop_20db_48k", "pop", 20, "white", 48000),
 ]
 
+# Long-stream cases: one synth clip repeated LOOPS[name] times, as one stream. 72 x 2.03 s = 146 s crosses 134.2 s,
+# where a port computing (frame index * hop) * 1000 in 32 bits overflowed (every later sound: t = 0, dur = 0).
+# Times must keep increasing and every loop must give the first loop's events. Appended after CASES so the other
+# cases keep their seeds.
+LONG_CASES = [
+    ("long_stream_rise", "rise", 20, "pink", 16000),
+]
+LOOPS = {"long_stream_rise": 72}
+
 TOLERANCES = {
     "note": "float32 C vs float64 Python. Frames: compare where both sides agree the frame is above the floor + 6 dB.",
     "frame": {"e_db": 0.05, "zcr": 0.0, "centroid_rel": 0.002, "flatness_abs": 0.002, "flux_db": 0.05,
@@ -94,10 +103,13 @@ def main() -> None:
     cfg = Config()
     fp = FrameProcessor(cfg)
     cases = []
-    for k, (name, cls, snr, bg, rate) in enumerate(CASES):
+    for k, (name, cls, snr, bg, rate) in enumerate(CASES + LONG_CASES):
         rng = np.random.default_rng(a.seed + k)
         clip = synth.make_clip(cls, rng, rate, float(snr), bg)
         pcm = np.clip(np.round(clip.audio * 32768.0), -32768, 32767).astype("<i2")
+        loops = LOOPS.get(name, 1)
+        if loops > 1:
+            pcm = np.tile(pcm, loops)
         pcm.tofile(out / f"{name}.pcm")
         if a.wav:
             import soundfile as sf
@@ -115,9 +127,11 @@ def main() -> None:
             d["message"] = message([d], i, features=True)
             evs.append(d)
         (out / f"{name}.events.json").write_text(json.dumps(
-            {"case": name, "synthetic": True, "truth": clip.labels(), "events": evs}, indent=1, default=float))
+            {"case": name, "synthetic": True, "truth": clip.labels(), "events": evs,
+             **({"loops": loops, "truth_note": "truth is one loop's"} if loops > 1 else {})}, indent=1, default=float))
         cases.append({"name": name, "class": cls, "kind": clip.kind, "snr_db": snr, "background": bg, "rate": rate,
                       "samples": int(pcm.size), "frames": len(frames),
+                      **({"loops": loops} if loops > 1 else {}),
                       "expected": [(e.label, e.text) for e in events]})
         print(f"{name:<22} {rate:>5} Hz {pcm.size / rate:5.2f} s  {len(frames):4d} frames  "
               f"{[e.label for e in events]}")

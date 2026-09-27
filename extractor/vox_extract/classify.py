@@ -35,11 +35,18 @@ class Event:
     emit: bool = True          # False = segment was dropped (weak blip); kept for debugging
     truncated: bool = False
     raw: dict = field(default_factory=dict)
+    sound: int = 0             # the sound's id in its stream (Extractor; 0 = not numbered); hold messages share it
+    held: bool = False         # a `hold start` was sent for this sound (hold.py)
 
     def to_dict(self) -> dict:
-        return {"t_start_ms": self.t_start_ms, "t_end_ms": self.t_end_ms, "label": self.label,
-                "sounds_like": self.sounds_like, "text": self.text, "emit": self.emit,
-                "truncated": self.truncated, "raw": self.raw}
+        d = {"t_start_ms": self.t_start_ms, "t_end_ms": self.t_end_ms, "label": self.label,
+             "sounds_like": self.sounds_like, "text": self.text, "emit": self.emit, "truncated": self.truncated}
+        if self.sound:
+            d["sound"] = self.sound
+        if self.held:
+            d["held"] = True
+        d["raw"] = self.raw
+        return d
 
 
 # ---------------------------------------------------------------- small portable helpers

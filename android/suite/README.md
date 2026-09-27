@@ -17,6 +17,9 @@ tests assert on the app's own tree dump, screenshots and event log. Everything r
 | `harvest.py` | Walks the launcher, the fixture and the stand-ins. Writes what the screen summariser sees to `out/harvest-*.jsonl`, and the intent cursor option lists to `out/targets-harvest-*.jsonl`. |
 | `enroll.py` | Pushes personalization examples (JSONL: `kind`, `name`, `fp`, `fp_version`, `pitch16`) to the app's active profile; also `list`, `delete` and `clear`. |
 | `ctl.py` | Sends one control op and prints the reply: `ctl.py ble_status`, `ctl.py ble_connect address=auto` (key=value, JSON values). Used for manual tests on a real phone (`VOX_SERIAL=<serial>`), e.g. the BLE end-to-end test in `../README.md`. |
+| `harvest_real.py` | Walks the emulator apps for the real-screen test set (`finetune/data/real-targets-v1`). For each screen it saves a screenshot and the app's own `targets` op reply (options, bounds, screen line, state template). |
+| `tree_targets.py` | A Python port of `Targets.kt` / `ScreenSummarizer.kt` over `uiautomator dump` XML, for phones where the VOX service is off. Its known gaps are listed at the top of the file. |
+| `harvest_device.py`, `harvest_device.sh` | Capture from a USB phone (`status`, `cap <app>/<state>`, `open <package>`). Writes a PNG, the uiautomator XML and the option list to the gitignored `finetune/data/real-targets-v1/zflip/raw`. The options come from the app's `targets` op when its service is on, and from `tree_targets.py` otherwise. Nothing is tapped. |
 | `www/long.html` | A long page for the Fennec scroll test. |
 
 Not tracked: `apks/` (downloaded APKs, about 284 MB) and `out/` (results, harvests, logs).

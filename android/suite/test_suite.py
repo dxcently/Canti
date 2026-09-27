@@ -171,15 +171,17 @@ def fixture_arch_swipes_right(c: Ctx):
 
 
 @test
-def fixture_pop_taps_at_once(c: Ctx):
+def fixture_pop_taps_after_the_pop_pop_gap(c: Ctx):
+    # 2026-09-27: pop pop = listen, so a lone pop waits one gap for a second pop, then taps
     c.open(FEED)
     m = c.ev.mark()
     o = c.act("pop")
     expect(o, "tap")
-    assert o["resolve"]["waited"] is False and o["resolve"]["held_ms"] < 100, o["resolve"]
-    assert not any(e["ev"] == "wait" for e in c.ev.since(m)), "pop must not wait (pop pop is unbound)"
+    assert o["resolve"]["waited"] and 550 <= o["resolve"]["held_ms"] <= 900, o["resolve"]
+    w = next((e for e in c.ev.since(m) if e["ev"] == "wait"), None)
+    assert w and "pop pop" in w["for"], w
     c.texts_until("feed_state", "paused")
-    c.note(f"pop held {o['resolve']['held_ms']} ms before deciding")
+    c.note(f"pop held {o['resolve']['held_ms']} ms before deciding (waiting for pop pop)")
 
 
 @test
@@ -200,15 +202,16 @@ def fixture_hiss_goes_back(c: Ctx):
 
 
 @test
-def fixture_click_pop_listens_then_phrase_uses_screen_tiebreak(c: Ctx):
+def fixture_pop_pop_listens_then_phrase_uses_screen_tiebreak(c: Ctx):
     c.open(FEED)
     m = c.ev.mark()
-    assert c.vox.sounds("click")["waiting"] is True, "click should wait for a possible pop"
+    assert c.vox.sounds("pop")["waiting"] is True, "pop should wait for a possible second pop"
     time.sleep(0.15)
     c.vox.sounds("pop")
     o = c.outcome(m)
-    assert o["resolve"]["sequence"] == "click pop" and o["resolve"]["waited"], o["resolve"]
+    assert o["resolve"]["sequence"] == "pop pop" and o["resolve"]["waited"], o["resolve"]
     expect(o, "listen_for_phrase", confirm=None)
+    assert o["decision"]["source"] == "app:listen", o["decision"]
     assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
     m2 = c.ev.mark()
     c.vox.phrase("next")
@@ -259,7 +262,7 @@ def timing_lonely_click_waits_one_gap_then_resolves(c: Ctx):
     m = c.ev.mark()
     c.vox.sounds("click")
     w = c.ev.wait(m, lambda e: e["ev"] == "wait", 2)
-    assert w and w["for"] == "click pop", w
+    assert w and "click click" in w["for"] and "click pop" not in w["for"], w
     o = c.outcome(m, timeout=3)
     assert o["resolve"]["waited"] and 550 <= o["resolve"]["held_ms"] <= 900, o["resolve"]
     expect(o, "none", confirm=None)
@@ -267,7 +270,7 @@ def timing_lonely_click_waits_one_gap_then_resolves(c: Ctx):
 
 
 @test
-def timing_pop_waits_only_when_profile_binds_pop_pop(c: Ctx):
+def timing_an_app_rule_can_claim_pop_pop(c: Ctx):
     c.open(FEED)
     c.vox.control("profile", profile={"app:ai.vox.fixture": [{"phrase": ["pop", "pop"], "kind": "fixed", "action": "like"}]})
     # pop pop -> like (double-tap)
@@ -281,17 +284,13 @@ def timing_pop_waits_only_when_profile_binds_pop_pop(c: Ctx):
     assert "VOX fixture" in rules and "like / favourite the current item" in rules, rules
     expect(o, "like")
     c.texts_until("feed_likes", "likes: 1")
-    # a single pop now waits a full gap before tapping
-    time.sleep(0.5)
-    o2 = c.act("pop")
-    assert o2["resolve"]["waited"] and o2["resolve"]["held_ms"] >= 550, o2["resolve"]
-    expect(o2, "tap")
-    c.note(f"with pop pop bound: single pop held {o2['resolve']['held_ms']} ms")
-    # other apps are unaffected: pop acts at once on the launcher
+    # other apps keep the default: pop pop opens the listen window there
     sh("input keyevent KEYCODE_HOME")
     time.sleep(1.0)
-    o3 = c.act("pop")
-    assert not o3["resolve"]["waited"], o3["resolve"]
+    m = c.ev.mark()
+    c.vox.sounds("pop"); time.sleep(0.15); c.vox.sounds("pop")
+    o3 = c.outcome(m)
+    expect(o3, "listen_for_phrase", confirm=None)
 
 
 @test
@@ -331,7 +330,7 @@ def timing_device_stamps_merge_a_late_follow_up(c: Ctx):
     assert r["sequence"] == "click pop" and r["clock"] == "device" and r["gaps_ms"] == [300], r
     w = next(e for e in c.ev.since(first) if e["ev"] == "wait")
     c.note(f"device clock: waited {w['wait_ms']} ms for the follow-up; resolved as {r['sequence']!r} ({r['ended_by']})")
-    # The same arrival pattern without stamps: arrival fallback splits it (click alone, then pop taps).
+    # The same arrival pattern without stamps: arrival fallback splits it (click alone, then pop taps after its gap).
     c.vox.control("reset")
     c.open(FEED)
     c.vox.sounds("click")
@@ -356,7 +355,7 @@ def timing_device_stamps_split_a_burst(c: Ctx):
     assert rs[0]["ended_by"] == "device-gap" and rs[1]["clock"] == "device", rs
     c.note(f"device clock: {rs[0]['sequence']!r} ended by {rs[0]['ended_by']}, then {rs[1]['sequence']!r}: {rs[1]['note']}")
     c.texts_until("feed_state", "paused")                    # the pop tapped the feed
-    # Without stamps the same burst merges into "click pop" (listen for a phrase).
+    # Without stamps the same burst merges into "click pop" (unbound since 2026-09-27: nothing happens).
     c.vox.control("reset")
     c.open(FEED)
     c.vox.sounds("click")
@@ -526,10 +525,10 @@ def jev_local_systemone_vox_jevlike(c: Ctx):
             if name == "hiss" and o["decision"]["action"] == "back":
                 time.sleep(1.0)
                 assert c.vox.control("ping")["app"] != "ai.vox.fixture", "back did not leave the feed"
-        # click pop -> listen, then the phrase "next" (screen tie-break: video feed -> swipe up)
+        # pop pop -> listen (the app, source app:listen), then the phrase "next" (screen tie-break: video feed -> swipe up)
         c.open(FEED)
-        o = c.act("click", "pop", timeout=200)
-        check("click pop", o, "listen_for_phrase")
+        o = c.act("pop", "pop", timeout=200)
+        check("pop pop", o, "listen_for_phrase")
         if o["decision"]["action"] == "listen_for_phrase":
             assert c.ev.wait(0, lambda e: e["ev"] == "listening" and e.get("state") == "open", 3)
             m = c.ev.mark()
@@ -549,12 +548,12 @@ def jev_local_systemone_vox_jevlike(c: Ctx):
         adb("reverse", "--remove", "tcp:8765", check=False)
 
 
-# --- intent cursor mode: click pop, a spoken target, then tap / highlight / not on screen ----------------------------
+# --- intent cursor mode: pop pop, a spoken target, then tap / highlight / not on screen ----------------------------
 
 def name_target(c: Ctx, phrase: str, timeout: float = 10) -> dict:
-    """In cursor mode: "click pop" (the app opens the listening window), then the phrase. Returns the target events."""
+    """In cursor mode: "pop pop" (the app opens the listening window), then the phrase. Returns the target events."""
     m = c.ev.mark()
-    assert c.vox.sounds("click", mode="cursor")["waiting"] is True, "in cursor mode click must wait for pop"
+    assert c.vox.sounds("pop", mode="cursor")["waiting"] is True, "in cursor mode pop must wait for a second pop"
     time.sleep(0.15)
     c.vox.sounds("pop", mode="cursor")
     d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("source") == "app:cursor-listen", 3)
@@ -778,7 +777,9 @@ def personal_custom_meow_bound_ignore_sneeze_and_far_sound(c: Ctx):
         assert not bad["ok"] and "floor[0]" in bad["error"], bad
         fl = c.vox.control("fp_floors", reset=True)
         assert fl["status"] == "provisional" and not fl["override"], fl
-        stored = json.loads(sh("run-as ai.vox.companion cat files/enroll/default.json"))
+        # one store per mic source (files/enroll/<profile>@<source>.json); enroll_list names it
+        store = c.vox.control("enroll_list")["enrollment"]["file"]
+        stored = json.loads(sh(f"run-as ai.vox.companion cat files/enroll/{store}"))
         assert [x["name"] for x in stored["classes"]] == ["meow", "sneeze"], stored
 
         c.vox.control("profile", profile={"global": [{"sound": "my:meow", "kind": "fixed", "action": "open_camera"}]})
@@ -1040,9 +1041,9 @@ def ui_flutter_status_screen_is_readable_and_pausable(c: Ctx):
     semantics labels, and tapping them (adb input at the listed bounds) pauses, resumes and opens the legacy settings."""
     mark = c.ev.mark()
     sh("am start -W -n ai.vox.companion/.MainActivity")   # not start_activity: its -S force-stop would kill the service
-    t = own_targets(c, "Pause VOX")
+    t = own_targets(c, "Pause Canti")
     opts = t["options"]
-    for want in ("Pause VOX", "Refresh status", "Legacy settings"):
+    for want in ("Pause Canti", "Refresh status", "Legacy settings"):
         assert any(o.startswith(want + " (") for o in opts), f"{want!r} missing from {opts}"
     assert "Listening for sounds" in own_text(c), own_text(c)
     ff = c.ev.wait(mark, lambda e: e["ev"] == "ui" and e.get("what") == "first_frame", 5)
@@ -1051,7 +1052,7 @@ def ui_flutter_status_screen_is_readable_and_pausable(c: Ctx):
         c.note(f"first frame {ff.get('since_create_ms')} ms after onCreate")
     # pause from the screen: the service ignores sounds and says why
     mark = c.ev.mark()
-    tap_option(t, "Pause VOX")
+    tap_option(t, "Pause Canti")
     e = c.ev.wait(mark, lambda e: e["ev"] == "pause" and e.get("state") == "paused", 4)
     assert e and e["by"] == "app", e
     assert c.vox.control("ping")["paused"] is True
@@ -1059,11 +1060,11 @@ def ui_flutter_status_screen_is_readable_and_pausable(c: Ctx):
     ign = c.ev.wait(mark, lambda e: e["ev"] == "ignored" and e.get("id") == c.vox.next_id, 3)
     assert ign and ign["reason"] == "paused (app)", ign
     assert not c.ev.wait(mark, lambda e: e["ev"] == "exec", 1.0), "a paused VOX acted"
-    t = own_targets(c, "Resume VOX", 5)
+    t = own_targets(c, "Resume Canti", 5)
     assert "Paused" in own_text(c), own_text(c)
     # resume
     mark = c.ev.mark()
-    tap_option(t, "Resume VOX")
+    tap_option(t, "Resume Canti")
     e = c.ev.wait(mark, lambda e: e["ev"] == "pause" and e.get("state") == "resumed", 4)
     assert e and e["by"] == "app", e
     assert c.vox.control("ping")["paused"] is False
@@ -1076,7 +1077,7 @@ def ui_flutter_status_screen_is_readable_and_pausable(c: Ctx):
     top = sh("dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' | head -1", check=False)
     assert "LegacySettingsActivity" in top, top
     sh("input keyevent KEYCODE_BACK")
-    own_targets(c, "Pause VOX", 5)
+    own_targets(c, "Pause Canti", 5)
 
 
 def main() -> None:

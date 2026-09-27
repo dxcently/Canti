@@ -1,0 +1,714 @@
+{
+ "name": "canti_badge",
+ "version": 2,
+ "about": "The floating badge's pixel Canti: the icon's head on a jointed robot body. Made by brand/tools/canti_sprite.py; don't edit by hand.",
+ "sheet": "canti_badge.png",
+ "frameWidth": 34,
+ "frameHeight": 47,
+ "columns": 8,
+ "frameCount": 99,
+ "artPxDp": 1.5238,
+ "scale": "Draw each art px as n x n device px, n = max(1, round(density x artPxDp)) (4 px at density 2.625), nearest neighbour, at whole-pixel positions.",
+ "states": {
+  "idle": {
+   "loop": true,
+   "frames": [
+    0,
+    1,
+    2,
+    3,
+    2,
+    4,
+    5,
+    4,
+    1
+   ],
+   "ms": [
+    700,
+    700,
+    700,
+    700,
+    700,
+    60,
+    90,
+    60,
+    700
+   ],
+   "still": 0,
+   "about": "Armed, waiting for a hum: calm crescent eyes, a slow blink, the head bobbing a pixel on its collar with the antenna swaying a beat behind. Lamp dull (it lights orange only while hearing); body lights unlit."
+  },
+  "hearing": {
+   "loop": true,
+   "frames": [
+    6,
+    7,
+    8,
+    9
+   ],
+   "ms": [
+    110,
+    110,
+    110,
+    110
+   ],
+   "still": 0,
+   "about": "A hum in progress: eyes up, a level meter, the lamp's halo pulsing, shoulder and hip lights lit, the antenna quivering with its tip bead pulsing."
+  },
+  "hearing_once": {
+   "loop": false,
+   "frames": [
+    6,
+    7,
+    8,
+    9
+   ],
+   "ms": [
+    110,
+    110,
+    110,
+    110
+   ],
+   "still": 0,
+   "about": "A sound that caused no action (one-shot): one beat of the meter."
+  },
+  "pending": {
+   "loop": true,
+   "frames": [
+    10,
+    11,
+    12,
+    13
+   ],
+   "ms": [
+    220,
+    220,
+    220,
+    220
+   ],
+   "still": 2,
+   "about": "Waiting for the second sound: round expectant eyes, dots counting, lamp and body lights yellow, the antenna tilting up to listen."
+  },
+  "scroll_up": {
+   "loop": false,
+   "frames": [
+    14,
+    15,
+    16,
+    17,
+    18
+   ],
+   "ms": [
+    80,
+    110,
+    110,
+    90,
+    80
+   ],
+   "still": 1,
+   "about": "One-shot after a scroll up: an arrow runs up the screen, the forearms push up, the head lifts, the antenna whips back and settles."
+  },
+  "scroll_down": {
+   "loop": false,
+   "frames": [
+    19,
+    20,
+    21,
+    22,
+    23
+   ],
+   "ms": [
+    80,
+    110,
+    110,
+    90,
+    80
+   ],
+   "still": 1,
+   "about": "One-shot after a scroll down: an arrow runs down the screen, the head dips, the antenna flicks up and settles."
+  },
+  "hold_scroll_up": {
+   "loop": true,
+   "frames": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29
+   ],
+   "ms": [
+    70,
+    70,
+    70,
+    70,
+    70,
+    70
+   ],
+   "still": 0,
+   "about": "Scrolling up while the hum is held: chevrons stream up, the head leans into it, the antenna streams with a steady wobble. BadgeState.HOLD_SCROLL plays the last scroll's direction."
+  },
+  "hold_scroll_down": {
+   "loop": true,
+   "frames": [
+    30,
+    31,
+    32,
+    33,
+    34,
+    35
+   ],
+   "ms": [
+    70,
+    70,
+    70,
+    70,
+    70,
+    70
+   ],
+   "still": 0,
+   "about": "Scrolling down while the hum is held: chevrons stream down, the head leans into it, the antenna streams with a steady wobble. BadgeState.HOLD_SCROLL plays the last scroll's direction."
+  },
+  "back": {
+   "loop": false,
+   "frames": [
+    36,
+    37,
+    38,
+    39,
+    40
+   ],
+   "ms": [
+    90,
+    140,
+    140,
+    110,
+    80
+   ],
+   "still": 1,
+   "about": "One-shot after Back: the left arm points left, an arrow runs left on the screen, the antenna trails the swing."
+  },
+  "forward": {
+   "loop": false,
+   "frames": [
+    41,
+    42,
+    43,
+    44,
+    45
+   ],
+   "ms": [
+    90,
+    140,
+    140,
+    110,
+    80
+   ],
+   "still": 1,
+   "about": "One-shot after Forward: the right arm points right, an arrow runs right, the antenna trails."
+  },
+  "home": {
+   "loop": false,
+   "frames": [
+    46,
+    47,
+    48,
+    49,
+    50
+   ],
+   "ms": [
+    90,
+    160,
+    90,
+    180,
+    80
+   ],
+   "still": 3,
+   "about": "One-shot after Home: a crouch, a hop with both mitts up, a house on the screen; the antenna bounces on the hop."
+  },
+  "cursor": {
+   "loop": true,
+   "frames": [
+    51,
+    52
+   ],
+   "ms": [
+    420,
+    420
+   ],
+   "still": 0,
+   "about": "Cursor mode: reticle eyes that lock in and out; the antenna stiff and straight, pointing."
+  },
+  "paused": {
+   "loop": true,
+   "frames": [
+    53,
+    54,
+    54,
+    55
+   ],
+   "ms": [
+    700,
+    700,
+    700,
+    700
+   ],
+   "still": 1,
+   "about": "Paused: eyes shut, a pixel z drifting up the screen, lamp dull, a slow breath; the antenna drooping."
+  },
+  "off": {
+   "loop": true,
+   "frames": [
+    56
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Off / disconnected: the off icon's face (dark eyes, lamp unlit), head sunk on the collar, antenna limp, still."
+  },
+  "error": {
+   "loop": true,
+   "frames": [
+    57,
+    58,
+    57,
+    58,
+    57
+   ],
+   "ms": [
+    110,
+    80,
+    110,
+    80,
+    1600
+   ],
+   "still": 4,
+   "about": "Stop / error (held): the lamp and body lights flash red twice, then stay red; eyes squint, the antenna jitters."
+  },
+  "error_once": {
+   "loop": false,
+   "frames": [
+    57,
+    58,
+    57,
+    58,
+    57
+   ],
+   "ms": [
+    110,
+    80,
+    110,
+    80,
+    160
+   ],
+   "still": 0,
+   "about": "A failed action (one-shot): the lamp and body lights flash red twice, eyes squint, the antenna jitters."
+  },
+  "ignored_once": {
+   "loop": false,
+   "frames": [
+    59,
+    60,
+    61,
+    62,
+    0
+   ],
+   "ms": [
+    70,
+    120,
+    140,
+    90,
+    60
+   ],
+   "still": 1,
+   "about": "A sound heard but not acted on (one-shot, rate-limited by the service): flat eyes, a wavy mouth, a quick shrug with a glance aside; lamp dull, no meter."
+  },
+  "tap_to_wake": {
+   "loop": true,
+   "frames": [
+    63,
+    64
+   ],
+   "ms": [
+    1200,
+    800
+   ],
+   "still": 1,
+   "about": "Asleep after a link drop, a tap wakes it (the app arms the Pico): drowsy half-lidded eyes, then TAP glowing on the face screen, alternating slowly; lamp dull, antenna half-drooped."
+  },
+  "joy_idle": {
+   "loop": true,
+   "frames": [
+    65
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_0_ah": {
+   "loop": true,
+   "frames": [
+    66
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_0_ee": {
+   "loop": true,
+   "frames": [
+    67
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_0_oo": {
+   "loop": true,
+   "frames": [
+    68
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up1_ah": {
+   "loop": true,
+   "frames": [
+    69
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up1_ee": {
+   "loop": true,
+   "frames": [
+    70
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up1_oo": {
+   "loop": true,
+   "frames": [
+    71
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up2_ah": {
+   "loop": true,
+   "frames": [
+    72
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up2_ee": {
+   "loop": true,
+   "frames": [
+    73
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up2_oo": {
+   "loop": true,
+   "frames": [
+    74
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up3_ah": {
+   "loop": true,
+   "frames": [
+    75
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up3_ee": {
+   "loop": true,
+   "frames": [
+    76
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up3_oo": {
+   "loop": true,
+   "frames": [
+    77
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up4_ah": {
+   "loop": true,
+   "frames": [
+    78
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up4_ee": {
+   "loop": true,
+   "frames": [
+    79
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_up4_oo": {
+   "loop": true,
+   "frames": [
+    80
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down1_ah": {
+   "loop": true,
+   "frames": [
+    81
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down1_ee": {
+   "loop": true,
+   "frames": [
+    82
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down1_oo": {
+   "loop": true,
+   "frames": [
+    83
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down2_ah": {
+   "loop": true,
+   "frames": [
+    84
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down2_ee": {
+   "loop": true,
+   "frames": [
+    85
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down2_oo": {
+   "loop": true,
+   "frames": [
+    86
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down3_ah": {
+   "loop": true,
+   "frames": [
+    87
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down3_ee": {
+   "loop": true,
+   "frames": [
+    88
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down3_oo": {
+   "loop": true,
+   "frames": [
+    89
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down4_ah": {
+   "loop": true,
+   "frames": [
+    90
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down4_ee": {
+   "loop": true,
+   "frames": [
+    91
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_down4_oo": {
+   "loop": true,
+   "frames": [
+    92
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_upoff_ah": {
+   "loop": true,
+   "frames": [
+    93
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_upoff_ee": {
+   "loop": true,
+   "frames": [
+    94
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_upoff_oo": {
+   "loop": true,
+   "frames": [
+    95
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_downoff_ah": {
+   "loop": true,
+   "frames": [
+    96
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_downoff_ee": {
+   "loop": true,
+   "frames": [
+    97
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  },
+  "joy_downoff_oo": {
+   "loop": true,
+   "frames": [
+    98
+   ],
+   "ms": [
+    1000
+   ],
+   "still": 0,
+   "about": "Voice joystick (cursor mode, Face A): the pitch bar's step and the vowel pointer; a still frame the service picks per tick."
+  }
+ }
+}

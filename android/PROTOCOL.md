@@ -1,6 +1,6 @@
 # VOX device → phone protocol (v1)
 
-Every feature source (the BLE GATT client, which is still a stub, and the two debug sources) delivers the same JSON
+Every feature source (the BLE GATT client `BleFeatureSource`, and the two debug sources) delivers the same JSON
 message to the app. The app does the rest: sequencing, the decision, the gesture and the confirmation.
 
 ## Feature message
@@ -27,13 +27,15 @@ message to the app. The app does the rest: sequencing, the decision, the gesture
 | `id` | int, optional | Message id. A repeat of the previous id is ignored, which absorbs BLE retransmits. |
 | `mode` | `gesture` \| `cursor` \| `listening` | The device's mode. **The device owns the mode**: it toggles on a single button click, or when the app asks through CONFIG (*App commands*), and the app follows this flag. No model action enters or leaves it (the schema has no `enter_cursor_mode` or `exit_cursor_mode`). `listening` is sent with a spoken phrase; it does not change the app's gesture/cursor mode. |
 | `armed` | bool, default true | `false` = disarm (a button hold, going to sleep, or an app command). The app drops pending sounds, stops the cursor, closes the listening window and discards decisions in flight. The next armed message re-arms. |
+| `by` | str, optional | `"button"` only: on a no-sound state message whose mode change the user made with the device's button. The app keeps that mode as the user's own (see *Disconnect*). Absent for console, app commands and everything else. |
 | `sleeping` | bool, optional, default false | `true` only on the last message before the device goes to sleep (always with `armed: false`). See *Sleep and wake*. |
 | `rejected` | str, optional | Present only on the reply to a CONFIG command the device refused: the reason. See *App commands*. |
 | `sounds` | list of str (0–3) | One categorical description per sound, exactly the text after `sound i: ` in the model state (format below). |
 | `sequence` | list of str, same length | The sound labels: `rise fall arch dip flat pop click hiss unknown`. |
-| `timing` | list, optional, same length | Per sound, `{"t_start_ms", "t_end_ms"}` on the **device's** monotonic clock (ms since the Pico booted). An entry may be `null`. Only differences matter: the phone never compares these values with its own clock. The ends must not be before the starts, and the starts must not decrease within a message. Strongly recommended: see *Sound grouping* below. |
-| `phrase` | str or null | A transcribed phrase. It is accepted only while a listening window is open (opened by `listen_for_phrase`, default `click pop`, and lasting `listen_window_ms`, default 6000). Otherwise it is logged as `ignored`. |
+| `timing` | list, optional, same length | Per sound, `{"t_start_ms", "t_end_ms"}` on the **device's** monotonic clock (ms since the Pico booted). An entry may be `null`. Only differences matter: the phone never compares these values with its own clock. The ends must not be before the starts, and the starts must not decrease within a message. Strongly recommended: see *Sound grouping* below. An entry may also carry `sound` (int) and `held` (bool): see *Hold messages*. |
+| `phrase` | str or null | A transcribed phrase. It is accepted only while a listening window is open (opened by `listen_for_phrase`, default `pop pop`, and lasting `listen_window_ms`, default 6000). Otherwise it is logged as `ignored`. A phrase in a message answers the window like the phone's recognizer would (*Spoken phrases*, below). |
 | `features` | list, optional, same length | Per sound, `null` or `{"fp": [float, ...], "fp_version": "fp1", "pitch16": [16 floats] or []}`: the sound fingerprint (an opaque vector of the declared version, 1–256 values) and the pitch track (16 points in semitones relative to the start; empty for unpitched sounds). Used for personalization (below). A malformed entry rejects the message; a version or length that differs from the enrolled examples is only skipped for matching (logged). |
+| `gated` | list, optional, same length | Per sound, `null` or why a guard turned the sound into `unknown` on purpose: `"media"` (`mic_media_gate`) or `"media_hiss"` (the media-hiss rule); only the phone/USB mic sets it (*Phone microphone*, Guards). A gated sound is never rewritten by personalization (below). |
 | `cursor` | str or null | Reserved. The app describes the cursor itself ("moving up fast", "stopped", ...). |
 
 The message is validated by `FeatureMessage.parse`. A bad message gets `{"ok": false, "error": ...}` and an `ignored`
@@ -54,7 +56,14 @@ checks them against the same vocabulary, generated into `Vocab.kt` by `tools/gen
 
 The app acts at once, **unless the active profile binds a longer sequence that starts with the sounds heard so far**.
 Only then does it wait for the next sound.
-- With the defaults, only `click` waits (for `click pop`). `pop` acts immediately because `pop pop` is unbound.
+- With the defaults, `click` waits (for `click click` = home, `click hiss` = forward) and `pop` waits (for `pop pop` =
+  listen, since 2026-09-27; `click pop` is unbound). So a lone `pop` taps only after `gap_ms + jitter_ms` (~0.75 s).
+- A longer sequence bound to the **same fixed action** as a shorter bound prefix is not waited for, because waiting
+  would change nothing but the delay. So `hiss` (back) acts at once although `hiss click` is also bound to back. The
+  rest of such a sequence is then **absorbed**: a click that follows the hiss within the gap (device gap when both
+  sounds are stamped, else arrival time) is logged as `absorbed{sound, tail_of, gap_ms, clock}` and does nothing, so
+  `hiss click` is one back and `hiss click click` is back followed by a lone `click` (which waits, then does nothing),
+  not back + home. A click after the gap starts a new group as usual.
 - If a profile binds `pop pop` for an app, a single `pop` in that app waits.
 - In cursor mode, only cursor-scope rules count. By default nothing waits there: `click click` is unbound unless a user
   rule binds it, for example to `drag_toggle`.
@@ -86,32 +95,381 @@ resolved. The `wait` event records `wait_ms` and `clock`.
 Cost: with stamps, a waiting sound that arrived on time waits `gap_ms + jitter_ms` (750 ms) instead of `gap_ms`. This
 only affects sounds that start a bound multi-sound sequence (by default only `click`).
 
+## Hold messages (hold-to-scroll)
+
+A sound is normally reported once, when it ends. For "swipe, then hold a hum to keep scrolling" the phone must know
+that a tone is being held **now**, and when it stops. The device therefore sends two small messages on EVENT for a
+held sound, besides the sound's normal feature message. The reference is `extractor/vox_extract/hold.py`
+(`Extractor.push_stream`); the thresholds are the `hold_*` fields of the extractor `Config`.
+
+```json
+{"v": 1, "id": 1043, "hold": "start", "sound": 57, "t_start_ms": 81790, "t_ms": 82090, "f0_hz": 145.2, "flat": true}
+{"v": 1, "id": 1044, "hold": "end",   "sound": 57, "t_start_ms": 81790, "t_ms": 83790}
+```
+
+| field | type | meaning |
+|---|---|---|
+| `v`, `id` | int | As in the feature message: every hold message carries a fresh `id`, and a repeated `id` is ignored. |
+| `hold` | `start` \| `end` | Its presence makes this a hold message, not a feature message. It has no `sounds`, `sequence`, `armed` or `mode`. |
+| `sound` | int | The sound's id: 1, 2, ... per device boot (it restarts at 1 after a reboot, as the device clock does). The hold messages of one sound and its feature message share it. |
+| `t_start_ms` | int | The sound's start on the device clock: the same value as its feature message's `timing[0].t_start_ms`. |
+| `t_ms` | int | `start`: how far the sound had got when it qualified (at least `t_start_ms + 300`). `end`: the sound's end, the same value as its `timing[0].t_end_ms`. |
+| `f0_hz` | float, `start` only | Median pitch of the qualifying window. |
+| `flat` | bool, `start` only | The window's pitch is within 1.5 semitones of the sound's start pitch. `false` = the sound moved and then settled (for example a rise that levels out without a break). When the hold qualifies at the earliest point, the window is the whole sound so far, and `flat` is always `true`. |
+| `from`, `dir` | str, `start` only, optional | `"from": "glide"` with `"dir": "up"` \| `"down"`: a **glide-and-hold** (below). Absent on a steady-hum start. |
+
+**The feature message of a numbered sound** carries the id and the hold flag in its `timing` entry:
+`"timing": [{"t_start_ms": 81790, "t_end_ms": 83790, "sound": 57, "held": true}]`. `sound` is optional (older
+firmware omits it); `held` is present (`true`) only when a `hold start` was sent for that sound.
+
+**When the device sends them.**
+- `hold start`: at most once per sound, while it is still going, at the first 10 ms frame where the sound has lasted
+  `hold_start_ms` (300 ms) and its last 300 ms look like one steady voiced tone: at least 80 % voiced frames, median
+  clarity at least 0.85, pitch drift under 1 semitone between the window's halves, a pitch wobble (median absolute
+  deviation) under 0.5 semitone, and not machine-steady. Pops, clicks and hisses never qualify. A held hum therefore
+  gets its `hold start` about 300 ms after it starts. A sound that settles later gets it later.
+- **Glide-and-hold** (checked first, every frame): once the sound's last `hold_glide_ms` (250 ms) pass the same
+  steadiness test, their median pitch is at least `hold_glide_min_st` (2 semitones) above or below the sound's
+  start pitch, and it is within `hold_glide_peak_st` (1.5 semitones) of the highest (up) / lowest (down) pitch the
+  sound has reached (so the held note is where the glide went, not the way back of an arch or dip), and that test
+  has then kept passing on every frame for `hold_glide_delay_ms` (300 ms) more (the late start), `hold start` goes
+  out, with `"from": "glide"`, `"dir": "up"` / `"down"` and `flat: false`. Only a sound that came after at least
+  `hold_glide_quiet_ms` (700 ms) of quiet since the previous sound ended is tested (a stream's first sound counts
+  as quiet): talk and music run sounds together, and a deliberate glide starts from silence. So a
+  rise or fall whose end note is held for about half a second becomes a hold in the glide's direction, typically
+  400–650 ms after the glide levels off. A glide released sooner gets no hold at all (`held: false`) and stays a plain `rise` /
+  `fall`, which the phone swipes as a full step. There is no rule on how fast the glide itself is.
+  `hold_glide_ms: 0` turns it off; `hold_glide_quiet_ms: 0` / `hold_glide_delay_ms: 0` drop the two guards.
+- `hold end`: when that sound ends (100 ms of hangover after the voice stops), **immediately before** its feature
+  message, which then carries `held: true`. A sound without a `hold start` gets no `hold end`.
+- Order on the link: `hold start` (the sound is open), then `hold end`, then the feature message, all with increasing `id`.
+  Other sounds cannot interleave: the device has one sound open at a time.
+
+**What the phone does** (auto-scroll, see *Navigation actions*):
+- **Gate.** A `hold start` acts only if the previous group was a single `rise` or `fall` that was executed as
+  `swipe_up` / `swipe_down` (not `arch` / `dip`: sideways scrolling has no use in feeds), in the same app and mode,
+  with nothing decided since, and the held sound follows it within 1 s on the device clock:
+  `hold.t_start_ms − swipe.t_end_ms ≤ 1000` (`HoldScrollTrigger.WINDOW_MS`: the default `gap_ms` of 600 plus 400 ms
+  of slack for the pause between the two). Without device stamps it is measured by arrival, allowing 2 s. Otherwise the hold messages are only logged, and the
+  sound is handled normally when its feature message arrives. `flat: false` does not act.
+  If the `hold start` arrives while the swipe's group is still waiting or being decided, the phone keeps it and
+  applies the gate once the swipe executes (unless its `hold end` has arrived by then).
+- **Glide-and-hold** (`from: glide`) needs no swipe before it: it scrolls the way a single `rise` (dir up) or `fall`
+  (dir down) would go in this app and mode (the user's app rule, then global rule, then the default:
+  `GlideHold.action`), if that is `swipe_up` / `swipe_down`. Otherwise (cursor mode, a rise bound to zoom, a rule only
+  the model can apply) it does not act and its sound is decided as usual. It is also ignored while a sequence is
+  waiting for its next sound (this sound may be that next sound), buffered while a decision is in flight, and
+  ignored when disarmed, paused or in the phrase window. `HoldGate.route` is the one gate for both kinds of start.
+  The older "swipe, then a separate held hum" method below is unchanged; both work with hums and whistles.
+- **Scroll** in the swipe's direction from `hold start` until the `hold end` with the same `sound`.
+- **The held sound's feature message** (`held: true`, same `sound`) after an acted-on hold is consumed: it is logged
+  (its `resolve` carries `auto_scroll`) and not decided. A held sound whose hold did not act is decided as usual.
+- **Stops**, besides the `hold end`: `armed: false` (including `sleeping: true`), a disconnect, a mode change, the
+  existing safety stops (foreground app change, screen off, pause, `reset`, the service stopping), and a
+  **watchdog**: stop if no `hold end` has arrived 5 s after the `hold start` (the device ends every sound within
+  4 s, so a missing `hold end` means it was lost).
+- **Without hold messages** (older firmware) there is no auto-scroll: the earlier timed rule ("a `flat` over 1 s
+  after the swipe scrolls until the next sound") was dropped. A `flat` is then always `long_press`. The debug
+  socket accepts hold messages like any other message.
+- **Speed:** a continuous drag at `auto_scroll_pct` % of the screen height per second (default 10). The finger moves
+  in 100 ms continued-stroke segments from 75% towards 25% of the screen, is lifted and put down again after half a
+  screen, and at the end holds still for 150 ms before lifting, so there is no fling. Touching the screen cancels it
+  (`why: drag cancelled (screen touched?)`).
+- **Log:** `hold{kind, sound, ...}` for each message, `hold{event: buffered | scroll | no scroll, why}`,
+  `auto_scroll{event: start | stop, action, app, hold, why, pct_per_s, ms}`, and the held sound's
+  `resolve{auto_scroll: hold}`.
+
+**The 4 s split.** The device force-closes a sound after 4 s (`max_segment_frames`, which bounds RAM; the feature
+message says `truncated`). A hum held longer than that gets its `hold end` at `t_start_ms + 4000`, and scrolling
+stops there. The rest of the hum usually does not become a new sound (the noise floor has risen towards it), and if it
+does, it is a new sound without a preceding swipe, so the gate ignores it. **One hold scrolls for at most about 4 s;**
+the user swipes and holds again to continue. Longer holds need a firmware change (keep the gate open past 4 s while a
+hold is active, and flag the split). That is not part of v1.
+
+**Sleep, disarm and disconnect in the middle of a hold.** When the device disarms or goes to sleep while a hold is
+open, it SHOULD send `hold end` for it before the `armed: false` / `sleeping: true` message. The phone MUST NOT rely on
+that: `armed: false`, `sleeping: true` and a disconnect each end any hold at once, and a `hold end` arriving later
+for that sound is ignored. After a reconnect or wake, a `hold end` without a matching `hold start` is ignored. The
+same holds for a device reboot (`sound` restarts at 1, and the device clock goes backwards).
+
+**Older apps** reject a hold message as a malformed feature message (`ignored`). Nothing else changes for them: the
+feature message only gains optional `timing` fields.
+
 ## Control messages (debug sources only)
 
 `{"type": "control", "op": ...}` returns a JSON reply on the socket.
 
 | op | args | reply / effect |
 |---|---|---|
-| `ping` | | `app`, `mode`, `armed`, `paused`, `waiting`, `settings` (API key redacted), `vocab` digest, `decisions` |
-| `config` | any of `decider` (`rules`\|`model`\|`hybrid`), `base_url`, `model`, `api_key`, `min_confidence`, `http_timeout_ms`, `gap_ms`, `jitter_ms`, `confirm_timeout_ms`, `listen_window_ms`, `target_min_confidence`, `target_model`, `target_choose_ms`, `enroll_reject_mult`, `ble_device` (a Bluetooth address, or `null`) | Applies the settings and rebuilds the decider. |
+| `ping` | | `app`, `mode`, `armed`, `paused`, `waiting`, `settings` (API key redacted), `vocab` digest, `decisions`, `media_lock{on, mode, media_playing, locked, unlock_left_ms}` (the phone-mic media lock) |
+| `config` | any of `decider` (`rules`\|`model`\|`hybrid`\|`escalate`), `base_url`, `model`, `api_key`, `min_confidence`, `http_timeout_ms`, `gap_ms`, `jitter_ms`, `confirm_timeout_ms`, `outward_confirm_ms` (the outward-action confirm-pop window, 500-30000, default 3000), `listen_window_ms`, `asr_engine` (`android`\|`off`), `asr_allow_online` (bool, default false), `asr_language` (default `en-US`), `auto_scroll_pct` (2-60, default 10), `target_min_confidence`, `target_model`, `target_choose_ms`, `timer_app` (a clock app package for spoken timers; empty = automatic), `app_prefer` (`from=to,...` packages: a spoken name that resolves to `from` opens `to` when it is installed; default `com.google.android.youtube=app.rvx.android.youtube`), `enroll_reject_mult`, `enroll_gesture_relabel` (bool, default true: a trained gesture relabels a sound, *Personalization*), `ble_device` (a Bluetooth address, or `null`), `ollama_endpoint`, `ollama_model`, `ollama_timeout_ms`, `ollama_target_timeout_ms`, `log_typed_text` (bool, default false: the words typed by voice appear in `exec`/`dictate` events), `dictate_speech_hold_ms` (200-3000, default 1000: during dictation a device sound this soon after the last words is speech), `media_lock` (bool, default true: while media plays, phone/USB mic sounds are dropped except a `pop pop` unlock), `media_unlock_mode` (`one`\|`fixed`\|`popext`, default `one`: how an unlock ends), `media_unlock_ms` (1000-30000, default 5000: the unlock's time limit), `cursor_speed` and `cursor_pitch_sens` (the voice joystick's sliders, 0.5-2.0, default 0.9, rounded to 0.01), `sound_source` (`pico`\|`phone`\|`usb`), `mic_rate`, `mic_preset`, `mic_read_ms`, `mic_while_disarmed`, `mic_effects`, `mic_touch_guard`, `mic_media_gate`, `hiss_media_max_centroid_hz` (0-8000, default 6500, 0 = off: the media-hiss rule under "Phone microphone" Guards), `level_gate` (bool, default true) and `level_gate_offset_db` (-10..10, default 0: the calibration-v2 level gate under "Phone microphone" Guards), `mic_dry_run` | Applies the settings and rebuilds the decider. `ollama_key` is refused: the cloud key is entered in the settings screen only, and `ping` shows it only as `"set"` or `""`. |
 | `profile` | `profile`: profile JSON, or `null` for the bundled default | Replaces the profile (format in `Profile.kt`). Its optional `name` (default `default`) selects the enrollment store. |
-| `enroll_add` | `kind` (`custom`\|`ignore`\|`gesture`), `name`, `examples`: list of `{fp, fp_version, pitch16}` | Adds examples to a class of the active profile, creating it if needed. All-or-nothing: rejected if any example has another `fp_version` or length than the store, if the class would exceed 10 examples, or if a `gesture` class is not named after a gesture (contour gestures need a 16-point `pitch16`). Reply: `enrollment` (as `enroll_list`). |
-| `enroll_list` | | `enrollment`: `profile`, `fp_version`, `dim`, `reject_mult`, `floors` (see `fp_floors`), and per class `kind`, `name`, `examples`, `active` (3+ examples), `contour`, `threshold`, `dtw_threshold`. |
+| `enroll_add` | `kind` (`custom`\|`ignore`\|`gesture`), `name`, `examples`: list of `{fp, fp_version, pitch16}` (each may carry a `meta` object, at most 2048 characters of JSON, stored with it), optional `source` | Adds examples to a class of the active profile, creating it if needed. `source` (`pico`\|`phone`\|`usb`, default the current sound source) picks the store (*Gesture training*: one store per mic source). All-or-nothing: rejected if any example has another `fp_version` or length than the store, if the class would exceed 10 examples, or if a `gesture` class is not named after a gesture (contour gestures need a 16-point `pitch16`). Reply: `enrollment` (as `enroll_list`). |
+| `enroll_list` | optional `source` | `enrollment`: `profile`, `source`, `file` (the store file name), `fp_version`, `dim`, `reject_mult`, `floors` (see `fp_floors`), and per class `kind`, `name`, `examples`, `active` (3+ examples), `contour`, `threshold`, `dtw_threshold`. |
 | `fp_floors` | none; or `table`: `{"<fp_version>": {"floor": [...], "provisional": bool, "source": "..."}}`; or `reset: true` | The per-feature std floors (Personalization, below). `table` stores an on-device override (`files/fp_floors.json`) whose entries replace the bundled ones per version; `reset` removes it. Reply: `table` (in use), `override` (bool), `status`. |
-| `enroll_delete` | `name` and optional `index`, or `all: true` | Deletes a class, one of its examples, or every class of the active profile. |
+| `enroll_delete` | `name` and optional `index`, or `all: true`; optional `source` | Deletes a class, one of its examples, or every class of the active profile. |
 | `screen` | | `line` (the `screen:` line) and `summary` (the raw tree summary) |
-| `dump` | | The visible nodes of the app window: `id cls text desc click scroll bounds` |
+| `asr` | `check` (bool, optional) | The phrase recognizer: `engine`, `status` (`ready`, `off`, or what the user must fix), `window_open`, and for `android` `asr{recognizer (on_device\|default_offline\|default_online\|none), status, language, pack, allow_online, on_device_available, any_available}`. `check: true` asks the recognizer again whether the offline pack is installed (API 33+; the answer is an `asr{event: check}` event). |
+| `listen` | | Opens the phrase window, as `listen_for_phrase` does. |
+| `phrase` | `text`: string and/or `nbest`: list of strings; `window` (bool, default true: as if a pop pop opened the listen window; false: as a phrase from outside a window, where a lone `up`/`down` does nothing) | A transcript as if the recognizer heard it, without a microphone: closes an open window and runs the full path (grammar → decider → executor). Reply `result{heard, hypothesis, command, parses, apps_ms, parse_ms, decision{n, action, source, path}, exec{action, ok, how, prep_ms}, target{query, targets, result}, result: ignored, pending, total_ms, armed, mode}` (keys present when that step ran; `pending`: the decision runs on the worker, the model decider, and its `decision`/`exec` events follow in the log). Debug builds only, like every op. |
+| `asr_audio` / `asr_audio_result` | `wav_b64` (16 kHz mono PCM16 WAV, <= 30 s); options `segmented` (EXTRA_SEGMENTED_SESSION), `feed_at` (`ready`\|`start`), `realtime` (bool), `lead_ms` / `tail_ms` (0-5000 of silence), `chunk_ms` (10-200); then `id` | A recorded clip through the on-device recognizer with EXTRA_AUDIO_SOURCE (a pipe of raw PCM, never the mic, never online; `AudioFileAsr.kt`). The result: `why`, `error_code`, `hypotheses`, `confidences`, `pick`, `audio_ms` (sent), `clip_ms`, `fed_ms`, `ready_ms`, `fed_all_ms`, `mic_watch`, `mic_opened`, `heard{rms_db_min, rms_db_max, rms_n, begin_ms, end_ms, buffers, events, segments, segmented_end}` (what the recognizer did with the audio), `sent{peak_dbfs, rms_dbfs, lead_silence_ms, clipped, samples, options}`, `service{on_device_default, user_default, installed}`. The log gets counts only. |
+| `heard` | `hypotheses`: list of strings (n-best) | The older form of `phrase` (same path). |
+| `dump` | `raw` (bool, optional) | The visible nodes of the app window: `id cls text desc click scroll bounds`. With `raw: true`, every node as the framework reports it, in pre-order with no filter or pruning (`raw: [{d, cls, id, text, desc, vis, imp, click, kids, bounds}]`, at most 800), for diagnosing odd trees |
+| `main_load` | `reset` (bool, optional) | Where the main thread spends its time (`MainLoad.kt`): `sections{what: {count, total_ms, mean_ms, max_ms, over_16, over_50, over_100}}`, busiest first. Sections: `a11y_event` (each accessibility event), `msg:features` (a feature message end to end, its tree reads included), `tree:current_app` (normally no tree read: the active window's package is learned once per window, `ForegroundApp.kt`), `tree:summarize`, `tree:fingerprint` (the Confirmer's tree walks), `tree:refresh` (the stale-root re-read, at most once a second per window), and `main:lag` (how late a 50 ms tick ran while armed: time the main thread was busy). A section timed off the main thread (the background feed-kind read's `tree:refresh`) is listed as `what@bg` and never logs `main_slow`. Any one main-thread section over 100 ms also logs `main_slow{what, ms, app}` at once. `reset: true` starts over after replying. |
 | `harvest` | `tag` | Appends `{tag, package, screen_text, summary}` to `files/harvest.jsonl`. |
 | `pause` | `paused` (bool, default `true`) | Pauses or resumes VOX from the phone, like the status screen's button (logged `pause{by: "op"}`). While paused, messages still update `armed` and `mode`, but their sounds and phrases are ignored (`ignored{reason: "paused (app)"}`). Reply: `paused`. |
 | `reset` | `clear_log`, `clear_harvest` (bool) | Drops pending state, re-arms, resumes, forgets the device-clock estimate, cancels a target choice, and optionally clears the files. |
 | `targets` | | Intent cursor mode's view of the screen: `package`, `screen_text`, `options` (exactly what the `target` question would send, NONE last) and `targets[{option, bounds}]`. |
 | `ble_scan` | `ms` (default 10000, 1000–60000) | Scans for devices advertising the VOX service; each new one is logged (`ble{what: found}`) and listed in `ble_status`. |
 | `ble_connect` | `address` (`AA:BB:CC:DD:EE:FF`, or `auto`, the default) | Connects and keeps reconnecting (it also ends a `needs_pairing` stop). `auto` = the remembered device, else the strongest one found, else scan and take the first. The device is remembered (`ble_device`) once the link is ready. |
-| `ble_status` | | `ble`: `state` (`off`, `idle`, `scanning`, `connecting`, `discovering`, `bonding`, `subscribing`, `ready`, `waiting`, `needs_pairing`), `why`, `adapter`, `permissions`, `remembered`, `target`, `mtu`, `bonded`, `info` (the device's INFO), `ready_ms`, `reconnect_in_ms`, `failures`, `auth_failures`, `hint` (what the user must do, or null), `messages`, `fragments`, `gaps`, `bad`, `found`, and `device`: `presence` (`listening`, `awake – paused`, `asleep`, `pairing needed`, `connecting`, `not connected`, `bluetooth off`, or null when no device is set up), `ready`, `asleep`, `armed`, `mode` (the device's last word), `waiting_for` (the command awaiting confirmation) and `error` (the last failed command). |
+| `ble_status` | | `ble`: `state` (`off`, `idle`, `scanning`, `connecting`, `discovering`, `bonding`, `subscribing`, `ready`, `waiting`, `needs_pairing`), `why`, `adapter`, `permissions`, `remembered`, `target`, `mtu`, `bonded`, `info` (the device's INFO), `ready_ms`, `reconnect_in_ms`, `failures`, `auth_failures`, `hint` (what the user must do, or null), `messages`, `fragments`, `gaps`, `bad`, `found`, and `device`: `presence` (`listening`, `awake – paused`, `asleep`, `pairing needed`, `connecting`, `not connected`, `bluetooth off`, or null when no device is set up), `ready`, `asleep`, `armed`, `mode` (the device's last word), `waiting_for` (the command awaiting confirmation), `error` (the last failed command), `pause_cause` (`link-drop`, `user`, or null: why the device is disarmed, see *Disconnect*) and `wakeable` (connected and paused only by a link drop: the badge shows `tap-to-wake`). |
 | `ble_disconnect` | | Drops the link and stops reconnecting until the next `ble_connect` (the device stays remembered). |
 | `device` | `armed` (bool) and/or `mode` (`gesture`\|`cursor`), or `sleep: true` alone | An app command to the device (*App commands (CONFIG)* above), written only on a ready link. Replies at once: `device_cmd{result: sent}`, or an error (no device connected, the device is asleep, busy with a previous command, invalid). The outcome follows as a `device_cmd` event: `confirmed` when the device's next no-sound state message arrives (for `sleep`, its `sleeping: true` message), `failed` when the device's reply carries `rejected` (at once, with its reason), the write fails, the link drops, or nothing arrives within 1500 ms (a write the stack blocked). The status screen shows the failure. |
 | `ble_forget` | | Disconnects and forgets the remembered device. The Android bond is kept (remove it in Bluetooth settings). |
 | `ble_config` | `config`: a JSON object | Writes it to the device's CONFIG characteristic (reserved; e.g. `{"v":1,"test_sounds":true}`). Needs a ready link. |
+| `mic_status` | | `mic`: the phone-mic source (PROTOCOL "Phone microphone"): `source`, `state`, `plan{service, capture, route}`, `service_running`, `service_refused`, `capturing`, `routed` (the input in use), `capture` (route, preset, effects, buffers), `permission`, `native` (the extractor version, or why it did not load), `unprocessed_supported`, `inputs`, `sounds`, `latency_ms{n, p50, max}` (end of sound → delivered), `stats` (once a second: the native `hop_us{p50,p90,p99,mean,max,over_4ms}`, `push_us`, `floor_db`, `gate_open`, `level{rms_dbfs, peak_dbfs, ms, band_hz, bands_dbfs}`, `thread_cpu_pct`, `silent_input`, `env`), `bands{band_hz, dbfs, ms}` while capturing (see below), `touch_guard{on, error, user_touches, injected_touches, sounds_dropped}`, `media_gate{mode, media_playing, gated, hiss_gated, hiss_media_max_centroid_hz}`, `level_gate{on, offset_db, gate, dropped, relabel_rule, relabelled}` (`gate`: the live `{min_snr_db, min_level_dbfs, from, n, weakest_snr_db?, weakest_level_dbfs?}` or null), and the `mic_*` settings and `hiss_media_max_centroid_hz`. **Band levels** (diagnostic, 2026-09-27): `bands.dbfs` is 8 numbers, the input level in dBFS (mean square, the same scale as `rms_dbfs`) in 8 equal bands from 0 to 8 kHz (`band_hz` 1000: 0-1, 1-2, ... 7-8 kHz), over the last once-a-second snapshot (`ms`). They are summed from the extractor's own per-hop spectrum (512-point Hann FFT at 16 kHz, after its 60 Hz high-pass; no extra FFT, no audio kept). At `mic_rate` 48000 they are after the 48→16 kHz decimator, whose filter takes about 4 dB off 7 kHz and 10 dB off 7.5 kHz. -200 = digital silence; absent when the mic is not capturing. For telling an acoustic 6-8 kHz media band (scales with volume, gone when muted) from a device artefact. |
+| `badge_hide` | `hide` (bool, default true), `ms` (500-60000, default 10000) | Hides Canti's head and its menu for a screen capture (`harvest_v3.py` wraps its `screencap` in it); `hide: false` shows it again, and it comes back by itself after `ms`. Reply `hidden`. A tucked head stays hidden. |
+| `joy_state` | | `joystick`: the voice joystick (*Voice joystick* below): `on`, `source`, `calibrated`, `mode`, `x_dp`, `y_dp`, `snapped`, `phase`, `mid_st`, `range_st`, `speed_mul`, `pitch_sens`, `elements` (magnet candidates), `ticks`, `pops` (tick-detector pops delivered), `merged`, `calibrating`; null if it did not start. |
+| `joy_recentre` | | Moves the joystick cursor to the screen centre (logged `joystick{event: recentre, by: ctl}`). Reply as `joy_state`. |
+| `calib_start` / `calib_step` / `calib_redo` / `calib_retry` / `calib_skip` / `calib_save` / `calib_cancel` / `calib_status` / `calib_get` | as the UI methods (`source`, `step`) | The joystick calibration, exactly as the UI channel's methods (*Voice joystick*, Calibration). Reply `calib`: the calib_status map (`calib_get`: the saved profile, or null); a command error also sets `ok: false, error`. |
+| `train_status` / `train_start` / `train_record` / `train_retry` / `train_skip` / `train_keep` / `train_next` / `train_cancel` / `train_delete` | as the UI methods (`gesture`, `cell`, `source`, `record`) | Gesture training, exactly as the `ai.vox/train` channel (*Gesture training*). Reply `train`: the train_status map; a refused command also sets `ok: false, error`. |
+| `mic_level` | | `mic`: `state`, `routed`, `level{rms_dbfs, peak_dbfs, ms, band_hz, bands_dbfs}` of the last second, `floor_db`, `gate_open`, `silent_input`. For checking a mic (e.g. a USB mic) without making sounds count. |
+| `mic_feed` | `pcm_b64` (PCM16 LE mono), `rate` (16000\|48000), `chunk_ms` (20), `repeat` (1-1000), `raw` (bool), `deliver` (bool) | Runs the PCM through a fresh JNI extractor, the live path's code (direct buffer, `chunk_ms` pushes), independent of the mic. `mic`: `events` (with `raw`: the full event JSON as in `extractor/vectors`), `stats` (as above, over all repeats), `wall_ms`, `audio_ms`, `native`. `deliver` also hands the sounds to the service as source `phone-mic-feed`. `tools/mic_parity.py` uses it for device parity and speed. |
+
+## Phone microphone (sound source `phone` / `usb`)
+
+The app can hear sounds without the Pico: the phone's built-in mic, or a USB mic plugged into the phone, runs
+through **the Pico's own extractor** (`firmware/extract/src`, compiled into `libvx_jni.so` with the NDK; not a port)
+on the phone. The setting `sound_source` picks one: `pico` (Bluetooth, the default), `phone` or `usb`. Only one
+source runs: `pico` = BLE only; `phone`/`usb` = no BLE.
+
+- **Same messages.** Each extracted sound becomes the feature message the Pico would send for it (`send_sound` in
+  `vox_state.cpp`): `{"v":1,"id","mode","armed":true,"sounds":[line],"sequence":[label],"timing":[{t_start_ms,
+  t_end_ms,sound}],"phrase":null,"cursor":null,"features":[{fp,fp_version:"fp1",pitch16}]}`, delivered as source
+  `phone-mic`. Times are on the phone's `elapsedRealtime` clock (the sequencer's arrival clock), so device-clock
+  grouping applies as with the Pico. `mode` is the service's current mode; ids start at `elapsedRealtime` at source
+  start. Hold messages (above) are mapped the same way once the extractor emits them.
+- **Capture.** `AudioRecord`, 16-bit mono at `mic_rate` (16000 direct, or 48000 through the extractor's
+  `Decimator3`), preset `mic_preset` (`auto` = `UNPROCESSED` when the phone supports it, else `VOICE_RECOGNITION`),
+  AGC/NS/AEC switched off where attached (`mic_effects` changes that), `mic_read_ms` blocking reads (default 20 ms) into one direct buffer on a
+  dedicated `THREAD_PRIORITY_AUDIO` thread: no allocation per read, and the native side reads the buffer in place.
+  `usb` routes to the first USB input (`TYPE_USB_DEVICE`/`TYPE_USB_HEADSET`) and waits when none is plugged; it never
+  falls back to the phone mic. `phone` prefers the built-in mic explicitly (a plugged USB headset does not take over).
+- **When it listens.** Only while the source is `phone`/`usb`, the service is not paused, and it is armed (or
+  `mic_while_disarmed`). Pausing (app, notification, `pause` op) closes the mic; resuming re-arms and reopens it.
+  With a mic source the phone owns mode and arm state: `device {mode, armed}` and the UI's mode button apply them
+  locally.
+- **Android.** `RECORD_AUDIO` (asked with its reason when a mic source is picked) and a foreground service of type
+  `microphone` (`MicListenService`) kept up while a mic source is selected. Android 14 lets it start only while a
+  Canti screen is visible; otherwise the mic state says `open Canti to start the mic` and it starts on the next
+  resume.
+- **Notification.** Canti's status notification (all sources): e.g. `Canti · Pico listening` or
+  `Canti is listening · Phone mic`, body `Gesture mode · <input>`, buttons **Cursor mode/Gesture mode**,
+  **Pause/Resume**, **Source** (a small chooser). It is the mic service's notification when that runs, else a plain
+  ongoing one; only a phone/USB source holds the microphone.
+- **Guards.** A sound that overlaps a user's touch on the screen is dropped (`mic_touch_guard`: a tap on the glass
+  is a pop to the phone's mic). While media plays on the phone's speaker, a pop/click under 14 dB over the floor, or
+  a hum under 14 dB or with clarity under 0.8, is passed on with `sequence: ["unknown"]` (not deliberate; it still
+  breaks up its group) (`mic_media_gate`, `PhoneGate.kt`). The message says so: `gated: ["media"]` (the media hiss: `["media_hiss"]`), and
+  personalization leaves a gated sound as it is. Each sound is judged 150 ms after its end, so a touch-down
+  that follows it can still count.
+- **Level gate** (calibration v2, `level_gate` default on, `level_gate_offset_db` -10..10 default 0, + = stricter;
+  `CalibV2.phoneVerdict`). A `phone`/`usb` `pop`, `click`, `hiss` or `unknown` must reach **both**
+  `gate.snr_db >= min_snr_db` and `gate.level_db >= min_level_dbfs` (each plus the offset), else it is dropped:
+  `ignored{reason: "below level gate", label, snr_db, level_dbfs, min_snr_db, min_level_dbfs, from, offset_db, source,
+  sound, t_start_ms}` and `mic_sound{dropped: "below level gate"}`. One pair per mic source, from its calibration
+  profile: the weakest calibrated pop / click / hiss minus 8 dB (SNR) and 8 dB (level), raised to the room step's
+  loudest transient + 3 dB, never above the weakest - 1 dB (`from: "calibration"`). Uncalibrated, or the clicks step
+  never measured: 12 dB and -45 dBFS (`from: "default"`). Hums are never level-gated. It runs in `PhoneMicSource`
+  before the joystick's filter and before the service, so a gated sound never reaches personalization
+  (`Personal.rewrite`'s trained-gesture relabel). No gate while a calibration runs, nor for Pico sounds, tick-detector
+  pops or touch-dropped sounds. A sound without gate numbers passes. Then the **click / pop relabel**: with a
+  per-person rule (the pops and clicks steps' examples separate on at least 2 of `dur_ms`, `snr_db`, `level_db`,
+  `lf_ratio`), a `pop` / `click` whose separating features all say the other label is relabelled:
+  `relabel{by: "click_pop_rule", from, to, votes, source, sound, t_start_ms}`, `mic_sound{relabel: "pop->click"}`.
+- **Media hiss** (`hiss_media_max_centroid_hz`, default 6500, 0 = off; `PhoneGate.hissReason`, 2026-09-27). While
+  media plays on the phone's own speaker (the `speaker` test above; earbuds/Bluetooth: no rule), a `phone`/`usb` hiss
+  whose spectral centroid (`gate.centroid_hz`, energy-weighted over the sound) is over the threshold is passed on as
+  `unknown`, `mic_sound.gated: "hiss centroid <n> Hz over <max> Hz while media plays on the speaker"`, message `gated: ["media_hiss"]`. It does not
+  depend on `mic_media_gate`. Pico sounds never. Why: on the Z Flip a YouTube Short made lone 6.6-7.3 kHz "mouth sound"
+  hisses, each a `back` (38-42 a minute in `auto`); the rule cuts that to 0-7 and kept 100 % of the user's Q9 mouth
+  hisses and 98 % of the phone's quiet-room ones (wiki/phone-mic-echo.md).
+- **Media lock** (`media_lock`, `MediaGate.kt`, user decision 2026-09-27; Z Flip round 4 heard 36-100 sounds a minute
+  from a YouTube Short alone, 30-47 of them would have acted, on every mic preset and echo-cancel setting). While media
+  is playing (`AudioManager.isMusicActive`, any output route) a `phone`/`usb` sound is dropped before the sequencer,
+  in gesture and cursor mode alike: `media_gate{kind, source, dropped: true, unlock?}` (`kind`: the label, or `hold` for
+  a `hold start`; a `hold end` always passes). The exception is the unlock, `pop pop` (two `pop`s, the second within
+  `gap_ms` of the first, nothing between; the media alone made none in round 4): both pops are dropped too
+  (`unlock: "1/2"`, `"2/2"`) and do nothing else (no phrase window: its recognizer would hear the video). Then sounds pass
+  to the usual rules (the pop allow-list below included) until the unlock ends, by `media_unlock_mode` (pending the
+  user's choice; no mode extends on other gestures, since media sounds would keep the window open):
+  - `one` (default): exactly the next gesture (the next resolved sequence, whatever it decides) passes, then it
+    re-locks: `media_unlock{event: used, sequence}`. `media_unlock_ms` is the time allowed to make it. A `pop pop` as
+    that gesture is listen-for-phrase.
+  - `fixed`: a `media_unlock_ms` window that never extends.
+  - `popext`: a `media_unlock_ms` window that only another `pop pop` extends (`media_unlock{event: extend}`); that
+    `pop pop` is taken by the lock and does not listen, so listen-for-phrase is not reachable by gesture while media plays.
+  The badge shows the pending face while an unlock is open. Media stopping lifts the lock at once. Events
+  `media_unlock{event: open|used|extend|expired|lifted, window_ms?, unlock_mode?, sequence?, mode?, app?}`. Pico sounds
+  are never gated. (The event name `media_gate` and `mic_status.media_gate` belong to different gates: the event is this
+  lock, the `mic_status` block is `mic_media_gate`.)
+- **No taps from room pops** (`MicPopGate.kt`, user decisions 2026-09-27, after a mouth-sound pop became a real tap
+  in YouTube). With a `phone`/`usb` source:
+  - a lone `pop` has **no default action** in gesture mode, in any app: `unbound{n, sequence, app, source: phone}` and
+    `decision{action: none, source: "app:unbound (phone mic pop)"}`. It taps only where the user binds it (a global or
+    per-app profile rule for `pop`: the rule is the allow-list). It still waits the gap for a second pop (`pop pop`).
+  - a sequence with a pop or click that the user did not bind is never a `tap` or `double_tap` in gesture mode,
+    whatever decided it (a model included): `gated{n, action, sequence, app, why: phone_mic}`, nothing happens.
+  - in a social, video or messaging app (`MicPopGate.APPS`: YouTube and its mods, TikTok, Instagram, Threads, Facebook,
+    Messenger, X, Reddit, Snapchat, Pinterest, LinkedIn, Tumblr, Bluesky, Twitch, Discord, WhatsApp, Telegram), a
+    sequence with a pop or click never does an outward action, even a user-bound one, and a pop never confirms an
+    outward action: `gated{n, action, sequence, app, why: phone_mic, confirm?}`.
+  - cursor mode keeps pop = click from every source (the user turns it on with the button).
+  Home, back, scrolling, `pop pop` = listen and everything from the Pico (pop = tap) are unchanged; a listen window
+  opened from the mic is logged `mic_listen{n, app, sequence, source}`.
+- **Privacy.** Samples go from `AudioRecord` into the extractor and nowhere else: nothing is stored, logged or sent.
+  Only the extractor's output (the sound lines and fp1 numbers the Pico would send) leaves the audio thread.
+
+Events: `mic{state, why, source}` (`off`, `paused`, `listening`, `starting`, `waiting for a USB mic`,
+`needs microphone permission`, `open Canti to start the mic`, `mic error: ...`, `unavailable: ...`, `paused for speech` (the phrase window: the capture stops, the
+foreground service stays)),
+`mic_capture{state, info}` (the route, preset, effects, buffer sizes; once a second a stats snapshot is kept for
+`mic_status`), `mic_service{state: foreground|refused}`, `mic_sound{label, text, t_start_ms, t_end_ms, detect_ms, latency_ms,
+gate{like, why, cues, dur_ms, floor_db, level_db, snr_db, voiced_frac, strong_voiced_frac, clarity_med, f0_med_hz,
+onset_flux_db, energy_iqr_db, centroid_hz, peak_centroid_hz, centroid_spread_oct, zcr, lf_ratio, hf_ratio, pitch_jumps_hz,
+voiced_runs, syllable_peaks, ...},
+dropped (touch|below level gate|joystick ...|calibrating|dry_run|null), touch_ms, relabel (e.g. `pop->click`, or null), media, media_speaker, gated}` per phone-mic sound (the extractor's own gate
+numbers, never audio; the spectral ones are over 90-7600 Hz of the 16 kHz stream: `centroid_hz` energy-weighted over
+the sound's frames (the media-hiss rule reads it), `peak_centroid_hz` at its loudest frame, `zcr` zero crossings per
+sample, `lf_ratio` / `hf_ratio` the energy share below 1 kHz / above 3.5 kHz; all exactly the raw event's values), `mic_touch{injected, device, source, flags}` (the first 3 touches), `mic_touch_watch{state}`,
+`sound_source{source, by}`.
+
+## Voice joystick (cursor mode, phone / USB mic)
+
+User decisions 2026-09-27; design in `wiki/voice-cursor.md` "Joystick cursor"; code `VoiceJoystick.kt` and
+`joystick/` (a port of `extractor/joystick_core.py`, checked tick for tick by `JoystickParityTest`). In cursor mode
+with `sound_source` `phone` or `usb`, the cursor is a relative 360° joystick. With the Pico the discrete cursor stays.
+
+- **Ticks.** The native extractor also runs the joystick's per-20 ms analysis on the same samples (`vx_tick.cpp`,
+  `VxNative.enableTicks` / `takeTicks`), only while the joystick is on or a calibration runs. Each row has
+  `TICK_COLS` = 10 doubles: `t_ms` (the stream clock, the same as the sounds' `t_start_ms`), `f0`, `f0_raw`,
+  `clarity`, `db`, `floor`, `f1`, `f2` (NaN = none), `voiced`, `why` (0 none, 1 quiet, 2 unclear, 3 no pitch). With
+  ticks off, the extractor path is byte-identical to before. The cost is about 27 µs per tick on the host.
+- **Moving.**
+  - Pitch against the home note moves it up or down, and the vowel moves it sideways (ee right, oo left, ah none).
+  - It moves only while a hum lasts and stops where the hum ends.
+  - The position (dp) is kept in prefs `canti_joystick` and never resets. Only `joy_recentre` or the badge menu's
+    RECENTRE moves it, or a rotation's clamp into the new screen.
+  - The magnet snaps a stopped cursor to a clickable element (`Targets`) within 48 dp. It jumps to the centre only for
+    small elements; corner brackets mark the snapped element.
+  - The sliders `cursor_speed` and `cursor_pitch_sens` scale the speed and the pitch sensitivity.
+- **Sounds while it drives.**
+  - Only `pop`, `click` and `hiss` go on to the sequencer. Other extractor sounds (the hums the joystick is using)
+    are dropped: `mic_sound{dropped: "joystick (a hum moves the cursor)"}`.
+  - The ticks have a second pop detector. Its pops arrive as sound `pop` with `text: "pop (tick detector)"` and
+    `tick: true`.
+  - When both detectors hear one pop (within `merge_ms` + 100 ms), it counts once. The later copy is dropped as
+    `joystick (the tick detector heard this pop)`, or not delivered at all if it is the tick detector's.
+  - A pop clicks at the cursor. `pop pop`, the numbered targets, the Outward / social / MediaGate / PhoneGate rules
+    are unchanged.
+  - A click on an outward button under the cursor ("Like", "Follow", "Send") waits for a confirm pop, like a named
+    target: `confirm_ask{source: joystick, why: "outward button"}`.
+- **Log.**
+  - `joystick{state: on|off, source, calibrated}`
+  - `joystick{profile, calibrated, skipped}`
+  - `joystick{event: stop, x_dp, y_dp, stop_dp, ms, why, snapped, reanchors}`
+  - `joystick{event: pop, detector: tick, t_ms}`
+  - `joystick{event: recentre|screen, ...}`
+- **Indicators.** Cursor B is a pixel ring with 1–3 chevrons in its heading (`assets/joystick_cursor.json`).
+  Face A is the badge's `joy_*` still frames: a pitch bar with 4 steps, and a pointer for the vowel.
+
+### Calibration
+
+The setup screen (`ui/lib/src/calibration.dart`, route `calibrate`) records eight steps, in this order (calibration
+v2, 2026-09-27; design in `wiki/voice-cursor.md` "Calibration v2"):
+
+| Step | The user | Measures | Fails with (`reason`) |
+| --- | --- | --- | --- |
+| `hum` | hums 'mm' relaxed, 3 s | the home note, the voicing threshold | `no steady hum heard in <n> s`; `too short or too rough (<n> steady ticks, need 40): a relaxed 'mm', 3 s` |
+| `glide` | glides lowest -> highest -> back, 5 s | the voice range | `no steady voice heard in <n> s`; `too small or too short (<x> st, <n> steady ticks; need 4 st, 50 ticks): ...` |
+| `vowels` | holds ee, ah, oo, 2 s each | the vowel centroids | `no clear '<v>' heard in <n> s`; `only <n> clear frames of '<v>' in <n> s (need 30): hold it steady for 2 s` |
+| `pops` | 3 lip pops | the tick pop detector; the pops' gate numbers | `heard <n>/3 pops, need 2 (pop your lips a bit louder, a second apart)` |
+| `clicks` | 3 tongue clicks, a second apart (8 s) | the clicks' gate numbers (any extractor pop / click / hiss up to 250 ms; the 3 strongest) | `heard <n>/3 clicks, need 2 (click your tongue a bit louder, about a second apart)` |
+| `whistle` | a whistle glide lowest -> highest -> back, 5 s | the whistle range, its home, the split from the voice range | `no steady whistle heard in <n> s`; `too small or too short (<x> st, <n> steady ticks; need 3 st, 50 ticks): whistle from your lowest to your highest and back`; `the whistle overlaps your voice range (whistle from <f> Hz, voice up to <f> Hz): whistle higher, or skip` |
+| `hiss` | 2 short 'tss' (8 s) | the hisses' gate numbers | `heard <n>/2 hisses, need 2 (a short, sharp 'tss', a bit louder)` |
+| `room` | stays quiet, 3 s | the floor (dBFS) and the loudest extractor transient | `not quiet: a steady tone was heard for <n> ms (a voice, music or a hum): make the room quiet and retry`; `a sound in the room was as loud as your quietest calibrated sound (<n> dB over the floor, yours <n> dB): make the room quieter and retry, or skip` |
+
+The room fails on a transient only when it is within the gate's reach in both SNR and level (transient + 3 dB over
+the weakest calibrated sound - 1 dB). During the whistle step, and afterwards for a profile with a whistle range, the
+ticks track pitch up to 2600 Hz (the voice's ceiling is 1100 Hz). The profile then steers by the whistle over the
+split: its own home and range, `band: "whistle"` in the joystick's state. It keeps one profile per mic
+source, stored only on the phone (prefs `canti_joystick`, key `calib_<source>`). The Pico can't be calibrated yet.
+While a calibration runs, every mic sound is dropped (`mic_sound{dropped: "calibrating"}`): nothing acts.
+
+**Commands.** Each is a UI-channel method or a debug op of the same name. Each answers the calib_status map.
+
+| Command | What it does |
+| --- | --- |
+| `calib_start {source, steps?}` | Starts a run. `steps` (optional) is an ordered subset of the 8 steps, no repeats (e.g. `["clicks", "whistle", "hiss", "room"]` to bring a version 1 profile up to date); without it, all 8 in order. The run starts directly on `steps[0]` and covers only those steps. `source` must be the current sound source, and the mic must be capturing (Canti resumed). The draft is the saved profile with the run's steps taken out of `skipped`: a step outside the run keeps its saved values and skip state (the save merges), and a step in the run that was skipped before is recorded again. The first tick after the start times the first step (the stream may have run for minutes). |
+| `calib_step {step}` | Records `step`. It is a no-op when that step is already waiting or recording. After `step_done`, the UI sends it for the next step of the run (`remaining[0]`). A step outside the run joins it. |
+| `calib_redo {step}` | Records a finished step again, for example from the result. When it finishes (or is skipped) the state goes back to `done` if every step of the run is finished; no other step starts. A step outside the run joins it. |
+| `calib_retry` | Only from `failed`: records the failed step again. |
+| `calib_skip` | Allowed from `failed`, from `waiting`, on `pops` / `clicks` / `hiss` before anything countable was heard, or during `room`. The step keeps its defaults and goes into `skipped`. **The run's next unfinished step after it then starts by itself** (the UI sends no `calib_step` after a skip). It never wraps round and never starts a step outside the run: with none after it, the state is `done` when every step of the run is finished, else `step_done` (an earlier step is still open: the UI picks it). |
+| `calib_save` | Stores the draft (`saved_at_ms`), applies it to the joystick, and ends the run. It answers the inactive map. |
+| `calib_cancel` | Ends the run without saving. It answers the inactive map. |
+| `calib_status` | Changes nothing. |
+| `calib_get {source}` | Answers the saved profile, or null. |
+
+A failed step never skips or starts again on its own: it stays `failed`, with a `reason`, until `calib_retry` or
+`calib_skip`. A command that can't run (no run, a wrong source, the mic off, an unknown step) answers the status map
+with `error`. The debug op also sets `ok: false`.
+
+**The calib_status map:**
+
+- Identity and state: `active` (true during a run), `source`, `step` (`hum`|`glide`|`vowels`|`pops`|`clicks`|`whistle`|`hiss`|`room`), `state`
+  (`waiting`|`recording`|`failed`|`step_done`|`done`; `done` = every step of the run is finished, measured or skipped).
+- The run: `steps` (the run's steps, in order) and `remaining` (those not finished yet, in order).
+- Prompts: `prompt`, `sub`, and `waiting_for_steady` (the step waits for a steady note).
+- Progress:
+  - `progress` (0..1 of the step);
+  - `step_done` (bool: the step just succeeded);
+  - `reason` (the failure, or null);
+  - `skipped` (the steps skipped in this run; `result.skipped` is the merged profile's).
+- Live readout: `live{voiced, pitch_hz, level_db, vowel, vowel_conf}` and `heard{pops_n, pops_need: 3, clicks_n, clicks_need: 3, hiss_n, hiss_need: 2}`
+  (`*_n`: the countable sounds heard so far in that step; `*_need` is what is asked, the step passes on 2).
+- `result`: the draft profile, once any step has finished.
+- `calibrated`: whether a profile is saved for that source.
+- `error`: the last command's error, if any.
+
+The inactive map, with no run, is `{active: false, source, state: null, calibrated, skipped, error}`.
+
+**The profile:**
+
+- The contract fields:
+  - `source`, `version: 2`, `saved_at_ms`;
+  - `home_hz`, `range_lo_hz`, `range_hi_hz`, `voicing_threshold`;
+  - `vowels{ee, ah, oo: {acc}}`;
+  - `pops_heard`, `skipped`;
+  - `extractor: {}`;
+  - calibration v2: `clicks_heard`, `hiss_heard`, `whistle_lo_hz`, `whistle_hi_hz`, `whistle_home_hz`,
+    `room_floor_dbfs`, `level_gate{min_snr_db, min_level_dbfs, from, n, weakest_snr_db?, weakest_level_dbfs?}`,
+    `relabel_rule` (bool), `missing_steps` (the steps neither measured nor skipped), `needs_recalibration`
+    (`missing_steps` is not empty).
+- Extras:
+  - `home_st`, `clarity_on`, `lo_st`, `hi_st`;
+  - `vowel_centroids_bark`, `vowel_dead_zone`, `vowel_full`, `vowel_report`;
+  - `pop{peak_db, rise_db, core_ticks}`, `pop_labels`;
+  - `whistle{lo_st, hi_st, home_st, split_st}`, `room{floor_dbfs, transient_snr_db, transient_level_dbfs, transients}`,
+    `pops_examples` / `clicks_examples` / `hiss_examples` (each `[{label, dur_ms, snr_db, level_db, lf_ratio,
+    peak_centroid_hz}]`: the extractor's gate numbers, never audio), `click_pop{features{<f>: {thr, pop_above}}, min_votes}`.
+- **Version 1** profiles (four steps) still load and drive the cursor as before; they answer `version: 2` with
+  `missing_steps: ["clicks", "whistle", "hiss", "room"]` and `needs_recalibration: true`, and keep the default level
+  gate. The inactive calib_status map and the joystick's describe also carry `needs_recalibration` and
+  `missing_steps`. The gate and the relabel rule are derived again from the stored examples on every load, so a
+  spec change applies without recalibrating.
+- A skipped or unknown value is null, and the spec default applies.
+- `extractor` is reserved for the gesture extractor's overrides (`VxNative.open`). It is **empty**: the desktop
+  go/no-go found no `vx_config` field worth moving. If overrides are used, `f0_min_hz` is clamped to at least 32 Hz.
 
 ## Transports
 
@@ -160,7 +518,7 @@ The app starts a message at a fragment with bit 6 set and appends chunks until o
 | Press | Awake | Asleep |
 |---|---|---|
 | 5 quick presses | toggle: if armed, turn off (disarm, then sleep); if not armed, arm | wake, then arm once the phone has subscribed |
-| 1 click | toggle `mode` gesture ↔ cursor | nothing |
+| 1 click | toggle `mode` gesture ↔ cursor (its state message carries `"by": "button"`) | nothing |
 | hold 1 s | disarm at once (the fast stop); sleep on release | nothing |
 | hold 5 s | disarm, then open the pairing window instead of sleeping | wake and open the pairing window |
 
@@ -194,7 +552,7 @@ The button and the app are equal: the most recent action wins.
 
 **Security.** LE Secure Connections bonding ("Just Works"; the device has no display or keypad). Android may still show a "Pair with VOX-XXXX?" confirmation once. EVENT and CONFIG require an encrypted link. A debug firmware build may turn encryption off for PC testing, and says so in INFO (`"insecure": true`).
 
-**Disconnect** means the device is disarmed: the app behaves as on `armed: false`. After an unexpected disconnect, such as the phone going out of range, the device stays **disarmed** when the phone reconnects. The user re-arms with 5 presses or from the app. Only waking with 5 presses arms on connect.
+**Disconnect** means the device is disarmed: the app behaves as on `armed: false`. After an unexpected disconnect, such as the phone going out of range, the device stays **disarmed** when the phone reconnects. The user re-arms with 5 presses or from the app. Only waking with 5 presses arms on connect. The app tells this **link-drop pause** from a pause the user chose (the device's state message carries no reason): a link whose first message says `armed: false` is a link-drop pause, unless the device was last disarmed by the user (`armed` going true -> false on a live link, from the app's Pause or the button, or a confirmed `armed: false` command; kept across service restarts). Only a link-drop pause is `wakeable`: the floating badge shows `tap-to-wake`, and a tap on it (or the notification's **Wake**) sends `{"v":1,"armed":true}`, the status screen's Resume command, plus `"mode"` in the same write when the device is not in the **user's mode**: the mode the user last chose themselves, saved (`canti_device/user_mode`, default `gesture`) only when a mode change from the badge menu, the notification or the status screen is confirmed, or when a state message says the device's button made it (`"by": "button"`). The `device` op, test tools and the Pico's console never change it. The confirming state message arms the app and sets its mode in one badge update (no `idle` on the way to `cursor`). Long-press opens the badge's menu in every state. Logged `device_pause{cause: link-drop | user | none, why}`, `wake{by: badge | notification, result: sent | confirmed | failed | skipped, why, error, ms, mode, device_mode, user_mode}`, `mode_request{by: wake}` when the mode is restored, `user_mode{mode, by, result: saved | unchanged | ignored}`, `badge{event: tap-to-wake | long-press}`.
 
 ## Event log
 
@@ -206,7 +564,7 @@ The event chain for one decision (`n` links the events of one decision; `watch` 
 
 ```
 msg → [wait] → resolve{n, sequence, phrase, waited, held_ms, app} → state{n, text}
-    → decision{n, action, source, confidence, ms} → exec{n, ok, how, watch}
+    → decision{n, action, source, confidence, ms, path, since_msg_ms} → exec{n, ok, how, watch, prep_ms}
     → gesture{watch, result} → confirm{watch, result, by, ms, echoes_ignored}
 ```
 
@@ -215,11 +573,40 @@ The confirmer's `result` is one of:
   content change that altered the visible-tree fingerprint).
 - `confirmed (pixels)`: no event came, but a `takeScreenshot` taken before dispatch and one taken at the timeout differ
   in more than 0.5% of a 36x80 luminance grid. System bars and VOX's own overlays are masked out. This covers GL
-  surfaces such as maps.
+  surfaces such as maps. Screenshots are kept at least 1 s apart (Android refuses closer ones with error 3): a baseline
+  that would come too soon reuses the previous watch's timeout screenshot if it is under 1 s old (`screenshot
+  reused`), else the watch runs on events alone (`by: screenshot rate-limited`); a timeout screenshot that would come
+  too soon waits out the interval.
 - `no visible change`.
 
 Clicks, long clicks, selections and focus changes that arrive while our own injected gesture is running, or within
 250 ms after it, are echoes of our touch. They are counted in `echoes_ignored` and never confirm anything.
+
+Latency: `decision.path` is `local` when the decider settled it without the screen or a model (`Decider.local`: bound
+gestures, cursor sounds, app-only bindings, not-deliberate and unbound sequences; in `model` mode only app-only and
+personal ones), decided at once on the main thread with no screen walk (its `state` has no screen line and
+`screen: "skipped (decided locally)"`); `worker` is the full path (screen summary, then the decider thread). It is
+taken only when nothing older is still being decided, so decisions stay in order. `since_msg_ms` is the time since the
+last features message arrived (it includes a sequencer wait). `exec.prep_ms` is the main-thread time up to the gesture
+dispatch (the confirmer's before-fingerprint included). Event-file writes run on their own thread.
+
+A rise / fall (and a voice scroll or next / previous that becomes a feed fling) also logs
+`fling_wait{action, plan, cache, cache_hit, age_ms, tree_ms, check_ms, refused, wait_ms, how, ok}` just before `exec`.
+A rise / fall never reads the tree: it plans from a cache (FeedKindCache) refreshed off the main thread. `plan`:
+`feed` (a fresh "paged feed" answer: the feed fling), `list` (a fresh list plan: its one list node is refreshed,
+`check_ms`, and must still be visible, the same class and inside the screen, on a screen of the same size; then it
+steps with the node's live bounds and scroll actions), `other` (a fresh "neither" answer, no scroller or a horizontal
+one: the plain fling), `last-feed` (no usable answer, in a known feed app, ScrollStep.FEED_APPS, whose last answer this
+session was a feed: the feed fling), `plain` (no usable answer otherwise, or the list check `refused`: the plain
+fling; a background refresh starts), `read` (voice scroll only: the tree read on the spot, `tree_ms`), `sideways`.
+`cache`: `hit`, `expired`, `miss` (`none` for sideways). `wait_ms`: from the executor taking the swipe to the dispatch
+call returning. `age_ms`: the cached answer's age. The cache is refreshed on window changes and, at most every 2 s with
+a trailing read after the last change, on content changes and scrolls, while armed; feed answers live 6 s, list plans
+20 s (re-checked live before each step), "neither" answers 1.5 s.
+
+`feed_undetected{app, window, why, tree}`: once per window, a known feed app whose screen shows no usable scroller
+(YouTube Shorts in RVX, round 4). `tree`: structure only, no text: node count, the scrollable nodes (visible or not),
+the big nodes and the video surfaces, each with class, view id, bounds, visibility, child count and scroll actions.
 
 `decision` also carries `server_ms` (the server's `latency_ms`, when a model answered) and `top` (the model's best
 options with probabilities).
@@ -228,14 +615,20 @@ Intent cursor mode (see below) adds its own chain, linked by `n`:
 
 ```
 listening{mode: cursor} → [asr] → msg{phrase} → target_state{n, app, text, options}
-    → target_decision{n, choice, confidence, top, ms, server_ms, min_confidence}   (or {n, error})
+    → target_decision{n, choice, confidence, top, ms, server_ms, min_confidence, unscored}   (or {n, error})
     → target{n, result: "tap" | "choose" | "not on screen" | "no model (decider=rules)", ...}
     → [choice{n, event: select | picked | ignored | cancelled, selected, option, why}] → exec/gesture/confirm as above
 ```
 
-Other events: `mode`, `arm`, `listening`, `ignored{reason}`, `app`, `service`, `source`, `profile`, `screen`,
-`harvest`, `reset`, `error`, `cursor`, `toast{text}`, `asr` (the phrase recognizer; currently a stub),
-`match`, `enroll` and `fp_floors{fp_version, status, source, note}` (personalization, below), and the BLE link's events:
+Other events: `absorbed{sound, tail_of, gap_ms, clock}` (above), `mode`, `arm`, `listening`, `ignored{reason}`, `app`, `service`, `source`, `profile`, `screen`,
+`harvest`, `reset`, `error`, `cursor`, `toast{text}`, `asr` / `phrase_parse` / `target_match` (*Spoken phrases*, below),
+`escalate{kind, outcome, model, choice, ms, tokens_in, tokens_out, error, fallback}` and `confirm_ask{n, action, event, why}`
+(decider `escalate`, below),
+`match`, `enroll` and `fp_floors{fp_version, status, source, note}` (personalization, below),
+`train{event: start | take | skip | keep | delete | done | end, ...}` (*Gesture training*, below),
+`forward{result: clicked | click-failed | no-forward, where, why, waited_ms, menu_closed}` and
+`badge{event: moved | menu | long-press | tap-to-wake | pass-through | tucked | untucked | state, ...}` (the Canti head; `state` carries the held state on each change, for the app's header; `tucked` while a Canti screen is in front), `hold{kind, sound, ...}` / `hold{event, why}` and `auto_scroll{event: start | stop, action, app, hold, why, pct_per_s, ms}` (*Hold messages*),
+and the BLE link's events:
 - `ble{what, ...}`: `start`, `scan`, `found{address, name, rssi}`, `state{state, why, address}`,
   `priority{high}` (the result of `requestConnectionPriority(HIGH)`, asked right after connecting), `mtu{mtu}`,
   `info{fw, mic, fp_version, insecure, raw}`, `bond{state, previous}`, `remember`, `disarm{reason}`, `forget`,
@@ -283,20 +676,57 @@ connects it to the running accessibility service through two platform channels. 
 
 - `ai.vox/backend` is a method channel (main thread). Its methods:
   - `status` returns a map: `service` (false, and nothing else, when the accessibility service is not running),
-    `armed`, `paused`, `mode`, `app`, `decider`, `ble_state`, `ble_device`, `ble_hint` (the `needs_pairing` hint,
+    `armed`, `paused`, `mode`, `app`, `decider` (the display line: the mode, or `escalate (ollama: <model>)`),
+    `decider_mode` (the bare mode), `ble_state`, `ble_device`, `ble_hint` (the `needs_pairing` hint,
     or null), `device_state` (`ble_status` `device.presence`), `device_ready`, `device_armed`, `device_mode`,
-    `device_waiting`, `device_error`, and `vocab`;
+    `device_waiting`, `device_error`, `vocab`, `auto_scroll` (null, or e.g. `hold-scroll down`), `badge` (the head's held state: `idle`, `pending`, `hold-scroll`, `cursor`, `paused`, `off`, `tap-to-wake`, ...), `sound_source`
+    (`pico`|`phone`|`usb`), `mic_state` (the phone-mic state, e.g. `listening`) and `mic_device` (the input in use).
+    `asr_engine` and `asr_status` (the phrase window's speech: `ready`, `off`, or e.g. `offline speech pack missing`).
+    For the first-run pairing screen: `ble_missing` (the Bluetooth runtime permissions not granted, Android names),
+    `ble_blocked` (refused with "don't ask again"), and with the Pico as the source `ble_adapter` (`on`|`off`|`none`),
+    `ble_target` (the address being connected), `ble_target_name` (its advertised name, e.g. `VOX-2807`) and
+    `ble_scan` (`scanning`, `none found` when the last search ended empty, or null). `calibrated` (bool): a voice-joystick
+    calibration is saved for the current sound source (always false for the Pico);
   - `setPaused {paused: bool}` does what the `pause` op does, logs `pause{by: app}`, and returns the status map;
   - `deviceCommand {armed?, mode?, sleep?}` does what the `device` op does, but answers only when the device has
     confirmed or the command failed: `{ok, cmd, result, error, ms, applied, armed, mode, sleeping}`;
-  - `connectDevice` connects to the remembered device again (`ble_connect auto`; it also ends `needs_pairing`) and
-    returns the status map;
+  - `connectDevice` connects to the remembered device again (`ble_connect auto`; it also ends `needs_pairing`), or,
+    with none remembered, searches and connects to the first Canti device found; returns the status map;
+  - `requestBluetooth` asks for the missing Bluetooth permissions and answers with the status map once the dialog
+    is answered (logs `ble{what: permissions}`); `enableBluetooth` shows the system's turn-on dialog;
+    `openAppSettings` opens Canti's page in the system settings;
+  - `launchRoute` answers the screen the activity was opened for (`pair`, or `calibrate`: the joystick calibration,
+    from the badge menu's CALIBRATE, logs `ui{what: open_calibrate, by}`), once, or null. The badge menu and the
+    sound-source chooser open the pairing screen this way when the Pico is picked with no device remembered
+    (`Pairing.kt`, logs `ui{what: open_pairing, by}`); a running UI gets `openRoute {route}`, a call from Kotlin on
+    this same channel;
+  - `cursorSettings` answers `{cursor_speed, cursor_pitch_sens}` (the joystick sliders, 0.5-2.0, default 0.9; works
+    with the service off); `setCursorSettings {cursor_speed?, cursor_pitch_sens?}` stores them clamped (logs
+    `setting{cursor_speed, cursor_pitch_sens, by: app}`), applies them to a running joystick, answers the same map;
+  - `levelGateSettings` answers `{level_gate, level_gate_offset_db}` (the calibration-v2 level gate: bool, default
+    true; -10..10 dB, default 0, + = stricter); `setLevelGateSettings {level_gate?, level_gate_offset_db?}` stores
+    them (the offset clamped, logs `setting{level_gate, level_gate_offset_db, by: app}`) and answers the same map;
+  - `calib_start {source, steps?}`, `calib_step {step}`, `calib_redo {step}`, `calib_retry`, `calib_skip`, `calib_save`,
+    `calib_cancel`, `calib_status` answer the calib_status map, and `calib_get {source}` the saved profile or null
+    (*Voice joystick*, Calibration). Kotlin also calls `calib_status {map}` on this channel about every 100 ms while a
+    calibration runs and after every command (also one from the debug socket);
   - `openLegacySettings` opens `LegacySettingsActivity`, the native screen (decider, endpoint, API key,
     permissions) that stays until Flutter screens replace it.
 - `ai.vox/events` is an event channel: every event-log line as its JSON string, from the moment the screen listens.
+- `ai.vox/train` is a method channel for gesture training (*Gesture training*, below; the Dart side is
+  `ui/lib/src/train.dart`, `ChannelTrainBackend`): `train_status {source?}`, `train_start {gesture, cell?, source?}`,
+  `train_record`, `train_retry`, `train_skip`, `train_keep`, `train_next {record?}`, `train_cancel`,
+  `train_delete {gesture, cell?, source?}` answer the train_status map (with `error` when refused; `{service: false}`
+  with the service off). Kotlin calls `train_status {map}` on it after every change and about every 100 ms while a take
+  records. Closing the UI ends an open round.
 
-The status screen's main button follows the device when one is connected (`device_ready`): **Pause VOX** sends
-`{"armed": false}`, **Resume VOX** lifts an app-side pause and sends `{"armed": true}`. Without a connected device
+With the Pico as the source and no device remembered, the status screen shows **Find my Canti device**. It opens the
+pairing screen (`ui/lib/src/pair_screen.dart`), which searches at once and shows each stage (search, found
+`VOX-xxxx`, connect, pair, connected), names any missing permission with a button to grant it, offers to turn
+Bluetooth on, and explains the device's pairing window (hold its button 5 s).
+
+The status screen's main button follows the device when one is connected (`device_ready`): **Pause Canti** sends
+`{"armed": false}`, **Resume Canti** lifts an app-side pause and sends `{"armed": true}`. Without a connected device
 it is the app-side pause (`setPaused`). The mode toggle and **Sleep device** appear only while the device is
 connected.
 
@@ -305,7 +735,10 @@ used by the widget tests and the Linux desktop runner.
 
 ## Decider HTTP call
 
-`POST {base_url}/v1/systemone`. `Authorization: Bearer <key>` is sent only when a key is set.
+`POST {base_url}/v1/systemone`. `Authorization: Bearer <key>` is sent only when a key is set. Both model clients (this one and
+the `escalate` Ollama client) send `User-Agent: Canti/<version> (Android)` (`CantiHttp`): ollama.com answers the
+default `Dalvik/...` agent with a 403 HTML page whatever the key. An HTTP error with an HTML body reads
+`HTTP <code> blocked by server (not an API reply)`; a 401/403 API answer reads `HTTP <code> (auth): <body>`.
 
 ```json
 {"state": "<Scene.text()>", "model": "<model>",
@@ -319,24 +752,248 @@ the server must not depend on this order.
 The answer is `answers.action.choice` (an option text, mapped back to the action key) with `confidence`. If the
 confidence is below `min_confidence` (0.5), the decision is `none`. On any error, the `model` decider falls back to
 the rule table (source `model-fallback:...`). `hybrid` applies an explicit local binding first and asks the model
-otherwise.
+otherwise. `escalate` is below.
+
+## Navigation actions: swipes, home, back, forward, auto-scroll
+
+Default gesture bindings (`finetune/vox/schema.py`, generated into `Vocab.kt`):
+
+| Sound(s) | Action | Notes |
+|---|---|---|
+| `rise` / `fall` | `swipe_up` / `swipe_down` | A fling: 72% → 12% of the screen height in 100 ms (`swipe_down` mirrors it, 28% → 88%; `SwipeGeometry` in `Navigation.kt`), clamped out of the system gesture and bar insets (at least 48 dp top and bottom, 32 dp at the sides). Paged feeds (Reels, Shorts, TikTok) snap to exactly one item. |
+| `arch` / `dip` | `swipe_right` / `swipe_left` | A fling across the width, 85% → 15% in 100 ms, through the middle, inside the side back-gesture zones. |
+| `hiss` | `back` | The quick path, and the cancel sound (target choice, confirm). Acts at once. |
+| `hiss click` | `back` | The two-sound form. The hiss has already gone back; a click within the gap is absorbed (`absorbed` event). |
+| `click click` | `home` | `GLOBAL_ACTION_HOME`. |
+| `click hiss` | `forward` | **App-only** (`schema.APP_ONLY_BINDINGS`): resolved by the rule table in every decider mode (source `rules:app-only`), and never a model option. `forward` is not in `ACTIONS`, so the students' option lists and the datasets are unchanged. A user rule for `click hiss` still overrides it. |
+| `rise`/`fall` + held hum | auto-scroll | Scrolls in the swipe's direction while the hum is held (*Hold messages*: `hold start` within 1 s of the swipe, until `hold end`). A `flat` on its own stays `long_press`. |
+
+**Forward.** Android has no global forward.
+1. The app clicks a visible, enabled control whose text or content description is exactly `Forward`, `Go forward`,
+   `Navigate forward` or `Forward button`, in any of the foreground app's windows. It clicks the node itself or its
+   nearest clickable ancestor. `Fast forward` and `Forward to…` never match.
+2. If that control is disabled, nothing happens: `exec` shows `no-forward (Forward is disabled)`.
+3. If there is no such control, the app clicks the overflow-menu button: `More options`, `Main menu`, `Menu`, and
+   similar labels, preferring one in the top or bottom 18% of the screen. It then polls the menu for Forward for up
+   to 1.5 s.
+   - If Forward is there and enabled, it is clicked (`forward{result: clicked}`).
+   - If Forward is missing or disabled, the menu is closed with back, but only if the screen changed, and the event
+     is `forward{result: no-forward}`.
+4. With neither a Forward control nor a menu, nothing happens (`no-forward`).
+
+Note: in mail and chat apps "Forward" means forwarding a message. `click hiss` there opens the app's forward screen;
+it never sends anything.
+
+**Auto-scroll (hold-to-scroll).** A `rise` or `fall` executes its swipe at once, with no delay. If a held flat hum
+starts within 1 s of the swipe's end, the page keeps scrolling that way until the hum stops. The held sound's own
+final event is then not acted on, so it is not a long-press. The rules (gate, speed, stops, the 4 s limit per hold,
+the log events) are under *Hold messages*. It shows in the status map's `auto_scroll` field
+(e.g. `hold-scroll down`) and on the overlay badge while it runs.
+
+## Decider `escalate`: the cloud model for hard cases
+
+`EscalatingDecider` (`OllamaDecider.kt`). The phone calls an Ollama chat API directly, with no PC in the path:
+`ollama_endpoint` (default `https://ollama.com`, or a LAN Ollama), `ollama_model` (default `deepseek-v4.1-flash`),
+and the key from the settings screen. The key is stored AES-GCM encrypted under an Android Keystore key and sent only
+as `Authorization: Bearer <key>` (no header when it is empty).
+
+```json
+POST {ollama_endpoint}/api/chat
+{"model": "<ollama_model>", "stream": false, "think": false, "options": {"temperature": 0},
+ "format": {"type": "object", "properties": {"choice": {"type": "string", "enum": ["<key>", "..."]}}, "required": ["choice"]},
+ "messages": [{"role": "system", "content": "<POLICY or TargetVocab.POLICY>"},
+              {"role": "user", "content": "<state>\n\noptions (answer with the key before the colon):\n<key>: <option text>\n..."}]}
+```
+
+Keys are the action keys for gestures and phrases, and `t0`, `t1`, ... plus `none` for targets. The answer is
+`message.content`, parsed strictly: `{"choice": k}`, `"k"`, the bare key, or `k: <start of option k's text>`.
+Ollama cloud does not apply `format` for this model and usually sends the bare key. Anything else is an error.
+
+Routing:
+- **Local, instant, never the network:** personalization, every explicit binding (defaults, profile and cursor
+  bindings, phrase rules, phrases in the phrase table), and what the policy settles (not-deliberate sounds, unbound
+  sequences).
+- **Hard cases:** a rule table answer of `*-rule-needs-model` or `rules:unknown-phrase`. The local model
+  (`base_url`, optional: blank = none) answers first. The cloud is asked when the local model is absent, fails or
+  answers below `min_confidence`, with a deadline of `ollama_timeout_ms` (1500). If the cloud fails, the local
+  model's answer is used, else the rule table's.
+- **Intent cursor targets:** the cloud first (`ollama_target_timeout_ms`, 2500), then the local model's `target`
+  question.
+- **Never blocking:** every new event cancels a cloud call in flight, and a decision that starts while a newer event
+  is queued skips the network. The event then gets the rule table's answer (`escalate-skipped` /
+  `escalate-fallback`).
+- **Confirmation:** cloud answers have no calibrated confidence (`unscored`).
+  - A risky action waits for a confirm pop (`confirm_ask`). Risky means an injected touch on content: `tap`,
+    `double_tap`, `like`, `long_press`, `click`, `drag_toggle`.
+  - A `pop` performs the action; `hiss` cancels it; any other sound cancels it and is then handled as usual.
+    `target_choose_ms` also cancels it.
+  - A cloud target pick is highlighted alone (the `choose` flow), so a `pop` taps it.
+
+**Outward actions always ask** (user decision; `Outward.kt`, one table). Publicly visible actions — `like`,
+`double_tap` (the same double-tap at the centre, which likes a post in feeds), and any future action or button whose
+name has an outward word (like, follow, share, repost, comment, reply, send, post, subscribe, ...) — wait for a confirm
+pop **whatever decided them** (rules, grammar, cloud, local model) and at any confidence. The badge asks ("Like? pop to
+confirm", "Tap Follow? pop to confirm"); `pop` performs it, `hiss` or any other sound cancels, and no pop within
+`outward_confirm_ms` (default 3000; not `confirm_timeout_ms`, which stays the Confirmer's screen-change timeout) means nothing happens (`confirm_ask{n, action, source, why: "outward action" | "outward
+button" | "unscored risky action", window_ms}`, then `event: confirmed | cancelled`). A tap on a screen target whose label
+is outward ("Like", "Follow", "Send message") asks the same way, also after a highlighted pick. The Executor refuses an
+unconfirmed outward action itself (`exec{ok: false, how: "refused: ... needs a confirm pop"}`). Scroll, back, home,
+volume, swipes and the rest stay instant. OutwardTest fails until every vocabulary action is classified.
+
+**System dialogs: back or home only** (`SystemDialog.kt`, SystemDialogTest). While a system dialog is in front of the
+app — a permission request (the permission controller), the package installer, or a window owned by the system
+itself (`android`, `com.android.intentresolver`: the app chooser, a role request such as Chrome's "default browser?",
+"isn't responding") at or above the top app window — the Executor drops every queued gesture (`gesture{action, result:
+"dropped (system dialog: <pkg>)"}`; a queued back or home stays), refuses every touch (swipes, flings, node scrolls,
+taps, double-taps, long-presses, target taps, cursor clicks, hold strokes: `exec{ok: false, how: "refused: system
+dialog (<pkg>): <action> (back or home only)"}`, `system_dialog{action, dialog, result: refused}`), never taps a
+dialog's buttons, and the badge says "system dialog: back or home only". Back, home, volume, media keys, cursor moves,
+open app and timers still run. The signal is the accessibility window list by owner package (cached 100 ms), not the
+window type: chat heads, the edge panel and other overlays are system windows too but never block; SystemUI and Canti's
+own windows never count.
+
+**Stale trees are refused** (`RootCheck.kt`, RootCheckTest; `TreeReader.appRoot`, which every screen read uses: the
+summary, targets, scroll/step decisions, the Confirmer's fingerprint, `dump`). The service reads trees through
+Android's per-service accessibility cache; on the Z Flip a `dump` with Instagram in front once returned TikTok's tree
+from six minutes before. Every root must be on a current window that is the active or the top app window, and is
+re-read past the cache (`refresh()`: false = its window is gone; a synchronous call into the app, so at most once a
+second per window). Otherwise the cache is cleared (API 34+) and the root read
+once more; if that fails too there is no root: `stale_root{package, why, retry, result: re-read | refused}`, no screen
+facts, no targets, nothing tapped.
+
+Every cloud call logs `escalate{kind, outcome: ok | timeout | invalid choice | error | cancelled (newer event) |
+skipped (newer event) | no cloud ..., ms, tokens_in, tokens_out}`, never the key. Measured quality and latency are in
+`finetune/reports/ollama_vs_students.md`.
 
 Test servers: the suite's fake `/v1/systemone` listens on host port **8767**; the real local server
 (`finetune/servers/systemone.py`, started by `suite/run.sh jev start`) listens on **8765**. Both reach the emulator
 through `adb reverse`.
 
+## Spoken phrases (the phrase window)
+
+`listen_for_phrase` (default `pop pop`) opens a window of `listen_window_ms` (6000). What is said in it goes through a
+deterministic grammar first; only what the grammar does not know reaches the phrase decider.
+
+**Recognizer** (`asr_engine`; `ListenWindow.kt`, `AndroidPhraseRecognizer.kt`). An engine only turns speech into a
+transcript plus its n-best (`Heard`); the grammar never depends on the engine.
+- `android` (default): the phone's `SpeechRecognizer`, main thread, one per window. The on-device recognizer
+  (`createOnDeviceSpeechRecognizer`, API 31+) when available; else the default recognizer with
+  `EXTRA_PREFER_OFFLINE` ("only use an offline engine"). **Never a silent cloud fallback**: with `asr_allow_online`
+  off (the default), a missing offline pack is reported (`offline speech pack missing`: toast, `asr_status` in the
+  app's status screen, the event log) and nothing is sent. `asr_allow_online: true` lets the default recognizer use
+  the network. API 33+: at start and on `asr {check: true}` the recognizer is asked whether `asr_language` (`en-US`)
+  is installed. Partial results, up to 5 hypotheses with confidences.
+- `off`: no phone-side recognition; the window waits for a message `phrase`.
+- A message `phrase` (the device, the debug socket) or the `phrase`/`heard` op answers the window the same way.
+
+**Window.** Open → the phone mic yields (`sound_source` phone/usb: Canti's capture stops, `mic{state: "paused for
+speech"}`, the foreground service stays; the Pico has nothing to yield) → the recognizer starts 150 ms later when a
+capture was running (the recorder is released first) → it ends on its final result or error, or at the window's end:
+stop, then 1.5 s for the final result, else the last partial (`partial: true`) → close exactly once: the recognizer is
+destroyed, the mic resumes exactly once, late results are ignored. The badge shows `hearing` while it is open. Sounds
+and holds that arrive while it is open are `ignored{reason: "phrase window open (speech is not gestures)"}`. A
+disarm, pause, reset or a new window cancels it. Canti plays no sounds of its own, so the recognizer cannot hear it.
+
+**Cleaning** (per hypothesis, before the grammar). Hesitations (`um`, `uh`, `er`, `hmm`) and `kind of`, `you know`
+are dropped wherever they are; softeners (`maybe`, `please`, `quickly`, ...) at the start or end or next to a command
+word ("scroll quickly down"), never as an argument ("tap maybe later" = the Maybe later button); `like` straight before
+a command word ("can you like scroll down"), before an amount ("like a lot"), at the end, or between `open` and a name;
+a phrase starting with `like` is filler unless it is an explicit like (see the grammar); politeness and the wake word at the start (`could you`, `would you mind`, `i want you to`, `hey
+canti` and its mishearings `hey candy`, `ok google`); tails at the end (`for me`, `thanks`, `again`, but not the argument
+of a tap verb: "tap okay"); a doubled word (`the the`, not numbers) and a repeated command ("scroll down scroll down")
+count once; `scrolling` → `scroll` (present participles only: "i opened it" is narration). **Self-correction**: after
+`no`, `wait`, `no wait`, `sorry`, `i mean`, `i meant`, `actually` the last part wins ("go back, no wait, home" → home), borrowing
+the verb it replaces ("open youtube, no, spotify", "scroll down, i mean up") or the end of what it corrects ("set a
+timer for ten, no, fifteen minutes" → 15 min; "open facebook, sorry, i mean instagram"); `no`/`wait` right after a tap verb are
+the argument ("tap no"). A command after a request is found ("i'm gonna go home"). A word cut off with a dash
+("scroll d-, scroll down", "open tele-, telegram") is dropped; `let's see`, `what's it called` are filler.
+
+**Nothing happens** (`ignore (why)` in `phrase_parse`; no decision, no toast) for: only filler ("um okay yeah"), a
+retraction ("open settings, never mind"), chatter (starts with a question or remark word: "what was i doing", "is it
+paused", "how long is left on the timer"), and **two different commands** in one phrase ("scroll down and go home",
+"open youtube and spotify": toast "one command at a time"; never a guess; the same one twice is fine). "and" inside
+one command stays ("tap terms and conditions", "an hour and a half"). A tap always needs a tap verb (or cursor mode)
+and a match on the screen: chatter never taps.
+
+**Grammar** (`PhraseGrammar.kt`, on the cleaned phrase):
+
+| Said | Command | Done by |
+|---|---|---|
+| an exact user phrase rule (profile scope `phrases`) | the phrase | the phrase decider (as before) |
+| `set a timer for 5 minutes`, `set timer for five minutes`, `ten minute timer`, `timer for an hour and a half`, `one minute thirty` (= 90 s), `three thirty` (= 3 min 30 s: two bare numbers, the second 10..59, no unit; a timer is a length, never a clock time; `timer for thirty` alone has no length) | timer, 1 s .. 24 h | `AlarmClock.ACTION_SET_TIMER` (skip UI, message "Canti") sent to **one resolved clock app** (`TimerTarget`): the `timer_app` setting, else the only handler, else the system default, else the one preinstalled clock; several and none of these → not ok, toast "no timer set: choose a clock app for timers ...", nothing started (never the app chooser reported as success) |
+| `louder`, `turn it up a bit`, `a lot quieter`, `crank it up`, `louder louder`, `volume up by 3`, `volume to 30 percent`, `half volume`, `volume 5`, `max volume`, `mute`, `shh`, `unmute`, `sound back on`, `it's too loud`, `i can't hear it`, `turn the ringer up`, `alarm volume to max` | volume (`Volume.kt`) | `Executor.setVolume`: the stream (during a call the call volume, else media; `ring`/`alarm`/`notification`/`media` words pick one), the plan (`VolumePlan`: a step is ~1/15 of the stream's range, "a bit" = 1 index, "a lot" = 3 steps, crank = 4; exact levels by fraction or index, a number above the max is a percent; mute remembers the level and unmute restores it, the call volume goes to its minimum instead). Always instant, always the system volume bar (`FLAG_SHOW_UI`). `exec{action: volume, stream, op, ok, how: "volume:music 7->9 of 15 (set 9)"}` |
+| `swipe right`, `flick left twice`, `swipe it right` | swipe, the finger's direction | the gesture, repeated (at most 5) |
+| `scroll right`, `go right`, `move left`, `what's on the right` | swipe, the **content** direction: the finger goes the other way (`scroll right` = `swipe_left`) | the gesture, repeated |
+| `next photo`, `previous slide`, `go back one picture`, `go three photos forward`, `skip two`, `the next three pictures`, `next reel`, `previous short`, `skip this reel` | next / previous N (`next video`, `next one`, `skip this`, `go back one video`: the navigation phrase as before) | `SwipePlan`: a reel / short / tiktok is always the vertical fling (`swipe_up` / `swipe_down`, never a media key), then the rules' screen tie-break (video feed vertical, photo viewer / document horizontal), else a horizontal noun (photo, slide, story, card, tab, page) swipes, else a clear Next / Previous button is tapped, else the rules (`next_item`); horizontal next/previous mirrored in right-to-left layouts. `swipe_plan{n, semantic, noun, screen, rtl, via, action, button, count}` |
+| `like this post`, `like the video`, `like it`, `heart it`; `hit like`, `tap the like button` | like (the like button on screen, else the like action) | **always a confirm pop** (outward). `like this`, `like that`, any other phrase starting with `like` → filler, nothing happens |
+| `go back`, `back`, `go home`, `scroll up/down`, `go down`, `move up a bit`, a lone `down` / `up` (= scroll **only in a listen window a pop pop opened**, user decision; outside one, e.g. a future always-listening mic, it is `ignore` and needs a verb), `go back to the previous screen`, `hold on a second` (= pause), `next`, `previous`, `pause`, `open camera`, ... (variants → the `Vocab.PHRASES` phrase); `scroll down three times`, `next twice` | navigation (a count repeats only scrolls and next/previous, at most 5) | `RuleDecider` on the phrase (user phrase rules first, the screen tie-break for next/previous and play/pause: a video feed, Reels / Shorts / TikTok, flings vertically); never a model |
+| `open\|launch\|start\|go to\|go back to\|switch to\|return to <app>` | open app | launcher labels + aliases, fuzzy (`you tube`, `tick tock`, `net flicks`); `getLaunchIntentForPackage` in user 0. Two installed apps with the name (YouTube and a mod): the `app_prefer` one (default: RVX for YouTube; also applied when only the official app matched the name but RVX is installed), else the most recently used if usage access is already granted (Canti never asks for it), else the official package, else toast "which YouTube? ..." and nothing opens. A known app's name that is not installed (`open snapchat`): toast "no app called snapchat", `exec{action: open_app, name, ok: false, how: "not installed"}`, **never a tap**; `launch`/`switch to`/`go back to` + an unknown name never taps either |
+| `tap\|click\|press\|select <thing>`, or `open <thing>` that is no app | tap | `TargetMatcher` on the screen's targets: one clear match (≥ 0.85, 0.1 ahead) is tapped; weak or several are highlighted (rise/fall pick, pop taps, hiss cancels); none → the model's `target` question if the decider is not `rules`, else a toast |
+| `type <text>`, `write <text>` (only in a listen window) | type into the focused text box | *Typing by voice*, below; checked before the rest of the grammar on the best hypothesis, as the recognizer wrote it |
+| `dictate`, `start dictation` (only in a listen window) | dictation mode | *Typing by voice*, below |
+| anything else, in cursor mode | tap (a bare word such as `home` falls back to the command) | as above |
+| anything else | the phrase | the phrase decider (`resolve` with the phrase, as before) |
+
+Volume and swipe forms are the grammar's own commands (like opening an app): the model vocabulary, its option lists and
+`Vocab.SOURCE_DIGEST` are unchanged, and the decider path (rules, models) keeps `volume_up` / `volume_down` (one system
+step on the same call-aware stream) and `swipe_*` / `next_item`.
+Numbers are words or digits (`twenty five`, `1.5`, `a hundred`); `for`/`to` count as 4/2 only straight before a unit
+("timer for minutes" = 4 min). The n-best: every hypothesis is parsed and the most concrete command wins (a known
+command, then a tap on something on screen, then a timer without a length, then unparsed); ties keep the recognizer's
+order.
+
+**Privacy.** Transcripts are personal: they go to the local event log only. They leave the phone only as the phrase
+decider's input when the user chose a model decider (`model`, `hybrid`, `escalate`) and the grammar did not handle
+them.
+
+**Events.** `listening{state: open, window_ms, mode, engine, recognizer}` →
+`asr{event: closed, why (final | no speech | timeout | error: ... | unavailable | cancelled: ...), engine, recognizer,
+status, n_best, confidence, partial, partials, peak_db, ready_ms, ms, mic_yielded}` →
+`phrase_parse{source, heard, hypothesis, command, parses, mode, window, parse_ms}` → `exec{n, action: open_app | set_timer | volume, ...}`, or `swipe_plan` + `decision` per swipe, or
+`state` + `decision` (navigation, `path: local`), or `target_match{n, query, targets, result, top}` + `target` /
+`choice`, or the usual `resolve` chain. Also `asr{engine}` and `asr{event: check, pack, status, info}`.
+
+### Typing by voice
+
+In a listen window (`pop pop`), with the phone's on-device recognizer (never online: `asr_allow_online` is not
+changed) and the phone mic (`VoiceTyping.kt`):
+
+- **`type <text>` / `write <text>`** types `<text>` into the box with input focus: at its cursor (a selection is
+  replaced, as a keyboard would), or at the end when it has none; a space is added where a word would run into the
+  text around it. The words are the recognizer's own, trimmed; only `comma`, `period`, `question mark` and `new line`
+  become `,` `.` `?` and a line break. **How:** `ACTION_SET_TEXT` with the box's whole new text, then
+  `ACTION_SET_SELECTION` to put the cursor after it; not a paste, which would overwrite the user's clipboard. Nothing
+  presses send, enter or an IME action, so nothing is ever submitted or sent.
+- **`dictate` / `start dictation`** starts dictation: each utterance is typed as above (a space between utterances),
+  and nothing said is parsed as a command except the stop phrase. It stops on about 4 s without speech, a sound from the
+  device after a pause of at least `dictate_speech_hold_ms` (default 1000, 200-3000) since the last recognized words
+  (that sound is not acted on; one sooner is the user speaking, which the Pico hears too: ignored,
+  `dictate{event: ignored_sound, sequence, since_words_ms}`), saying `stop dictation` (the words before it in that utterance are typed), or
+  after 2 minutes; also on disarm, pause, `reset`, the box going away, or a recognizer problem. The mic is yielded once
+  for the session; each utterance has its own recognizer. The badge shows the listening face while dictating.
+- **Refused**, with the toast and nothing typed: no focused editable box (`no text box selected`), a password box, a
+  box that would overflow its limit, and a system dialog in front (`SystemDialog`: `refused: system dialog`).
+  `type` alone: toast `say what to type`.
+
+**Events.** `phrase_parse{source, command: "type (N chars)" | dictate | "stop dictation", mode, window}` →
+`exec{n, action: type_text, ok, how (set_text | why not), chars, text?}`; dictation:
+`dictate{event: start | utterance | ignored_sound | stop | refused, why, chars, utterances?, status?, text?}` (`why` of a stop:
+`silence`, `sound`, `stop phrase`, `time limit`, `disarm`, `pause`, `reset`, `no text box selected`, `recognizer: ...`).
+The typed words (`text`, and `n_best` in the window's `asr{event: closed}`) are logged **only** with `log_typed_text`
+on; otherwise `n_best` reads `(typing: not logged)`.
+
 ## Intent cursor mode: the `target` question
 
 In cursor mode the user can name an on-screen element ("the subscriptions tab") instead of steering the cursor there.
 
-1. **Trigger.** `click pop` in cursor mode opens the listening window (`Decision("listen_for_phrase",
+1. **Trigger.** `pop pop` in cursor mode opens the listening window (`Decision("listen_for_phrase",
    "app:cursor-listen")`). `schema.CURSOR_ACTIONS` has no listen option and the generator never produces it, so the
-   **app** handles this sequence and it is never sent to the action model. A cursor-scope profile rule for `click pop`
-   overrides it (binding it to `none` disables it). Because `click pop` is now bound in cursor mode, a `click` there
-   waits `gap_ms + jitter_ms` for a possible `pop`.
-2. **Phrase.** The phrase arrives as the `phrase` field of a feature message (from the device, or from the on-phone
-   `PhraseRecognizer`, which is a **stub**: `StubPhraseRecognizer` logs `asr` and produces nothing). A phrase inside
-   the window in cursor mode becomes a `target` question; in gesture mode it is resolved as before.
+   **app** handles this sequence and it is never sent to the action model. A cursor-scope profile rule for `pop pop`
+   overrides it (binding it to `none` disables it). Because `pop pop` is bound in cursor mode, a `pop` (click) there
+   waits `gap_ms + jitter_ms` for a possible second `pop`.
+2. **Phrase.** From the phone's recognizer or a message's `phrase` (*Spoken phrases*). In cursor mode a phrase that is
+   not a command names an element: it is matched by name first (`TargetMatcher`, no model); only when nothing on
+   screen matches, and the decider is not `rules`, it becomes a `target` question as below.
 3. **Options** (spec: the docstring of `finetune/vox/targets.py`; `Targets.kt`):
    - Nodes: visible, clickable or focusable, with the centre on screen. Not options: a scrollable non-clickable
      container, a focusable-only node covering more than half the screen, and a label-less focusable-only container
@@ -373,6 +1030,8 @@ In cursor mode the user can name an on-screen element ("the subscriptions tab") 
      (6000) cancels; each rise/fall restarts that timer. A mode change, disarm, reset or new phrase also cancels.
      Other sounds are ignored while choosing; sounds failing the not-deliberate gate (talking etc.) are ignored.
    - With `decider = rules` there is no model to ask: toast, and `target{result: "no model (decider=rules)"}`.
+   - With `decider = escalate` the cloud answers first. Its answer has no probabilities (`unscored`), so it always
+     takes the highlight path with the one element: `pop` taps it, `hiss` cancels.
 
 ## Personalization: enrolled sounds rewrite the line
 
@@ -382,7 +1041,11 @@ with the user's enrolled examples and rewrites the sound line **before** sequenc
 **Enrollment.** Per profile, any number of classes, each `custom` (a sound the user invented and named), `ignore`
 (a sound that must never act: a sneeze, a laugh, a kettle) or `gesture` (the user's own rise, pop, ...), with 3–10
 examples. Classes with fewer than 3 examples are stored but not matched. Examples are recorded on the PC for now and
-pushed with `suite/enroll.py` (the `enroll_*` ops). The store is `files/enroll/<profile>.json` in app-private storage.
+pushed with `suite/enroll.py` (the `enroll_*` ops), or recorded on the phone (*Gesture training*, below). There is one
+store per profile and mic source, `files/enroll/<profile>@<source>.json` in app-private storage (`source` = `pico`,
+`phone`, `usb`); matching uses the current sound source's store. A store from before (`files/enroll/<profile>.json`) is
+renamed, once, to the store of the sound source that is current when it is first loaded (logged
+`enroll{change: migrate, from, to}`).
 
 **Matching** (`Matcher` in `Personal.kt`):
 1. Every fingerprint is standardised by the per-feature mean and std of all examples in the store, the std raised
@@ -403,7 +1066,8 @@ pushed with `suite/enroll.py` (the `enroll_*` ops). The store is `files/enroll/<
    examples would accept ever farther sounds.) The DTW threshold is computed the same way on the pitch tracks.
 4. Result: `custom`, `ignore`, `gesture`, `none` (nearest class beyond its threshold), or `skipped` (nothing enrolled,
    or another `fp_version` or length). Every attempt is logged:
-   `match{id, i, profile, result, class, nearest, distance, threshold, dtw, dtw_threshold, reason, label, new_label, line, floors}`.
+   `match{id, i, profile, result, class, nearest, distance, threshold, dtw, dtw_threshold, reason, label, new_label, line, floors, relabel, trusted, dist, skipped, gated}`
+   (`relabel{from, to}` and `dist`: a gesture class relabelled the sound; `trusted: true`: it agreed with the extractor).
 
 **Rewrite:**
 
@@ -411,7 +1075,19 @@ pushed with `suite/enroll.py` (the `enroll_*` ops). The store is `files/enroll/<
 |---|---|---|
 | custom `meow` | `my sound "meow"; duration <bucket>; loudness <bucket>` (the extractor's buckets; a pop/click line, which has no duration, gets `very short (under 150 ms)`) | `my:meow` |
 | ignore | the extractor's line with `sounds like one of my ignore sounds` | unchanged |
-| gesture, none, skipped | unchanged | unchanged |
+| gesture `arch`, the extractor said `dip` (or `unknown`, ...) | the arch's normal line, keeping the measured fields: `hum that rises then falls; pitch change <kept, or from pitch16>; duration <kept>; tone <kept>; loudness <kept>; sounds like <kept>` (pop/click: `<shape>; instant sound; loudness; sounds like`, hiss: `a hiss; duration; loudness; sounds like`; flat: pitch change always small) | `arch` |
+| gesture `arch`, the extractor also said `arch` | unchanged (logged `trusted: true`) | unchanged |
+| none, skipped | unchanged | unchanged |
+
+**Gesture relabel** ([train], 2026-09-27; `wiki/personalization.md`: a re-recorded gesture becomes "the normal gesture
+line, now trusted"). Only an **active** `gesture` class (3+ examples) of the **current sound source's** store can
+relabel, and only within its reject threshold (plus the DTW test for a contour). Custom and ignore keep their
+precedence: the nearest class decides, whatever its kind. A relabelled line is an ordinary gesture line, so every
+decider and binding treats it as that gesture. `config {enroll_gesture_relabel: false}` turns it off (the match is
+still logged). The gesture trainer sees the extractor's own labels (its takes are taken before this step).
+A **gated** sound (the message's `gated[i]`, set by the phone mic's media gate and media-hiss rule) is never rewritten, by
+any class kind: a trained pop or click must not turn a deliberately `unknown` media sound back into an action. The match
+is still logged, with `skipped: "gated"` and `gated: "<reason>"`.
 
 **Deciding.** The model has no training data for these lines until data v6, so:
 - a sound that `sounds like one of my ignore sounds` is always `none`, decided locally (source `personal:ignore-sound`);
@@ -422,3 +1098,86 @@ pushed with `suite/enroll.py` (the `enroll_*` ops). The store is `files/enroll/<
 - only a plain-language rule (`kind: "rule"`) bound to exactly that sequence sends it to the model.
 
 Fixed rules on custom sounds are not shown to the model under "my rules:".
+
+## Gesture training
+
+<!-- [train] GestureTraining.kt, ui/lib/src/train_screen.dart; user decision 2026-09-27 -->
+Design: `wiki/personalization.md`. The user records their own version of every gesture, with its variations, into
+the enrollment store of the **current sound source** (class kind `gesture`, named after the gesture, e.g. `arch`).
+It is separate from the voice cursor's setup and resumable: one card per gesture, each done, stopped and redone on
+its own; every accepted take is stored at once.
+
+**Plan** (`TrainPlan`, 52 takes per source). Each take is a *cell*:
+
+| gesture | cells | takes |
+|---|---|---|
+| rise, fall, arch, dip | `hum`\|`whistle` × start `low`\|`high` × `slow` (~1.5 s)\|`quick` (~0.5 s): ids `hum-low-slow`, ... | 8 |
+| flat | `hum`\|`whistle` × note `low`\|`high` × `short`\|`long`: ids `whistle-high-long`, ... | 8 |
+| pop, click, hiss | `soft`\|`loud` × 2: ids `soft-1`, `soft-2`, `loud-1`, `loud-2` | 4 |
+
+Each cell has a prompt ("Whistle a QUICK rise, starting LOW", "Pop your lips LOUDLY (2 of 2)") and a hint.
+
+**A take** (`GestureTrainer`). While a round is open, every sound of the current source goes to it and none acts
+(outside a recording they are dropped: `ignored{reason: "gesture training (not recording)"}`; hold messages too). A
+take records from `train_record` until 0.9 s after its first sound (so a split arch arrives whole), or fails after
+8 s with nothing. It is judged against its cell (`TrainJudge`), in this order; the first reasons found are shown:
+
+| check | reason code | e.g. |
+|---|---|---|
+| a sound was heard | `nothing` | "Heard nothing in 8 s." |
+| exactly one sound | `count` | "Heard 2 sounds (rise then fall): make it one unbroken sound." |
+| it carries an fp1 fingerprint | `features` | |
+| the extractor's label is the prompted gesture | `label` | "Heard a dip (down then up): an arch goes up then down." |
+| contours: hum vs whistle by the fingerprint's median f0 (whistle >= 600 Hz, the extractor's `whistle_min_hz`) | `tone` | "Heard a hum (about 220 Hz): a whistle is 600 Hz or higher. Whistle it." |
+| contours: `quick`/`short` <= 1.0 s, `slow`/`long` >= 0.8 s | `speed` | "It took 1.4 s: a QUICK dip takes about half a second (at most 1.0 s)." |
+
+Also `blocked` (the take could not start: paused, not armed, cursor mode, mic not listening, Canti device not
+connected) and `store` (the store refused it). Start pitch (`low`/`high`) and loudness (`soft`/`loud`) are recorded,
+not checked: there is no fixed reference for either. A failed take **stops** with the reason and waits for
+`train_retry` or `train_skip`; when the only reason is `label` (and a contour take has a pitch track),
+`train_keep` stores it anyway (logged `train{event: keep}`, `meta.kept: true`). Nothing is skipped or recorded again
+without a command.
+
+**Commands** (the `ai.vox/train` channel, and the debug socket's ops of the same names). All answer the status map;
+a refused one adds `error`.
+
+| method | args | effect |
+|---|---|---|
+| `train_status` | `source?` | the status (of `source`'s store; default the current one) |
+| `train_start` | `gesture`, `cell?`, `source?` | opens a round: the gesture's missing cells, or only `cell` (a redo, replacing its example). `source` must be the current sound source. Refused when every cell is recorded, or the class would exceed 10 examples |
+| `train_record` | | records the current cell (state `ready`, `failed` or `passed`) |
+| `train_retry` | | records the failed cell again (state `failed` only) |
+| `train_skip` | | leaves the cell unrecorded; the next one waits in `ready` (it does not record by itself) |
+| `train_keep` | | stores a take that failed only on its label |
+| `train_next` | `record?` (default true) | after a stored take: the next cell (recording at once), or `done` after the last |
+| `train_cancel` | | ends the round (stored takes stay). Also on a sound-source change, UI close, or 5 min without a command |
+| `train_delete` | `gesture`, `cell?`, `source?` | deletes the gesture's class (Delete / redo) or one cell's example, in any source's store |
+
+**States:** `ready` (the prompt; RECORD) → `recording` → `passed` (stored; NEXT) or `failed` (the reason; RETRY /
+SKIP / KEEP ANYWAY) → ... → `done`.
+
+**Status map** (`train_status`): `active`, `source` (whose cards), `current_source`, `profile`, `live_trace` (the
+source gives live pitch ticks: phone / USB mic, not the Pico), `blocked` (why a take cannot start now, or null),
+`done`, `total` (52), `sources{pico|phone|usb: {done, total}}`, `gestures[{name, kind (contour|discrete), done, total,
+examples, extra (examples not from training), active (3+), kept, cells[{id, prompt, done, tags}]}]`, and `session`
+(null when no round is open): `source`, `gesture`, `state`, `cell`, `prompt`, `hint`, `tags`, `index`, `count`,
+`next_prompt`, `reason`, `reasons` (codes), `can_keep`, `heard{label, line, sounds, labels, dur_ms, f0_hz, start_hz,
+tone, loudness, pitch16, shape}`, `heard_n`, `left_ms`, `live{trace_hz (one per 20 ms tick, null = unvoiced, at most
+250), level_db, pitch_hz}`, `passed`, `skipped`, `kept`.
+
+**Stored example.** `enroll_add` semantics into class `gesture:<name>` of the round's source, with
+`meta{train: 1, cell, <tags: tone, pitch, speed|length | loudness, take>, heard{label, dur_ms, f0_hz, start_hz, tone,
+loudness}, kept?, at_ms}`. A cell counts as recorded when an example of the class carries its `meta.cell`.
+
+**What it changes.** From 3 takes a gesture class takes part in matching (*Personalization*): a sound it matches
+that the extractor labelled otherwise becomes that gesture (`match{result: gesture, relabel{from, to}}`), unless
+`enroll_gesture_relabel` is off.
+
+**Events:** `train{event: start{source, gesture, cells, cell}, take{gesture, cell, result: passed | failed, reason,
+reasons, label, can_keep, dur_ms, f0_hz, source}, skip{gesture, cell, reason}, keep{gesture, cell, heard, line,
+reason, source}, delete{source, gesture, cell}, done{gesture, source, passed, kept, skipped}, end{by, gesture, source,
+passed, kept, skipped, state}}`, and `enroll{change, source, ...}` for each store change.
+
+**Live trace.** For the phone / USB mic the trainer turns the native 20 ms ticks on while a round is open
+(`PhoneMicSource.setTrainTicks`, independent of the joystick's); the Pico sends no ticks, so the screen shows the
+take's `pitch16` after it instead.

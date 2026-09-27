@@ -1,0 +1,88 @@
+{
+ "version": "voice_cursor_v2",
+ "about": "Voice-cursor calibration / feasibility spec, v2 (wiki/voice-cursor.md). ONE source of truth for the steps, the analysis settings and the per-person rules: the desktop test (extractor/voice_cursor_test.py), its scorer, and later the app's calibration all read this file. Everything is relative to the person. v2 over v1: the range top comes from the glides (capped by the held note), the person accepts or redoes the range on a live meter, levels are measured twice (blind, then with the live pitch meter), vowel takes are scored by their MEASURED pitch band, and the formant tracker keeps broad back-vowel F2s and refuses one-frame jumps to F3. voice_cursor_v1.json stays as it was, so v1 sessions still score the same.",
+ "analysis": {
+  "fs": 16000, "win": 512, "hop": 160,
+  "hpf_hz": 70,
+  "hpf_note": "2nd-order high-pass before everything: breath and handling thumps on the mic are almost all below 70 Hz (they started and ended v1 takes before the voice came)",
+  "f0_min_hz": 60, "f0_max_hz": 1100, "mpm_k": 0.88, "clarity_min": 0.8, "level_over_floor_db": 6,
+  "lpc_order": 18, "preemph": 0.97, "f1_hz": [200, 1100], "f2_hz": [600, 3600], "f2_min_gap_hz": 150, "max_bw_hz": 500,
+  "f2_max_bw_hz": 1000,
+  "f2_jump_hz": 500, "f2_jump_frames": 5,
+  "f2_note": "F2 may be broad (back rounded vowels on a room mic: 500-1000 Hz); a frame whose F2 is more than f2_jump_hz from the last accepted F2 is dropped (nan) unless f2_jump_frames frames in a row agree, so one lost F2 no longer turns into F3",
+  "attack_skip_ms": 150, "release_skip_ms": 80, "max_steady_ms": 1500,
+  "smooth_ms": 200,
+  "smooth_note": "pitch and formants are averaged over >= one vibrato cycle (vibrato is 5-7 Hz, so 143-200 ms) before any steadiness test",
+  "vowel_window_ms": 250, "vowel_window_min_formant_frac": 0.5,
+  "lock_window_ms": 300, "lock_pitch_st": 0.5, "lock_f2_frac_of_ee_oo": 0.25
+ },
+ "live": {
+  "tick_ms": 50, "voiced_ticks_to_start": 3, "meter_margin_st": 1.5, "meter_lines": 19,
+  "note": "the live take loop: a take starts when voice (clarity >= clarity_min, level >= pre-take level + level_over_floor_db) is heard for voiced_ticks_to_start ticks, and stops after take.silence_s without voice; a thump alone never starts or stops a take"
+ },
+ "blocks": [
+  {"id": "range", "intro": ["Your comfortable pitch range: first two slow glides on an open “ah”, low to high,",
+                            "then hold your lowest and your highest note you could hold for a while WITHOUT straining.",
+                            "Comfortable, not extreme, and in your normal voice (no falsetto): this becomes the top and",
+                            "bottom of the screen. You'll see the result and can redo it."]},
+  {"id": "home", "intro": ["Your “home note”: the note you hum most easily, without thinking. Hum it 3 times, about 2 s each.",
+                           "It is the middle of your screen, and in daily use a 3 s home note re-centres your range."]},
+  {"id": "levels", "intro": ["BLIND: five heights, like a staircase: 1 = your comfortable low end, 3 = your home note,",
+                             "5 = your comfortable high end, 2 and 4 halfway between. Start from silence and go straight",
+                             "to that height, no warm-up slide, and hold it about 1.5 s. The pitch meter is HIDDEN on",
+                             "purpose: this measures whether the same note lands on the same spot without looking."]},
+  {"id": "feedback", "intro": ["WITH THE METER: the same five heights, but now you see your pitch live on the meter.",
+                               "The target line is highlighted; get the dot onto it and hold it there until it turns",
+                               "green (about 0.3 s), then stop. This measures how fast and how exactly you get there."]},
+  {"id": "vowels", "intro": ["Hold a vowel, mouth open, for about 2 s at the height shown on the meter: LOW = near your",
+                             "low end, HOME = your home note, HIGH = near your high end. Keep the vowel clean and steady.",
+                             "If the pitch lands in another band the take is flagged and you can redo it (r)."]}
+ ],
+ "steps": [
+  {"id": "rg_glide", "block": "range", "kind": "glide", "repeats": 2, "meter": "live", "text": "Glide “ah”: LOW → HIGH", "sub": "slowly, over about 3 s", "max_s": 7.0},
+  {"id": "rg_low", "block": "range", "kind": "anchor", "anchor": "low", "repeats": 1, "meter": "live", "text": "Hold your LOWEST comfortable note", "sub": "about 2 s, “ah” or hum", "max_s": 4.0},
+  {"id": "rg_high", "block": "range", "kind": "anchor", "anchor": "high", "repeats": 1, "meter": "live", "text": "Hold your HIGHEST comfortable note", "sub": "about 2 s, normal voice, no straining, no falsetto", "max_s": 4.0},
+  {"id": "hm", "block": "home", "kind": "anchor", "anchor": "home", "repeats": 3, "meter": "live", "text": "Hum your HOME note", "sub": "the easiest one, about 2 s", "max_s": 4.0},
+  {"id": "confirm", "block": "home", "kind": "confirm", "text": "Your range", "sub": "Enter = use it    r = redo range and home note"},
+  {"id": "lv", "block": "levels", "kind": "level", "shuffle": true, "repeats": 3, "meter": "hidden",
+   "levels": [{"level": 1, "pos": 0.0, "anchor": "low"}, {"level": 2, "pos": 0.25}, {"level": 3, "pos": 0.5, "anchor": "home"},
+              {"level": 4, "pos": 0.75}, {"level": 5, "pos": 1.0, "anchor": "high"}],
+   "pos_note": "pos is the place on the person's own low..home..high scale: 0 = low, 0.5 = home, 1 = high (piecewise, so an off-centre home note is fine)",
+   "text": "Level {level}", "sub": "{stairs}   from silence, hold ~1.5 s", "max_s": 3.5},
+  {"id": "lf", "block": "feedback", "kind": "level", "feedback": true, "shuffle": true, "repeats": 3, "meter": "target",
+   "levels": [{"level": 1, "pos": 0.0, "anchor": "low"}, {"level": 2, "pos": 0.25}, {"level": 3, "pos": 0.5, "anchor": "home"},
+              {"level": 4, "pos": 0.75}, {"level": 5, "pos": 1.0, "anchor": "high"}],
+   "text": "Level {level}  (meter on)", "sub": "{stairs}   get the dot onto the line, hold till green", "max_s": 4.0},
+  {"id": "vw", "block": "vowels", "kind": "vowel", "shuffle": true, "repeats": 2, "meter": "target",
+   "vowels": [{"vowel": "ee", "hint": "as in “see”"}, {"vowel": "ah", "hint": "as in “father”"}, {"vowel": "oo", "hint": "as in “food”"}],
+   "bands": [{"band": "low", "pos": 0.1, "label": "LOW"}, {"band": "home", "pos": 0.5, "label": "HOME"}, {"band": "high", "pos": 0.9, "label": "HIGH"}],
+   "text": "“{VOWEL}”  at your {LABEL} note", "sub": "{hint}, mouth open, hold ~2 s", "max_s": 4.0}
+ ],
+ "take": {"silence_s": 0.6, "no_sound_s": 4.0},
+ "rules": {
+  "range": {
+   "rule": "top = min(glide top, held high note); bottom = max(glide bottom, held low note); glide top/bottom = the glide_top_pct / glide_bottom_pct percentile of STEADY glide frames (voiced, smoothed pitch moving < glide_max_step_st per hop, so cracks and octave jumps drop out). With no usable glide, the held notes alone. Flag an anchor that lies more than anchor_glide_flag_st beyond the glide edge (falsetto or a strain note): it is not used.",
+   "glide_top_pct": 95, "glide_bottom_pct": 5, "glide_max_step_st": 0.3, "anchor_glide_flag_st": 5.0
+  },
+  "vowel_band_by": "measured",
+  "vowel_band_note": "a vowel take counts in the band whose pos is nearest to its MEASURED pitch on the person's scale, not the band it was prompted for; live, a mismatch is flagged and offered for a redo",
+  "rows": "floor(range_st / (rows_sd_factor * sd)), capped at max_rows. rows_blind: sd = pooled repeat SD of the blind levels (same note from silence, no meter). rows_feedback: sd = RMS error of the final pitch from the target over the feedback takes that reached it",
+  "rows_sd_factor": 4.0, "max_rows": 9, "min_rows": 2,
+  "feedback": {
+   "time_to_target": "ms from voice onset to the end of the first lock_window_ms in which the smoothed pitch stays within ±lock_pitch_st of the target",
+   "final_ms": 500,
+   "final_note": "final accuracy = median smoothed pitch of the last final_ms of the steady part, minus the target (st)",
+   "overshoot": "the furthest the smoothed pitch goes past the target (in the direction of approach from the onset pitch) before the lock, st; 0 if it never passes"
+  },
+  "columns": "per pitch band: 'vowel' (3 columns: oo left, ah centre, ee right) if that band's leave-one-take-out vowel accuracy >= vowel_acc_min, else 'snap' (height picks a screen band, short hums step through the tappable elements in it)",
+  "vowel_acc_min": 0.9,
+  "go": {
+   "uses": "feedback",
+   "why": "the position cursor always shows its dot, so the go/no-go uses the with-meter measurement; the blind rows only say whether you could also jump without looking",
+   "rows_feedback_min": 3, "time_to_target_p90_max_ms": 1500, "never_reached_max_frac": 0.1,
+   "blind_rows_absolute_min": 3
+  },
+  "verdict": "GO if rows_feedback >= rows_feedback_min and time-to-target p90 <= time_to_target_p90_max_ms and never-reached <= never_reached_max_frac, and at least one band uses 'vowel'; SNAP-ONLY if the same but every band snaps; NO-GO otherwise. Reported with it: 'absolute (no look) too' if rows_blind >= blind_rows_absolute_min",
+  "report_only": {"lock_ms_p90_max": 400, "f2_wobble_max_frac_of_ee_oo": 0.25}
+ }
+}

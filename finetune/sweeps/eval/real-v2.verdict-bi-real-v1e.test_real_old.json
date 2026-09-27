@@ -1,0 +1,158 @@
+{
+ "test_real_old.verdict-bi-real-v1e.jsonl": {
+  "n": 308,
+  "groups": {
+   "all": {
+    "n": 308,
+    "acc_gold": 0.841,
+    "acc_acceptable": 0.841
+   },
+   "app:antennapod": {
+    "n": 64,
+    "acc_gold": 0.891,
+    "acc_acceptable": 0.891
+   },
+   "app:tasks": {
+    "n": 74,
+    "acc_gold": 0.743,
+    "acc_acceptable": 0.743
+   },
+   "app:wikipedia": {
+    "n": 170,
+    "acc_gold": 0.865,
+    "acc_acceptable": 0.865
+   },
+   "kind:appearance": {
+    "n": 43,
+    "acc_gold": 0.744,
+    "acc_acceptable": 0.744
+   },
+   "kind:casual": {
+    "n": 40,
+    "acc_gold": 0.875,
+    "acc_acceptable": 0.875
+   },
+   "kind:function": {
+    "n": 52,
+    "acc_gold": 0.885,
+    "acc_acceptable": 0.885
+   },
+   "kind:name": {
+    "n": 68,
+    "acc_gold": 0.956,
+    "acc_acceptable": 0.956
+   },
+   "kind:near_none": {
+    "n": 8,
+    "acc_gold": 0.625,
+    "acc_acceptable": 0.625
+   },
+   "kind:none": {
+    "n": 33,
+    "acc_gold": 0.818,
+    "acc_acceptable": 0.818
+   },
+   "kind:position": {
+    "n": 64,
+    "acc_gold": 0.766,
+    "acc_acceptable": 0.766
+   },
+   "source:deepseek-v4-pro": {
+    "n": 308,
+    "acc_gold": 0.841,
+    "acc_acceptable": 0.841
+   }
+  },
+  "none_recall": 0.818,
+  "false_none_rate": 0.033,
+  "pred_none_share": 0.117,
+  "ece_gold": 0.0721,
+  "ece_acceptable": 0.0721,
+  "thresholds": {
+   "0.5": {
+    "coverage": 0.87,
+    "acc_covered": 0.899,
+    "acc_deferred": 0.45,
+    "tap": {
+     "n": 239,
+     "acc": 0.904
+    },
+    "none": {
+     "n": 29,
+     "acc": 0.862
+    },
+    "gold_none_tapped": 0.152
+   },
+   "0.6": {
+    "coverage": 0.808,
+    "acc_covered": 0.932,
+    "acc_deferred": 0.458,
+    "tap": {
+     "n": 221,
+     "acc": 0.941
+    },
+    "none": {
+     "n": 28,
+     "acc": 0.857
+    },
+    "gold_none_tapped": 0.091
+   },
+   "0.7": {
+    "coverage": 0.744,
+    "acc_covered": 0.948,
+    "acc_deferred": 0.532,
+    "tap": {
+     "n": 206,
+     "acc": 0.956
+    },
+    "none": {
+     "n": 23,
+     "acc": 0.87
+    },
+    "gold_none_tapped": 0.061
+   },
+   "0.8": {
+    "coverage": 0.646,
+    "acc_covered": 0.95,
+    "acc_deferred": 0.642,
+    "tap": {
+     "n": 182,
+     "acc": 0.956
+    },
+    "none": {
+     "n": 17,
+     "acc": 0.882
+    },
+    "gold_none_tapped": 0.03
+   },
+   "0.9": {
+    "coverage": 0.558,
+    "acc_covered": 0.953,
+    "acc_deferred": 0.699,
+    "tap": {
+     "n": 157,
+     "acc": 0.962
+    },
+    "none": {
+     "n": 15,
+     "acc": 0.867
+    },
+    "gold_none_tapped": 0.03
+   },
+   "0.95": {
+    "coverage": 0.445,
+    "acc_covered": 0.971,
+    "acc_deferred": 0.737,
+    "tap": {
+     "n": 130,
+     "acc": 0.969
+    },
+    "none": {
+     "n": 7,
+     "acc": 1.0
+    },
+    "gold_none_tapped": 0.03
+   }
+  }
+ }
+}

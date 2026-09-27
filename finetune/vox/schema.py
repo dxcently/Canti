@@ -80,10 +80,22 @@ DEFAULT_BINDINGS = {
     ("hiss",): "back",
     ("flat",): "long_press",
     ("click", "pop"): "listen_for_phrase",
+    ("click", "click"): "home",
+    ("hiss", "click"): "back",   # same action as a single hiss, so hiss never waits for the click (Android Sequencer)
 }
-# Cursor mode is toggled ONLY by the device button / switch jack, never by a sound (so it is not an action). "pop pop" and
-# "click click" are deliberately unbound so a single pop never has to wait for a second one.
-FREED_SEQUENCES = [("pop", "pop"), ("click", "click")]
+# Cursor mode is toggled ONLY by the device button / switch jack, never by a sound (so it is not an action). "pop pop" is
+# deliberately unbound so a single pop never has to wait for a second one.
+FREED_SEQUENCES = [("pop", "pop")]
+
+# App-only bindings: resolved by the Android app's rule table in every decider mode, never shown to a model. Their
+# actions are not in ACTIONS, so the students' option lists (and every dataset built from them) are unchanged.
+# "forward" has no global action on Android: the app clicks a visible Forward control (or one in the overflow menu).
+APP_ONLY_ACTIONS = {
+    "forward": "go forward",
+}
+APP_ONLY_BINDINGS = {
+    ("click", "hiss"): "forward",
+}
 
 # Foreground apps. Display name is what the Android app would resolve from the package.
 APPS = {

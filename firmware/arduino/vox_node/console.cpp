@@ -2,12 +2,15 @@
 #include "ble_link.h"
 #include "config.h"
 #include "controls.h"
+#include "ext.h"
 #include "mic.h"
 #include "out.h"
 #include "power.h"
 #include "status_led.h"
 #include "test_player.h"
 #include "vox_state.h"
+#include <hardware/dma.h>
+#include <hardware/pio.h>
 
 static char s_line[160];
 static size_t s_len;
@@ -31,7 +34,12 @@ void console_help() {
         "  pad <bytes>              send a state message padded with JSON whitespace (fragmentation test)",
         "  test on|off              2 presses of the button send the next canned sound",
         "  mic level|stream|off     mic diagnostics (stream = binary frames; use tools/pico_stream.py)",
-        "  mic gain <0|6|12|18|24>  stream gain in dB",
+        "  mic gain <0|6|12|18|24>  stream gain in dB (also the extractor's input level)",
+        "  ext on|off               the on-device extractor (core 1): mic sounds -> feature messages",
+        "  ext stats [reset]        cycles per hop / per sound end, core-1 load, ring and queue counters",
+        "  ext features on|off      send the fp1 `features` with each sound (INFO fp_version follows)",
+        "  ext feed <n> [16000|48000]  run n int16 LE samples sent next (binary) through the extractor instead",
+        "                           of the mic; prints `ext event {...}` lines (tools/ext_feed.py)",
         "  ble                      link details",
         "  ble mtu <23..517>        largest MTU accepted on the NEXT connection",
         "  ble disconnect | ble forget   drop the link | erase all stored bonds",
@@ -66,6 +74,21 @@ void print_status() {
                (unsigned long)b.sent_msgs, (unsigned long)b.sent_frags, (unsigned long)b.dropped_msgs, b.queued,
                b.max_mtu);
     mic_status();
+    ext_status();
+    // Claimed PIO state machines ('C') and DMA channels ('D'), and the free heap: a sleep/wake cycle must leave these
+    // unchanged (a failed radio bring-up after a wake keeps the state machine and DMA channels it claimed).
+    char pio[3 * (NUM_PIO_STATE_MACHINES + 6)], dma[NUM_DMA_CHANNELS + 1];
+    int k = 0;
+    for (uint p = 0; p < NUM_PIOS; p++) {
+        k += snprintf(pio + k, sizeof(pio) - k, "%s%u:", p ? " " : "", p);
+        for (uint s = 0; s < NUM_PIO_STATE_MACHINES; s++)
+            k += snprintf(pio + k, sizeof(pio) - k, "%c", pio_sm_is_claimed(pio_get_instance(p), s) ? 'C' : '.');
+    }
+    for (uint c = 0; c < NUM_DMA_CHANNELS; c++) dma[c] = dma_channel_is_claimed(c) ? 'D' : '.';
+    dma[NUM_DMA_CHANNELS] = 0;
+    out_printf("hw: PIO SMs %s, DMA %s, free heap %d bytes", pio, dma, rp2040.getFreeHeap());
+    out_printf("console: %lu bytes in %lu line(s) dropped while a terminal was open but not reading",
+               (unsigned long)out_dropped_bytes(), (unsigned long)out_dropped_lines());
 }
 
 static int split(char *s, char **argv, int max) {
@@ -156,6 +179,26 @@ static void run(char *line) {
             mic_set_gain_db(atoi(argv[2]));
             out_printf("mic stream gain %d dB", mic_gain_db());
         } else mic_status();
+    } else if (!strcmp(c, "ext")) {
+        if (argc == 2 && !strcmp(argv[1], "on")) {
+            ext_set_enabled(true);
+            out_line("ext: on");
+        } else if (argc == 2 && !strcmp(argv[1], "off")) {
+            ext_set_enabled(false);
+            out_line("ext: off (mic sounds are not analysed)");
+        } else if (argc >= 2 && !strcmp(argv[1], "stats")) {
+            ext_stats(argc == 3 && !strcmp(argv[2], "reset"));
+        } else if (argc == 3 && !strcmp(argv[1], "features") && (!strcmp(argv[2], "on") || !strcmp(argv[2], "off"))) {
+            ext_set_features(!strcmp(argv[2], "on"));
+            out_printf("ext: features %s", ext_features() ? "on (fp1)" : "off");
+        } else if ((argc == 3 || argc == 4) && !strcmp(argv[1], "feed") && is_number(argv[2]) &&
+                   (argc == 3 || is_number(argv[3]))) {
+            int rate = argc == 4 ? atoi(argv[3]) : 16000;
+            if (g_streaming) out_line("err: `mic off` first (the serial port carries the mic stream)");
+            else if (!ext_feed_begin((uint32_t)atol(argv[2]), rate)) out_line("err: ext feed <n> [16000|48000]");
+        } else {
+            out_line("err: ext on|off | ext stats [reset] | ext features on|off | ext feed <n> [16000|48000]");
+        }
     } else if (!strcmp(c, "ble")) {
         if (argc == 1) {
             print_status();
@@ -196,6 +239,27 @@ static void run(char *line) {
 }
 
 void console_poll() {
+    // `ext feed`: the next bytes are samples, not text; take only what the extractor's ring has room for (the rest
+    // waits in the USB buffer, which holds the host back), and at most FEED_BYTES_PER_POLL per call. Without that limit
+    // a host sending about as fast as core 1 consumes kept the ring from ever filling, so this loop never returned:
+    // loop() stopped (no ext_poll: the event queue overflowed; no ble_poll) and a feed over 8 s tripped the watchdog
+    // (Pico 2 W, 2026-09-26, extractor/vectors/long_stream_rise).
+    static const size_t FEED_BYTES_PER_POLL = 4096;
+    size_t budget = FEED_BYTES_PER_POLL;
+    while (ext_feeding()) {
+        static uint8_t buf[256];
+        size_t room = ext_feed_room();
+        int avail = Serial.available();
+        if (!room || avail <= 0 || !budget) return;   // still feeding: the bytes that follow are samples, not text
+        size_t k = (size_t)avail;
+        if (k > room) k = room;
+        if (k > budget) k = budget;
+        if (k > sizeof(buf)) k = sizeof(buf);
+        k = Serial.readBytes(buf, k);
+        if (!k) return;
+        budget -= k;
+        ext_feed_bytes(buf, k);
+    }
     while (Serial.available()) {
         int ch = Serial.read();
         if (ch < 0) break;
@@ -205,6 +269,7 @@ void console_poll() {
                 if (!g_streaming) out_printf("> %s", s_line);
                 run(s_line);
                 s_len = 0;
+                if (ext_feeding()) return;   // the bytes after `ext feed ...` are samples
             }
         } else if (s_len < sizeof(s_line) - 1) {
             s_line[s_len++] = (char)ch;

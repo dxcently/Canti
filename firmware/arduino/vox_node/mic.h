@@ -1,5 +1,5 @@
 // INMP441 I2S microphone: 16 kHz, 32-bit slots (64 BCLK per frame), mono from the LEFT slot (L/R pin to GND).
-// Capture runs all the time; there is no on-device extractor yet.
+// Capture runs all the time while awake and feeds the on-device extractor (ext.h) with the `mic stream` samples.
 //   presence   "inmp441" once the left slot carries a changing signal, "none" if it is all zeros or constant
 //              (GP20 has a pull-down, so an unplugged mic reads as exact zeros). Reported in INFO.
 //   mic level  ~10x/s: RMS, peak and DC in dBFS (of the mic's 24-bit full scale), plus wiring diagnostics

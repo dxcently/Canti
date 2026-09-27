@@ -24,7 +24,7 @@ from pathlib import Path
 from . import wordings as W
 from .schema import (
     ACTIONS, APPS, CLARITY, CONTOURS, CURSOR_ACTIONS, DEFAULT_BINDINGS, DISCRETE,
-    DURATION, EXCURSION, FREED_SEQUENCES, LOUDNESS, PHRASES, APP_SCREENS, SCREEN_SCROLL, screen_text,
+    DURATION, EXCURSION, FREED_SEQUENCES, APP_ONLY_BINDINGS, LOUDNESS, PHRASES, APP_SCREENS, SCREEN_SCROLL, screen_text,
     SCREEN_NEXT, SCREEN_PREV, PAUSE_WORDS, PLAY_WORDS,
 )
 
@@ -43,7 +43,7 @@ POLICY = (
     "'pause' when already paused or 'play' when already playing means do nothing. "
     "Never change an explicit gesture or rule because of the screen."
 )
-DEFAULTS_TEXT = "defaults: rise=swipe up, fall=swipe down, arch=swipe right, dip=swipe left, pop=tap, hiss=go back, long flat hum=long-press, click pop=listen for a phrase"
+DEFAULTS_TEXT = "defaults: rise=swipe up, fall=swipe down, arch=swipe right, dip=swipe left, pop=tap, hiss=go back, long flat hum=long-press, click pop=listen for a phrase, click click=go home, hiss click=go back"
 
 
 HELDOUT_APPS = {"com.netflix.mediaclient", "com.pinterest", "com.duolingo", "com.google.android.apps.docs"}
@@ -313,7 +313,7 @@ class Generator:
                     seq = self.random_seq()
             elif kind == "unbound":
                 seq = r.choice(FREED_SEQUENCES) if r.random() < 0.3 else self.random_seq()
-                while seq in DEFAULT_BINDINGS:
+                while seq in DEFAULT_BINDINGS or seq in APP_ONLY_BINDINGS:  # app-only: resolved by the app, never "none"
                     seq = self.random_seq()
             else:
                 seq = r.choice(list(DEFAULT_BINDINGS))

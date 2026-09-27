@@ -1,13 +1,15 @@
 // VOX node: the Pico 2 W side of VOX (android/PROTOCOL.md, "BLE GATT link (v1)").
 // One button + blue Bluetooth LED + BLE feature messages + sleep/wake + pairing window + canned test sounds +
-// INMP441 mic diagnostics.
-// No on-device extractor yet: sounds come only from the canned set (serial `send`, or the button test trigger).
-// Build with tools/build.sh (it regenerates test_sounds.h from the Python extractor first).
+// INMP441 mic diagnostics + the on-device feature extractor (ext.h: firmware/extract on core 1; each sound goes out
+// as a feature message with its fp1 `features`).
+// Build with tools/build.sh (it regenerates test_sounds.h from the Python extractor first, and compiles
+// firmware/extract as a library).
 // Board: rp2040:rp2040:rpipico2w with ipbtstack=ipv4btcble (Bluetooth on).
 #include "ble_link.h"
 #include "config.h"
 #include "console.h"
 #include "controls.h"
+#include "ext.h"
 #include "mic.h"
 #include "out.h"
 #include "power.h"
@@ -17,10 +19,14 @@
 
 static void update_info() {
     char info[200];
-    snprintf(info, sizeof(info), "{\"v\":1,\"fw\":\"%s\",\"mic\":\"%s\",\"fp_version\":null%s}", VOX_FW_VERSION,
-             mic_present() ? "inmp441" : "none", VOX_INSECURE ? ",\"insecure\":true" : "");
+    const char *fpv = ext_fp_version();   // "fp1" while the extractor sends features, else null
+    snprintf(info, sizeof(info), "{\"v\":1,\"fw\":\"%s\",\"mic\":\"%s\",\"fp_version\":%s%s%s%s}", VOX_FW_VERSION,
+             mic_present() ? "inmp441" : "none", fpv ? "\"" : "null", fpv ? fpv : "", fpv ? "\"" : "",
+             VOX_INSECURE ? ",\"insecure\":true" : "");
     ble_set_info(info);
 }
+
+void info_changed() { update_info(); }
 
 void mic_changed(bool present) {
     (void)present;
@@ -202,6 +208,7 @@ void setup() {
     Serial.begin(115200);
     led_begin();
     controls_begin();
+    ext_begin();          // the extractor's core-0 side (core 1 runs setup1/loop1 in ext.cpp)
     mic_begin();          // ~0.3 s: presence check for INFO
     update_info();
     ble_begin();
@@ -223,6 +230,7 @@ void loop() {
         player_poll(now);
         mic_poll(now);
     }
+    ext_poll(now);        // finished sounds from core 1 -> BLE
     ble_poll();
     power_poll(now);
     led_update(now);

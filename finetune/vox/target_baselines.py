@@ -7,7 +7,7 @@
          score fitted on validation.
 
 Writes preds/<data name>/<split>.<baseline>.jsonl in the usual {"id", "probs"} format; score with vox.evaluate.
-Usage: python -m vox.target_baselines data/targets-v1 [--device cpu]
+Usage: python -m vox.target_baselines data/targets-v1 [--device cpu] [--splits a,b] [--val-data data/targets-v2]
 """
 
 from __future__ import annotations
@@ -104,16 +104,19 @@ def main() -> None:
     p.add_argument("data", type=Path)
     p.add_argument("--device", default="cpu")
     p.add_argument("--baselines", default="fuzzy,e5")
+    p.add_argument("--splits", default="test_iid,test_unseen_phrasing,test_unseen_apps")
+    p.add_argument("--val-data", type=Path, default=None, help="dataset dir whose validation fits the none score "
+                   "(default: DATA itself; e.g. data/targets-v2 when scoring data/real-targets-v1)")
     a = p.parse_args()
-    load = lambda s: [json.loads(line) for line in (a.data / f"{s}.jsonl").open()]  # noqa: E731
-    val = load("validation")
+    load = lambda s, d=None: [json.loads(line) for line in ((d or a.data) / f"{s}.jsonl").open()]  # noqa: E731
+    val = load("validation", a.val_data)
     out_dir = Path("preds") / a.data.name
     out_dir.mkdir(parents=True, exist_ok=True)
     for name in a.baselines.split(","):
         fn = fuzzy_scores if name == "fuzzy" else E5(a.device).scores
         temp = 0.15 if name == "fuzzy" else 0.02
         none = fit_none(val, [fn(r) for r in val])
-        for split in ("test_iid", "test_unseen_phrasing", "test_unseen_apps"):
+        for split in a.splits.split(","):
             with (out_dir / f"{split}.{name}.jsonl").open("w") as f:
                 for r in load(split):
                     f.write(json.dumps({"id": r["id"], "probs": [round(x, 6) for x in softmax(fn(r) + [none], temp)]}) + "\n")

@@ -1,5 +1,6 @@
 package ai.vox.companion
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Process
 import android.os.SystemClock
@@ -22,6 +23,27 @@ class MainActivity : FlutterActivity() {
         createdAt = SystemClock.elapsedRealtime()
         EventLog.initIfNeeded(this)
         super.onCreate(savedInstanceState)
+        bridge?.route(intent, running = false)   // the pairing screen, from the badge menu or the source chooser
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        bridge?.route(intent, running = true)
+    }
+
+    // [phone-mic] Visible: the mic's foreground service may start now (Android 14 refuses it from the background).
+    // First start: ask once for the notification permission (Canti's status notification; never asked again).
+    override fun onResume() {
+        super.onResume()
+        ai.vox.companion.audio.PhoneMicSource.onAppVisible()
+        ai.vox.companion.audio.NotificationSetup.askOnce(this)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == ai.vox.companion.audio.NotificationSetup.REQ) ai.vox.companion.audio.CantiNotification.repost()   // [phone-mic]
+        bridge?.onPermissionResult(requestCode)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

@@ -26,6 +26,10 @@ class DeviceLinkTest {
         override fun later(ms: Long, r: () -> Unit): () -> Unit { val x = Timer(t + ms, r); timers += x; return { timers.remove(x) } }
         override fun now() = t
         override fun log(ev: String, vararg fields: Pair<String, Any?>) { logs += ev to fields.toMap() }
+        // the persisted "user paused the device" flag (SharedPreferences in the app)
+        var userPaused = false
+        override fun saveUserPaused(paused: Boolean) { userPaused = paused }
+        override fun loadUserPaused() = userPaused
 
         fun advance(ms: Long) {
             val end = t + ms
@@ -255,6 +259,101 @@ class DeviceLinkTest {
         assertTrue("the app must not arm the device by itself", io.writes.isEmpty())
     }
 
+    // --- why the device is paused: tap-to-wake -----------------------------------------------------------------------------
+
+    private fun causes(io: FakeLink) = io.logs.filter { it.first == "device_pause" }.map { it.second["cause"] }
+
+    /** Out of range / a service restart: the device paused itself; one tap (the arm command) wakes it. */
+    @Test fun aLinkDropPauseIsWakeableAndOneArmCommandWakesIt() {
+        val (io, d) = up(armed = true)
+        assertNull(d.pauseCause); assertFalse(d.wakeable)
+        d.lost("disconnected (status 8)")
+        d.connected()
+        d.message(state(armed = false, id = 1))                                        // state-on-connect: paused
+        assertEquals(DeviceLink.PauseCause.LINK_DROP, d.pauseCause)
+        assertTrue("wakeable as soon as its state-on-connect message is in (ready may come after it)", d.wakeable)
+        d.ready()
+        assertTrue(d.wakeable)
+        assertEquals("awake – paused", d.presence())                                   // the status screen's word is unchanged
+        assertEquals(listOf<Any?>("link-drop"), causes(io))
+        assertTrue("nothing is written until the user taps", io.writes.isEmpty())
+        val st = d.status()
+        assertEquals("link-drop", st.getString("pause_cause")); assertTrue(st.getBoolean("wakeable"))
+        // The tap: {"armed": true}, confirmed by the device's next state message.
+        val out = d.run(DeviceLink.Command(armed = true))
+        assertEquals("""{"v":1,"armed":true}""", io.writes.single().toString())
+        d.message(state(armed = true, id = 2))
+        assertEquals("confirmed", out.single().getString("result"))
+        assertNull(d.pauseCause); assertFalse(d.wakeable); assertEquals("listening", d.presence())
+        assertEquals(listOf<Any?>("link-drop", "none"), causes(io))
+        assertFalse(io.userPaused)
+    }
+
+    /** Not wakeable while the link is down, while asleep, or when the device doesn't know it (no message yet). */
+    @Test fun onlyAConnectedAwakeDeviceIsWakeable() {
+        val (_, d) = up(armed = true)
+        d.lost("status 8"); d.connected(); d.ready(); d.message(state(armed = false))
+        assertTrue(d.wakeable)
+        d.lost("status 8")
+        assertEquals("the link is down again: the tap could not reach it", false, d.wakeable)
+        assertEquals(DeviceLink.PauseCause.LINK_DROP, d.pauseCause)                   // kept for the next link
+        d.connected()
+        assertFalse("connected, but its state-on-connect message is not in yet", d.wakeable)
+        d.message(state(armed = false, sleeping = true))
+        assertNull("going to sleep clears it (5 presses wake it armed)", d.pauseCause)
+        assertFalse(d.wakeable)
+        val fresh = DeviceLink(FakeLink())
+        assertFalse(fresh.wakeable); assertNull(fresh.pauseCause)
+    }
+
+    /** A pause the user chose (the app's Pause, the device's button) is never tap-to-wake, even after a drop. */
+    @Test fun aUsersPauseStaysAUsersPauseAcrossADrop() {
+        val (io, d) = up(armed = true)
+        d.run(DeviceLink.Command(armed = false))                                       // the status screen's Pause
+        d.message(state(armed = false, id = 2))
+        assertEquals(DeviceLink.PauseCause.USER, d.pauseCause); assertFalse(d.wakeable)
+        assertTrue(io.userPaused)
+        d.lost("status 8"); d.connected(); d.ready()
+        d.message(state(armed = false, id = 1))
+        assertEquals(DeviceLink.PauseCause.USER, d.pauseCause); assertFalse(d.wakeable)
+        // The device's own button on a live link (armed true -> false) is the user's too.
+        val (io2, d2) = up(armed = true)
+        d2.message(state(armed = false, id = 5))
+        assertEquals(DeviceLink.PauseCause.USER, d2.pauseCause); assertTrue(io2.userPaused)
+        // Resume clears it.
+        d2.message(state(armed = true, id = 6))
+        assertNull(d2.pauseCause); assertFalse(io2.userPaused)
+    }
+
+    /** Pause pressed while it already sat paused after a drop: from then on it is the user's pause. */
+    @Test fun pauseCommandOnALinkDropPauseMakesItTheUsers() {
+        val (_, d) = up(armed = true)
+        d.lost("status 8"); d.connected(); d.ready(); d.message(state(armed = false))
+        assertTrue(d.wakeable)
+        val out = d.run(DeviceLink.Command(armed = false))
+        d.message(state(armed = false, id = 2))
+        assertEquals("confirmed", out.single().getString("result"))
+        assertEquals(DeviceLink.PauseCause.USER, d.pauseCause); assertFalse(d.wakeable)
+        // A mode command's reply while paused by a drop keeps the cause.
+        val (_, d2) = up(armed = true)
+        d2.lost("status 8"); d2.connected(); d2.ready(); d2.message(state(armed = false))
+        d2.run(DeviceLink.Command(mode = "cursor")); d2.message(state(armed = false, mode = "cursor", id = 2))
+        assertEquals(DeviceLink.PauseCause.LINK_DROP, d2.pauseCause); assertTrue(d2.wakeable)
+    }
+
+    /** A service restart forgets everything in memory, but not that the user paused the device. */
+    @Test fun aUsersPauseSurvivesAServiceRestart() {
+        val io = FakeLink().apply { userPaused = true }                                // saved by the previous service
+        val d = DeviceLink(io)
+        assertEquals(DeviceLink.PauseCause.USER, d.pauseCause)
+        d.connected(); d.ready(); d.message(state(armed = false))
+        assertFalse(d.wakeable); assertEquals(DeviceLink.PauseCause.USER, d.pauseCause)
+        // Without that flag the same message is a link-drop pause: the restart dropped the link.
+        val d2 = DeviceLink(FakeLink())
+        d2.connected(); d2.ready(); d2.message(state(armed = false))
+        assertEquals(DeviceLink.PauseCause.LINK_DROP, d2.pauseCause); assertTrue(d2.wakeable)
+    }
+
     // --- pairing --------------------------------------------------------------------------------------------------------
 
     @Test fun pairingFailuresEscalateToAHintThatSaysWhatToDo() {
@@ -270,5 +369,86 @@ class DeviceLinkTest {
         d.connected(); d.ready()                                                      // paired again
         assertNull(d.hint); assertEquals(0, d.authFailures.count)
         assertTrue(io.writes.isEmpty())
+    }
+
+    // --- the user's mode (UserMode.kt): what a wake restores ------------------------------------------------------------
+
+    private class ModeStore(var saved: String? = null) : UserMode.Store {
+        val logs = mutableListOf<Map<String, Any?>>()
+        override fun load() = saved
+        override fun save(mode: String) { saved = mode }
+        override fun log(ev: String, vararg fields: Pair<String, Any?>) { logs += fields.toMap() + ("ev" to ev) }
+    }
+
+    @Test fun theUsersModeDefaultsToGesture() {
+        assertEquals("gesture", UserMode(ModeStore()).mode)
+        assertEquals("a stored value that is not a mode", "gesture", UserMode(ModeStore("listening")).mode)
+        assertEquals("cursor", UserMode(ModeStore("cursor")).mode)
+    }
+
+    /** Saved from the badge menu, the notification and the status screen only; debug ops, tools, the wake itself never. */
+    @Test fun onlyTheUsersOwnControlsSaveTheMode() {
+        for (by in listOf("badge", "notification", "status-screen")) {
+            val st = ModeStore(); val u = UserMode(st)
+            assertTrue(by, u.chose("cursor", by))
+            assertEquals(by, "cursor", st.saved); assertEquals("cursor", u.mode)
+            assertEquals(mapOf("mode" to "cursor", "by" to by, "result" to "saved", "ev" to "user_mode"), st.logs.single())
+        }
+        val st = ModeStore("cursor"); val u = UserMode(st)
+        for (by in listOf("op", "wake", "test", "console", "device", "app")) assertFalse(by, u.chose("gesture", by))
+        assertFalse("not a mode", u.chose("listening", "badge"))
+        assertEquals("cursor", st.saved); assertEquals("cursor", u.mode)
+        assertTrue(st.logs.all { it["result"] == "ignored" })
+        assertFalse("the same mode again is not a save", u.chose("cursor", "badge"))
+        assertEquals("unchanged", st.logs.last()["result"])
+    }
+
+    /** The Pico's button is the user's own control: its state message says "by":"button", and a wake then keeps that mode. */
+    @Test fun aModeChosenOnThePicosButtonIsTheUsersMode() {
+        val button = FeatureMessage.parse(JSONObject("""{"v":1,"id":7,"mode":"cursor","armed":true,"by":"button","sounds":[],"sequence":[]}"""))
+        assertEquals("button", button.by)
+        assertEquals("round trip", "button", FeatureMessage.parse(button.toJson()).by)
+        val console = FeatureMessage.parse(JSONObject("""{"v":1,"id":8,"mode":"gesture","armed":true,"sounds":[],"sequence":[]}"""))
+        assertNull("untagged (console, app command)", console.by)
+        val st = ModeStore(); val u = UserMode(st)
+        assertTrue(u.chose(button.mode, button.by!!))                                   // as VoxService does for a tagged state
+        assertEquals("cursor", st.saved)
+        assertEquals("the wake keeps the button's mode", DeviceLink.Command(armed = true), u.wakeCommand("cursor"))
+        assertEquals(DeviceLink.Command(armed = true, mode = "cursor"), u.wakeCommand("gesture"))
+    }
+
+    /** A test tool left the Pico in cursor mode; the user's mode is gesture: the wake is one write with both. */
+    @Test fun aWakeRestoresTheUsersModeInOneCommand() {
+        val u = UserMode(ModeStore())                                                   // never chosen: gesture
+        val (io, d) = up(armed = true)
+        d.lost("disconnected (status 8)"); d.connected()
+        d.message(state(armed = false, mode = "cursor", id = 1)); d.ready()             // state-on-connect: paused, cursor
+        assertTrue(d.wakeable)
+        val out = d.run(u.wakeCommand(d.mode))
+        assertEquals(mapOf("v" to 1, "armed" to true, "mode" to "gesture"), map(io.writes.single()))
+        d.message(state(armed = true, mode = "gesture", id = 2))
+        assertEquals("confirmed", out.single().getString("result")); assertTrue(out.single().getBoolean("applied"))
+        assertEquals("arm + mode gesture", out.single().getString("cmd"))
+        assertEquals("gesture", d.mode); assertFalse(d.wakeable); assertEquals("listening", d.presence())
+        assertEquals("one confirmation for the whole wake", 1, io.cmdLogs("confirmed").size)
+        // Already in the user's mode: the plain arm command; the device's mode unknown: say it.
+        assertEquals(DeviceLink.Command(armed = true), UserMode(ModeStore("cursor")).wakeCommand("cursor"))
+        assertEquals(DeviceLink.Command(armed = true, mode = "cursor"), UserMode(ModeStore("cursor")).wakeCommand(null))
+    }
+
+    /** The `device` debug op (or the Pico's console) switching the mode goes straight to the link: the user's mode stays. */
+    @Test fun aDebugOpModeChangeDoesNotOverwriteTheUsersMode() {
+        val st = ModeStore(); val u = UserMode(st)
+        u.chose("cursor", "badge")
+        val (io, d) = up(armed = true)
+        val r = d.run(DeviceLink.Command(mode = "gesture"))                           // the op: bleOrThrow().command(...)
+        d.message(state(armed = true, mode = "gesture", id = 2))
+        assertEquals("confirmed", r.single().getString("result"))
+        assertFalse(u.chose("gesture", "op"))
+        d.message(state(armed = true, mode = "gesture", id = 3))                        // a console / button change: a plain message
+        assertEquals("cursor", st.saved); assertEquals("cursor", UserMode(st).mode)     // and after a service restart
+        d.lost("disconnected (status 8)"); d.connected(); d.message(state(armed = false, mode = "gesture", id = 1)); d.ready()
+        d.run(u.wakeCommand(d.mode))
+        assertEquals(mapOf("v" to 1, "armed" to true, "mode" to "cursor"), map(io.writes.last()))
     }
 }

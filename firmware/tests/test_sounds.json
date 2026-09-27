@@ -4,7 +4,7 @@
  "note": "Lines produced by running the Python extractor on its SYNTHETIC test clips. Canned, for link tests.",
  "digest": "851a102482a68eb9",
  "vocab_digest": "139d86bd72e13ae5",
- "extractor_source_sha256": "4e039d79a043db3b",
+ "extractor_source_sha256": "fc94951efe059b20",
  "stale_vectors": [],
  "sounds": [
   {

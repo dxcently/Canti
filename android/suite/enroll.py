@@ -2,7 +2,8 @@
 
 Enrollment is recorded on the PC for now. Each example is one JSON line:
     {"kind": "custom" | "ignore" | "gesture", "name": "meow", "fp": [...], "fp_version": "fp1", "pitch16": [...16 or []]}
-Examples go to the app's *active* profile (the profile's "name", default "default").
+Examples go to the app's *active* profile (the profile's "name", default "default"), in the store of the current
+sound source; `--source pico|phone|usb` picks another (one store per mic source, PROTOCOL.md "Gesture training").
 
     python3 suite/enroll.py push examples.jsonl [more.jsonl ...]   # enroll_add, one call per class
     python3 suite/enroll.py list                                   # classes, example counts, thresholds
@@ -38,10 +39,10 @@ def read_examples(paths: list[str]) -> dict[tuple[str, str], list[dict]]:
     return classes
 
 
-def push(vox: Vox, classes: dict[tuple[str, str], list[dict]]) -> dict:
+def push(vox: Vox, classes: dict[tuple[str, str], list[dict]], src: dict) -> dict:
     reply: dict = {}
     for (kind, name), examples in classes.items():
-        reply = vox.control("enroll_add", kind=kind, name=name, examples=examples)
+        reply = vox.control("enroll_add", kind=kind, name=name, examples=examples, **src)
         if not reply.get("ok"):
             raise SystemExit(f"{kind} '{name}': {reply.get('error')}")
         print(f"enrolled {kind} '{name}': +{len(examples)}")
@@ -50,6 +51,7 @@ def push(vox: Vox, classes: dict[tuple[str, str], list[dict]]) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--source", choices=["pico", "phone", "usb"], help="the mic source's store (default: the current one)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("push").add_argument("files", nargs="+")
     sub.add_parser("list")
@@ -58,15 +60,16 @@ def main() -> None:
     d.add_argument("--index", type=int)
     sub.add_parser("clear")
     a = ap.parse_args()
+    src = {"source": a.source} if a.source else {}
     vox = Vox()
     if a.cmd == "push":
-        r = push(vox, read_examples(a.files))
+        r = push(vox, read_examples(a.files), src)
     elif a.cmd == "list":
-        r = vox.control("enroll_list")
+        r = vox.control("enroll_list", **src)
     elif a.cmd == "delete":
-        r = vox.control("enroll_delete", name=a.name, **({"index": a.index} if a.index is not None else {}))
+        r = vox.control("enroll_delete", name=a.name, **src, **({"index": a.index} if a.index is not None else {}))
     else:
-        r = vox.control("enroll_delete", all=True)
+        r = vox.control("enroll_delete", all=True, **src)
     print(json.dumps(r.get("enrollment", r), indent=1))
     vox.close()
 

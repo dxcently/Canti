@@ -43,6 +43,8 @@ DEFAULT_BINDINGS = {
     ("hiss",): "back",
     ("flat",): "long_press",
     ("click", "pop"): "listen_for_phrase",
+    ("click", "click"): "home",
+    ("hiss", "click"): "back",
 }
 
 

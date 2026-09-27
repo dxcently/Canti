@@ -1,0 +1,125 @@
+{
+ "set": "tv2-phrasing",
+ "gold": "data/targets-v2/test_unseen_phrasing.jsonl",
+ "rows_in_file": 2000,
+ "rows_scored": 480,
+ "sample": [
+  "per_kind",
+  80
+ ],
+ "model": "deepseek-v4.1-flash",
+ "endpoint": "https://ollama.com",
+ "kinds_in_sample": {
+  "item": 80,
+  "name": 80,
+  "name_pos": 80,
+  "none": 80,
+  "position": 80,
+  "unlabeled": 80
+ },
+ "models": {
+  "ollama-dsv41flash": {
+   "n": 466,
+   "coverage": 0.9708333333333333,
+   "accuracy": 0.8905579399141631,
+   "nll": 2.2679969049018625,
+   "ece": 0.1094420600858369,
+   "false_trigger_rate": 0.2948717948717949,
+   "missed_command_rate": 0.03350515463917526,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.853,
+    "name_pos": 0.868,
+    "none": 0.705,
+    "position": 0.91,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 397,
+   "latency_ms_p95": 856,
+   "accuracy_population_weighted": 0.8432
+  },
+  "ollama-dsv41flash+jevlike-fallback@2500ms": {
+   "n": 480,
+   "coverage": 1.0,
+   "accuracy": 0.8791666666666667,
+   "nll": 2.3961518744520265,
+   "ece": 0.12055794791666674,
+   "false_trigger_rate": 0.2875,
+   "missed_command_rate": 0.0425,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.812,
+    "name_pos": 0.863,
+    "none": 0.713,
+    "position": 0.887,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 395,
+   "latency_ms_p95": 856,
+   "accuracy_population_weighted": 0.8207
+  },
+  "jevlike": {
+   "n": 480,
+   "coverage": 1.0,
+   "accuracy": 0.5916666666666667,
+   "nll": 4.1929328833081785,
+   "ece": 0.35919474583333333,
+   "false_trigger_rate": 0.0875,
+   "missed_command_rate": 0.2625,
+   "by_kind": {
+    "item": 0.15,
+    "name": 0.4,
+    "name_pos": 0.588,
+    "none": 0.912,
+    "position": 0.562,
+    "unlabeled": 0.938
+   },
+   "latency_ms_p50": 9.09,
+   "latency_ms_p95": 10.42,
+   "accuracy_population_weighted": 0.545
+  },
+  "verdict": {
+   "n": 480,
+   "coverage": 1.0,
+   "accuracy": 0.6479166666666667,
+   "nll": 4.923705971493362,
+   "ece": 0.32520149583333335,
+   "false_trigger_rate": 0.15,
+   "missed_command_rate": 0.2,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.388,
+    "name_pos": 0.537,
+    "none": 0.85,
+    "position": 0.475,
+    "unlabeled": 0.637
+   },
+   "accuracy_population_weighted": 0.5368
+  }
+ },
+ "cloud_calls": {
+  "n": 480,
+  "ok": 466,
+  "error_rate": 0.0292,
+  "errors": {
+   "invalid choice": 8,
+   "timeout": 6
+  },
+  "latency_ms_p50": 397,
+  "latency_ms_p95": 856,
+  "latency_ms_max": 20037,
+  "server_ms_p50": 204,
+  "budget_ms": 2500,
+  "within_budget_rate": 0.9708,
+  "fallback_rate": 0.0292,
+  "tokens_prompt_total": 105810,
+  "tokens_eval_total": 1690,
+  "tokens_prompt_mean": 223.2,
+  "tokens_eval_mean": 3.6,
+  "think": false,
+  "parse": {
+   "json/bare (run 1)": 440,
+   "echo": 26
+  }
+ }
+}

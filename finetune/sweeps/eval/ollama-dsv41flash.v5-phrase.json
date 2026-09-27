@@ -1,0 +1,103 @@
+{
+ "set": "v5-phrase",
+ "gold": "data/v5/test_unseen_phrasing.jsonl",
+ "rows_in_file": 2000,
+ "rows_scored": 314,
+ "sample": [
+  "kinds",
+  [
+   "phrase",
+   "screen_phrase"
+  ]
+ ],
+ "model": "deepseek-v4.1-flash",
+ "endpoint": "https://ollama.com",
+ "kinds_in_sample": {
+  "screen_phrase": 150,
+  "phrase": 164
+ },
+ "models": {
+  "ollama-dsv41flash": {
+   "n": 310,
+   "coverage": 0.9872611464968153,
+   "accuracy": 0.8,
+   "nll": 4.144653167389286,
+   "ece": 0.19999999999999996,
+   "false_trigger_rate": 0.3409090909090909,
+   "missed_command_rate": 0.022556390977443608,
+   "by_kind": {
+    "phrase": 0.945,
+    "screen_phrase": 0.639
+   },
+   "latency_ms_p50": 805,
+   "latency_ms_p95": 1165
+  },
+  "ollama-dsv41flash+jevlike-fallback@1500ms": {
+   "n": 314,
+   "coverage": 1.0,
+   "accuracy": 0.8057324840764332,
+   "nll": 4.025857458770313,
+   "ece": 0.19426743312101913,
+   "false_trigger_rate": 0.3409090909090909,
+   "missed_command_rate": 0.018518518518518517,
+   "by_kind": {
+    "phrase": 0.945,
+    "screen_phrase": 0.653
+   },
+   "latency_ms_p50": 800,
+   "latency_ms_p95": 1138
+  },
+  "jevlike": {
+   "n": 314,
+   "coverage": 1.0,
+   "accuracy": 0.9777070063694268,
+   "nll": 0.11963351247022054,
+   "ece": 0.01929865923566874,
+   "false_trigger_rate": 0.045454545454545456,
+   "missed_command_rate": 0.0,
+   "by_kind": {
+    "phrase": 0.988,
+    "screen_phrase": 0.967
+   },
+   "latency_ms_p50": 37.04,
+   "latency_ms_p95": 78.03
+  },
+  "verdict": {
+   "n": 314,
+   "coverage": 1.0,
+   "accuracy": 0.910828025477707,
+   "nll": 1.4981480400618135,
+   "ece": 0.0873995,
+   "false_trigger_rate": 0.0,
+   "missed_command_rate": 0.011111111111111112,
+   "by_kind": {
+    "phrase": 0.939,
+    "screen_phrase": 0.88
+   }
+  }
+ },
+ "cloud_calls": {
+  "n": 314,
+  "ok": 310,
+  "error_rate": 0.0127,
+  "errors": {
+   "invalid choice": 4
+  },
+  "latency_ms_p50": 805,
+  "latency_ms_p95": 1165,
+  "latency_ms_max": 2463,
+  "server_ms_p50": 214,
+  "budget_ms": 1500,
+  "within_budget_rate": 0.9745,
+  "fallback_rate": 0.0255,
+  "tokens_prompt_total": 171514,
+  "tokens_eval_total": 1678,
+  "tokens_prompt_mean": 546.2,
+  "tokens_eval_mean": 5.3,
+  "think": false,
+  "parse": {
+   "json/bare (run 1)": 240,
+   "echo": 70
+  }
+ }
+}

@@ -1,0 +1,20 @@
+{
+  "test_emulator.verdict-bi-targets-v2.jsonl": {
+    "n": 557,
+    "coverage": 1.0,
+    "accuracy": 0.6463195691202872,
+    "nll": 4.520641135959164,
+    "ece": 0.3108848294434471,
+    "false_trigger_rate": 0.3764705882352941,
+    "missed_command_rate": 0.18008474576271186,
+    "by_kind": {
+      "appearance": 0.662,
+      "casual": 0.67,
+      "function": 0.562,
+      "name": 0.832,
+      "near_none": 0.364,
+      "none": 0.624,
+      "position": 0.566
+    }
+  }
+}

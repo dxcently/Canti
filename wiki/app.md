@@ -43,10 +43,18 @@
   2. Mute the extractor while VOX's own haptics, TTS or earcons play.
   3. Measure false triggers with media playing, using MUSAN music played through the speaker.
   - If it's still bad, fall back to recommending a wired or Bluetooth headset mic for the demo.
+  - **2026-09-27, user approved: media lock.** Echo cancelling did not help: on the Z Flip (round 4), a YouTube Short alone gave 36–100 phone-mic sounds a minute, and 30–47 of them would have acted, on every mic preset and AEC setting. So while media plays, the phone mic (and a USB mic) ignores every sound except the unlock, `pop pop`. The media alone made 0 pop pops in 5.4 minutes, against 39 click clicks, 34 hiss hisses and 7 flat hums of 1 s or more. After the unlock, sounds follow the normal rules until the unlock ends. How it ends is the setting `media_unlock_mode`, kept open until the user chooses: `one` (the default: exactly the next gesture, within `media_unlock_ms` = 5 s, then it locks again), `fixed` (a 5 s window) or `popext` (a 5 s window that only another pop pop extends). A window that every action restarted was dropped: replayed on the round-4 logs, the video's own sounds kept it open, with 8–19 false actions per unlock. The lock lifts as soon as the media stops. It can be turned off with `media_lock`. Pico sounds are not affected. See `MediaGate.kt` and PROTOCOL.md, "Phone microphone".
 - **Calibration.** A 5-second "hum at your normal level" step sets `loud_calib_db`, per mic.
 - **Enrollment follows the mic.** An example recorded on the phone mic only matches on the phone mic. Each enrollment class records which source it came from.
 
 ## 2. Decision model on the phone (new)
+
+> **Update 2026-09-27 (librarian):**
+> - This section's plan to run jevlike on the phone is out of date. Verdict is the chosen phone model
+>   ([D041](decisions.md#d041)), and none is on the phone yet.
+> - Hard cases go to DeepSeek on Ollama cloud (`OllamaDecider`).
+> - The device has one button, not a switch jack ([D048](decisions.md#d048)).
+> - See [architecture.md](architecture.md) for the app as built.
 
 - **OnDeviceModel.** ONNX Runtime for Android, running the jevlike student (e5-small encoder + attention head) exported to int8 ONNX. This needs a WordPiece tokenizer in Kotlin, checked against the Python tokenizer on the test sets. It is a native dependency added next to the Flutter embedding.
 - **Size and speed targets:** model about 35 MB int8; under 50 ms per decision on a mid-range phone. To be measured.
@@ -63,7 +71,7 @@ The accessibility service can tap anything, so stopping it must never depend on 
 | Notification | Pause/Resume and Stop buttons on the always-visible foreground notification |
 | Android accessibility shortcut | Hold both volume keys for 3 s to turn the service off. This is built into Android and gets enabled during onboarding |
 | HUD | Tap the HUD to pause |
-| Pico button / switch jack | Later, as agreed |
+| Pico button | Later, as agreed |
 | Automatic | Pauses during phone calls, while the screen is off, and while the VOX app itself is being edited (so a hum doesn't trigger things mid-enrollment) |
 
 - **States:** Off → Paused → Armed (gesture mode) ⇄ Cursor mode, plus the Listening-for-phrase window. The HUD always shows which state is active.

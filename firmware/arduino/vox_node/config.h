@@ -1,7 +1,7 @@
 // VOX node: pins, version and compile-time switches. See firmware/README.md and firmware/HARDWARE.md.
 #pragma once
 
-#define VOX_FW_VERSION "0.1.0"
+#define VOX_FW_VERSION "0.2.2"
 
 // ---- compile-time switches (pass e.g. -DVOX_INSECURE=1 via tools/build.sh --insecure) ----
 

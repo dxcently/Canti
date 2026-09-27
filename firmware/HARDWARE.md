@@ -114,14 +114,15 @@ Check: nothing is in rows 1 and 2 on the right side (Pico pins 40 and 39, the 5 
 
 ## Step 3: test the button and the LED
 
-Plug in the USB cable and flash the firmware (`tools/build.sh --upload`, see README.md). Open the console:
+Plug in the USB cable and flash the firmware (`PORT=$(ls /dev/serial/by-id/usb-Raspberry_Pi_Pico*-if00) tools/build.sh --upload`, see README.md; a brand-new Pico has no port yet, so the first time hold BOOTSEL while plugging in and load the .uf2 with picotool). Open the console:
 
 ```bash
-stty -F /dev/ttyACM0 115200 raw -echo && cat /dev/ttyACM0 &
-echo status > /dev/ttyACM0          # type any command this way
+PICO=$(ls /dev/serial/by-id/usb-Raspberry_Pi_Pico*-if00)   # the Pico's own port; /dev/ttyACM0 may be a phone
+stty -F $PICO 115200 raw -echo && cat $PICO &
+echo status > $PICO          # type any command this way
 ```
 
-`status` should answer `vox_node 0.1.0 (secure build)`, and a line `power: awake`. The device starts **awake and disarmed**.
+`status` should answer `vox_node 0.2.2 (secure build)`, and a line `power: awake`. The device starts **awake and disarmed**.
 
 **1. The LED wiring**
 - [ ] `led on`: the blue LED lights. `led off`: it goes dark.

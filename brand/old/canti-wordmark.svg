@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 480 200" width="960" height="400">
+  <title>Canti</title>
+  <!-- Letterforms: heavy 24-unit strokes, large rounded leading corners (r 44, inner r 20),
+       square cut ends, a detached bar in the A. Cartoon treatment: ink outline, hard offset
+       shadow, cel-shaded lower band, mint glints. Colours from Canti (see README.md). -->
+  <defs>
+    <path id="c" d="M86 0H44A44 44 0 0 0 0 44V56A44 44 0 0 0 44 100H86V76H44A20 20 0 0 1 24 56V44A20 20 0 0 1 44 24H86Z"/>
+    <path id="a" d="M100 100V44A44 44 0 0 1 144 0H148A44 44 0 0 1 192 44V100H168V44A20 20 0 0 0 148 24H144A20 20 0 0 0 124 44V100Z"/>
+    <path id="n" d="M206 100V0H250A44 44 0 0 1 294 44V100H270V44A20 20 0 0 0 250 24H230V100Z"/>
+    <path id="t" d="M320 0H392V24H362V100H338V24H308V12A12 12 0 0 1 320 0Z"/>
+    <rect id="i" x="406" y="0" width="24" height="100"/>
+    <rect id="bar" x="129" y="54" width="34" height="20"/>
+    <clipPath id="glyphs">
+      <use href="#c"/><use href="#a"/><use href="#n"/><use href="#t"/><use href="#i"/>
+    </clipPath>
+  </defs>
+
+  <!-- hard shadow -->
+  <g fill="#1D2757" transform="translate(7 7)">
+    <use href="#c"/><use href="#a"/><use href="#n"/><use href="#t"/><use href="#i"/><use href="#bar"/>
+  </g>
+  <!-- body -->
+  <g fill="#6DB8A8">
+    <use href="#c"/><use href="#a"/><use href="#n"/><use href="#t"/><use href="#i"/>
+  </g>
+  <!-- cel shade -->
+  <rect x="-10" y="66" width="450" height="40" fill="#4A9488" clip-path="url(#glyphs)"/>
+  <!-- glints -->
+  <g fill="none" stroke="#DDEBD3" stroke-width="5" stroke-linecap="round">
+    <path d="M14 42A30 30 0 0 1 42 14"/>
+    <path d="M114 42A30 30 0 0 1 142 14"/>
+    <path d="M252 14A30 30 0 0 1 280 42"/>
+  </g>
+  <!-- ink -->
+  <g fill="none" stroke="#16192B" stroke-width="5" stroke-linejoin="round">
+    <use href="#c"/><use href="#a"/><use href="#n"/><use href="#t"/><use href="#i"/>
+  </g>
+  <!-- the A's detached bar: a signal light -->
+  <use href="#bar" fill="#F2A33A" stroke="#16192B" stroke-width="5" stroke-linejoin="round"/>
+
+  <!-- [ HUM · CLICK · SWIPE ] -->
+  <g fill="#16192B">
+    <path d="M52 130H40V162H52V157H46V135H52Z"/>
+    <path d="M378 130H390V162H378V157H384V135H378Z"/>
+    <text x="215" y="152" text-anchor="middle" letter-spacing="7"
+          font-family="Futura, 'Century Gothic', Avenir, 'Trebuchet MS', sans-serif"
+          font-size="17" font-weight="600">HUM · CLICK · SWIPE</text>
+  </g>
+</svg>

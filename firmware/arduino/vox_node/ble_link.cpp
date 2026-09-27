@@ -459,6 +459,9 @@ bool ble_power_on() {
         return false;
     }
     s_powered = true;
+    // The caller must have started the mic first (power.cpp wake()): the CYW43 SPI bus fails to come up on the PIO state
+    // machine / DMA channels I2S used before the sleep. A failed bring-up shows as "hci_power_control(ON) returned -6"
+    // and BLE stays "starting"; it also keeps the PIO state machine and DMA channels it claimed (`status` hw: line).
     stack_setup();
     blog("radio on (CYW43 init %lu ms)", (unsigned long)(millis() - t0));
     return true;

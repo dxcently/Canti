@@ -2,14 +2,14 @@
   "sweep-v5-e5-base-e3.test_iid.jsonl": {
     "n": 2000,
     "coverage": 1.0,
-    "accuracy": 0.9865,
-    "nll": 0.06377723007165713,
-    "ece": 0.012654493500000034,
+    "accuracy": 1.0,
+    "nll": 1.7330894953886544e-06,
+    "ece": 1.7325000000179003e-06,
     "false_trigger_rate": 0.0,
     "missed_command_rate": 0.0,
     "by_kind": {
       "app_rule": 1.0,
-      "cursor": 0.887,
+      "cursor": 1.0,
       "default": 1.0,
       "disabled": 1.0,
       "global_rule": 1.0,
@@ -17,10 +17,10 @@
       "phrase": 1.0,
       "phrase_rule": 1.0,
       "screen_phrase": 1.0,
-      "sequence": 0.992,
+      "sequence": 1.0,
       "unbound": 1.0
     },
-    "latency_ms_p50": 25.09,
-    "latency_ms_p95": 49.57
+    "latency_ms_p50": 16.25,
+    "latency_ms_p95": 18.23
   }
 }

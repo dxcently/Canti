@@ -2,25 +2,25 @@
   "sweep-v5-e5-base-e3.test_unseen_phrasing.jsonl": {
     "n": 2000,
     "coverage": 1.0,
-    "accuracy": 0.987,
-    "nll": 0.07567487866253493,
-    "ece": 0.012220486999999957,
-    "false_trigger_rate": 0.0020964360587002098,
+    "accuracy": 0.9995,
+    "nll": 0.001620845582166845,
+    "ece": 0.0008862989999999986,
+    "false_trigger_rate": 0.0,
     "missed_command_rate": 0.0,
     "by_kind": {
       "app_rule": 1.0,
-      "cursor": 0.9,
+      "cursor": 1.0,
       "default": 1.0,
       "disabled": 1.0,
       "global_rule": 1.0,
       "not_deliberate": 1.0,
       "phrase": 1.0,
-      "phrase_rule": 1.0,
+      "phrase_rule": 0.993,
       "screen_phrase": 1.0,
-      "sequence": 0.995,
-      "unbound": 0.986
+      "sequence": 1.0,
+      "unbound": 1.0
     },
-    "latency_ms_p50": 25.91,
-    "latency_ms_p95": 45.5
+    "latency_ms_p50": 16.38,
+    "latency_ms_p95": 18.6
   }
 }

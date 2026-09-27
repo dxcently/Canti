@@ -65,3 +65,9 @@ local.properties
 
 # --- personal editor state
 /.obsidian/
+
+# --- extractor: the separate local ASR venv (faster-whisper, CPU; no torch)
+/extractor/.venv-asr/
+
+# --- android: CMake/NDK build intermediates (vx_jni)
+.cxx/

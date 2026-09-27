@@ -1,0 +1,83 @@
+{
+  "_doc": "One synthetic screen for the option format (Targets.kt OPTION FORMAT): TargetFormatTest.kt and `python3 suite/tree_targets.py --selftest` must both build exactly `options` (format v2) and `options_v1` (format v1). Node keys: cls, id, text, desc, b = [left, top, right, bottom], click, focus, selected, scroll, rows, kids.",
+  "w": 1080, "h": 2400,
+  "root": {"cls": "android.widget.FrameLayout", "b": [0, 0, 1080, 2400], "kids": [
+    {"cls": "android.view.ViewGroup", "b": [0, 100, 1080, 247], "kids": [
+      {"cls": "android.widget.ImageButton", "desc": "Navigate up", "b": [0, 100, 147, 247], "click": true},
+      {"cls": "android.widget.TextView", "text": "Alarms", "b": [180, 130, 600, 217]},
+      {"cls": "android.widget.ImageButton", "desc": "More options", "b": [933, 100, 1080, 247], "click": true}]},
+    {"cls": "android.widget.ImageView", "desc": "Profile photo", "b": [0, 250, 100, 290], "click": true},
+    {"cls": "androidx.recyclerview.widget.RecyclerView", "b": [0, 300, 1080, 900], "scroll": true, "rows": 3, "kids": [
+      {"cls": "android.view.ViewGroup", "b": [0, 300, 1080, 500], "kids": [
+        {"cls": "android.widget.TextView", "text": "7:00 AM", "b": [40, 350, 500, 450]},
+        {"cls": "android.widget.Switch", "id": "com.example.clock:id/onoff", "b": [880, 350, 1040, 450], "click": true}]},
+      {"cls": "android.view.ViewGroup", "b": [0, 500, 1080, 700], "kids": [
+        {"cls": "android.widget.TextView", "text": "8:30 AM", "b": [40, 550, 500, 650]},
+        {"cls": "android.widget.Switch", "id": "com.example.clock:id/onoff", "b": [880, 550, 1040, 650], "click": true}]},
+      {"cls": "android.view.ViewGroup", "b": [0, 700, 1080, 900], "kids": [
+        {"cls": "android.widget.TextView", "text": "9:15 AM", "b": [40, 750, 500, 850]},
+        {"cls": "android.widget.Switch", "id": "com.example.clock:id/onoff", "b": [880, 750, 1040, 850], "click": true}]}]},
+    {"cls": "androidx.recyclerview.widget.RecyclerView", "b": [0, 1000, 1080, 1600], "scroll": true, "rows": 3, "kids": [
+      {"cls": "android.view.ViewGroup", "b": [0, 1000, 1080, 1200], "click": true, "kids": [
+        {"cls": "android.widget.TextView", "text": "Groceries for the week and the weekend party", "b": [40, 1050, 800, 1150]},
+        {"cls": "android.widget.ImageButton", "desc": "Delete", "b": [900, 1050, 1040, 1150], "click": true}]},
+      {"cls": "android.view.ViewGroup", "b": [0, 1200, 1080, 1400], "click": true, "kids": [
+        {"cls": "android.widget.TextView", "text": "Work", "b": [40, 1250, 800, 1350]},
+        {"cls": "android.widget.ImageButton", "desc": "Delete", "b": [900, 1250, 1040, 1350], "click": true}]},
+      {"cls": "android.view.ViewGroup", "b": [0, 1400, 1080, 1600], "click": true, "kids": [
+        {"cls": "android.widget.TextView", "text": "Ideas", "b": [40, 1450, 800, 1550]},
+        {"cls": "android.widget.ImageButton", "desc": "Delete", "b": [900, 1450, 1040, 1550], "click": true}]}]},
+    {"cls": "android.widget.FrameLayout", "b": [0, 1650, 1080, 2000], "kids": [
+      {"cls": "android.widget.TextView", "text": "Share", "b": [300, 1700, 500, 1780], "click": true},
+      {"cls": "android.widget.TextView", "text": "Share", "b": [600, 1850, 700, 1900], "click": true}]},
+    {"cls": "android.widget.ImageButton", "desc": "New alarm", "b": [900, 2000, 1040, 2140], "click": true},
+    {"cls": "android.widget.LinearLayout", "b": [0, 2200, 1080, 2400], "kids": [
+      {"cls": "android.widget.FrameLayout", "b": [0, 2200, 360, 2400], "click": true, "selected": true, "kids": [
+        {"cls": "android.widget.TextView", "text": "Alarm", "b": [100, 2250, 260, 2350]}]},
+      {"cls": "android.widget.FrameLayout", "b": [360, 2200, 720, 2400], "click": true, "kids": [
+        {"cls": "android.widget.TextView", "text": "Clock", "b": [460, 2250, 620, 2350]}]},
+      {"cls": "android.widget.FrameLayout", "b": [720, 2200, 1080, 2400], "click": true, "kids": [
+        {"cls": "android.widget.TextView", "text": "Timer", "b": [820, 2250, 980, 2350]}]}]}]},
+  "options_v1": [
+    "Navigate up (button, top left)",
+    "Profile photo (image, top left)",
+    "More options (button, top right)",
+    "onoff switch (switch, top right, 1st of 2)",
+    "onoff switch (switch, top right, last of 2)",
+    "Groceries for the week and the weekend party (list item, center)",
+    "Work (list item, center)",
+    "Ideas (list item, center)",
+    "onoff switch (switch, right)",
+    "Delete (button, right, 1st of 3)",
+    "Delete (button, right, 2nd of 3)",
+    "Delete (button, right, last of 3)",
+    "Alarm (tab, bottom left)",
+    "Share (item, bottom, 1st of 2)",
+    "Share (item, bottom, last of 2)",
+    "Clock (tab, bottom)",
+    "New alarm (button, bottom right)",
+    "Timer (tab, bottom right)",
+    "none of these (the thing I named is not on screen)"
+  ],
+  "options": [
+    "Navigate up (button, top left, 1st of 2 from left)",
+    "Profile photo (image, top left, far left)",
+    "More options · Alarms (button, top right, 1st of 5 down)",
+    "onoff switch · 7:00 AM (switch, top right, 1st of 3 down)",
+    "onoff switch · 8:30 AM (switch, top right, 2nd of 3 down)",
+    "Groceries for the week and the weekend party (list item, center, 1st of 3 down)",
+    "Work (list item, center, 2nd of 3 down)",
+    "Ideas (list item, center, last of 3 down)",
+    "onoff switch · 9:15 AM (switch, right, last of 3 down)",
+    "Delete · Groceries for the week and... (button, right, 2nd of 5 down)",
+    "Delete · Work (button, right, 3rd of 5 down)",
+    "Delete · Ideas (button, right, 4th of 5 down)",
+    "Alarm (tab, bottom left, 1st of 3 from left)",
+    "Share (item, bottom, 1st of 2)",
+    "Share (item, bottom, last of 2)",
+    "Clock (tab, bottom, 2nd of 3 from left)",
+    "New alarm (button, bottom right, last of 5 down)",
+    "Timer (tab, bottom right, last of 3 from left)",
+    "none of these (the thing I named is not on screen)"
+  ]
+}

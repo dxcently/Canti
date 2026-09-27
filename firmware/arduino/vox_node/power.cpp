@@ -71,8 +71,12 @@ static void wake(const char *why, bool arm_on_subscribe, bool window) {
     out_printf("waking up (%s)", why);
     uint32_t t0 = millis();
     s_asleep = false;
-    if (!ble_power_on()) out_line("wake: the radio did NOT start (see the log above); `reboot` to recover");
+    // The mic BEFORE the radio, in the same order as setup(). I2S (arduino-pico) and the CYW43's SPI bus both take a
+    // PIO state machine and 2 DMA channels. The CYW43 bus does not come up on the ones I2S used before a sleep
+    // (-6 on every attempt, BLE stuck at "starting"; seen on the Pico 2 W 2026-09-26), and radio-first handed it exactly
+    // those. Mic-first gives I2S its old ones back and the radio the ones it had at boot.
     mic_begin();
+    if (!ble_power_on()) out_line("wake: the radio did NOT start (see the log above); `reboot` to recover");
     out_printf("awake after %lu ms: advertising", (unsigned long)(millis() - t0));
     if (arm_on_subscribe) {
         s_arm_on_subscribe = true;
@@ -145,7 +149,7 @@ void on_btn_series(int n) {
         return;
     }
     if (n == 1) {
-        state_toggle_mode("button click");
+        state_toggle_mode("button click", "button");
     } else if (n == 2 && g_state.test_sounds) {
         player_next_in_cycle();
     } else if (n == 5) {

@@ -375,5 +375,76 @@ class BleTest {
             AuthFailures.hint(addr, AuthFailures.Problem.UNKNOWN).lines())
     }
 
+    // --- LinkRecovery: the retry state machine ----------------------------------------------------------------------
+
+    private fun connect(auto: Boolean, refresh: Boolean) = LinkRecovery.Plan.Connect(autoConnect = auto, refreshCache = refresh)
+
+    @Test fun recoveryDropsBackOffThenAutoConnect() {
+        val r = LinkRecovery()
+        assertEquals(connect(auto = false, refresh = false), r.attempt(staleLink = false, asleep = false))
+        assertEquals(listOf(1000L, 2000L, 4000L, 8000L, 16000L), (1..5).map { r.failed(LinkRecovery.Failure.DROP) })
+        assertEquals(connect(auto = true, refresh = false), r.attempt(staleLink = false, asleep = false))
+        assertEquals(listOf(30_000L, 30_000L), (1..2).map { r.failed(LinkRecovery.Failure.DROP) })   // capped
+    }
+
+    @Test fun recoverySetupFailureGivesAFreshDirectLinkWithARefreshedCache() {
+        val r = LinkRecovery()
+        repeat(5) { r.failed(LinkRecovery.Failure.DROP) }          // auto-connect territory
+        assertEquals(30_000L, r.failed(LinkRecovery.Failure.SETUP))
+        assertEquals(1, r.setupFailures)
+        // never auto-connect after a setup failure (it would reattach to the same link), and refresh the cache
+        assertEquals(connect(auto = false, refresh = true), r.attempt(staleLink = false, asleep = false))
+        assertEquals(connect(auto = false, refresh = true), r.attempt(staleLink = false, asleep = true))
+    }
+
+    @Test fun recoverySetupFailuresWaitAtLeastTheSettleTimeAndStillEscalate() {
+        val r = LinkRecovery()
+        assertEquals(listOf(2000L, 2000L, 4000L, 8000L, 16000L, 30000L, 30000L), (1..7).map { r.failed(LinkRecovery.Failure.SETUP) })
+        assertEquals(7, r.setupFailures)
+    }
+
+    @Test fun recoveryADropEndsTheSetupStreak() {
+        val r = LinkRecovery()
+        r.failed(LinkRecovery.Failure.SETUP)
+        r.failed(LinkRecovery.Failure.DROP)                         // device away: back to the normal rules
+        assertEquals(0, r.setupFailures)
+        assertEquals(connect(auto = true, refresh = false), r.attempt(staleLink = false, asleep = true))
+    }
+
+    @Test fun recoveryWaitsOutAStaleLinkOncePerStreak() {
+        val r = LinkRecovery()
+        assertEquals(LinkRecovery.Plan.WaitForRelease(4_000), r.attempt(staleLink = true, asleep = false))
+        // still up after the wait: connect anyway, refreshing the cache
+        assertEquals(connect(auto = false, refresh = true), r.attempt(staleLink = true, asleep = false))
+        r.failed(LinkRecovery.Failure.DROP)
+        assertEquals(connect(auto = false, refresh = true), r.attempt(staleLink = true, asleep = false))
+        // a setup failure allows another wait (our own closed link may linger)
+        r.failed(LinkRecovery.Failure.SETUP)
+        assertTrue(r.attempt(staleLink = true, asleep = false) is LinkRecovery.Plan.WaitForRelease)
+    }
+
+    @Test fun recoveryReadyStartsOver() {
+        val r = LinkRecovery()
+        r.attempt(staleLink = true, asleep = false)
+        repeat(3) { r.failed(LinkRecovery.Failure.SETUP) }
+        r.reset()
+        assertEquals(0, r.failures); assertEquals(0, r.setupFailures)
+        assertEquals(1000L, r.failed(LinkRecovery.Failure.DROP))
+        assertTrue(r.attempt(staleLink = true, asleep = false) is LinkRecovery.Plan.WaitForRelease)
+    }
+
+    @Test fun arrivalLagIsTheDelayAboveTheBestRecentOne() {
+        val a = ArrivalLag(window = 4)
+        assertEquals(0L, a.lag(10_030, 5_000))            // offset 5030: the best so far
+        assertEquals(200L, a.lag(11_230, 6_000))          // 200 ms later than that
+        assertEquals(0L, a.lag(12_020, 7_000))            // a faster one becomes the reference
+        assertEquals(10L, a.lag(13_030, 8_000))
+        assertEquals(0L, a.lag(500, 100))                 // device rebooted (clock went back): start over
+        assertEquals(82_090L, ArrivalLag.deviceMs(JSONObject().put("hold", "start").put("t_ms", 82_090)))
+        assertEquals(81_512L, ArrivalLag.deviceMs(JSONObject("{\"timing\":[{\"t_start_ms\":1,\"t_end_ms\":2},{\"t_start_ms\":81234,\"t_end_ms\":81512}]}")))
+        assertEquals(2L, ArrivalLag.deviceMs(JSONObject("{\"timing\":[{\"t_start_ms\":1,\"t_end_ms\":2},null]}")))
+        assertNull(ArrivalLag.deviceMs(JSONObject().put("armed", true)))
+    }
+
     private fun hex(s: String) = s.replace(" ", "").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 }

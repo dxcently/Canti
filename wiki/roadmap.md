@@ -41,6 +41,12 @@ Effort figures are judgment, not measurements.
 | **4. Calibration + eval** | Temperature fit; held-out rules, held-out users, none/false-trigger set, latency; RF vs student vs Jev | Held-out splits | Report: accuracy, false triggers/min, ECE, p50/p95 |
 | **5. ONNX export + phone latency** | ONNX int8 in the Android app behind a local `/v1/systemone`-compatible interface, so a URL change switches models. Kev has no documented ONNX path, so verify it or use llama.cpp on Android | Calibrated checkpoint | On-device model + latency |
 
+> **Update 2026-09-27 (librarian):**
+> - **Step 3.** Kev was dropped ([D061](decisions.md#d061)). Verdict is the chosen phone model ([D041](decisions.md#d041)).
+>   jevlike leads only on synthetic data; on real screens it scored 0.447 against Verdict's 0.646.
+> - **Step 4.** It now follows the cross-fit protocol and a locked test ([training.md](training.md)).
+> - **Step 5.** It has not started: the app has no ONNX runtime yet.
+
 **Compute.** The user's **Strix Halo workstation** (Ryzen AI Max+ 395, Radeon 8060S gfx1151, 32 GiB GPU carve-out, NixOS with ollama, llama.cpp and HIP) is the main option. It is trainer, teacher host, synthetic-data host and benchmark laptop tier. PyTorch ROCm on gfx1151 is recent and pre-release, so **verify it** ([llm-tracker](https://llm-tracker.info/_TOORG/Strix-Halo)). A **rented H100** is the fallback, about $1 per Kev-4B run ([Kev](https://github.com/jaredpalmer/kev)).
 
 **Licences.** The user accepted the contractual risk of distilling from JevK5 and Jev outputs for this class project. Decider is Apache-2.0 ([Decider](https://github.com/Mapika/decider)).

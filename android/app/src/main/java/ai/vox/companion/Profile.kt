@@ -35,21 +35,39 @@ class Profile(val bindings: List<Binding>, val name: String = DEFAULT_NAME) {
     fun phraseBindings() = bindings.filter { it.scope == "phrases" }
 
     /**
-     * The sound sequences that are bound for this app and mode (resolution order app > global > defaults). Used by the
-     * sequencer: a sound only waits if a bound multi-sound sequence starts with it. Disabled sequences are not bound.
+     * The sound sequences worth waiting for in this app and mode (resolution order app > global > defaults and app-only
+     * bindings). Used by the sequencer: a sound only waits if one of these multi-sound sequences starts with it.
+     * Disabled sequences are not bound. A sequence whose fixed action is the same as that of a shorter bound prefix is
+     * left out: waiting for it would change nothing but the delay (default "hiss click" = back, so a hiss acts at once;
+     * a click that follows within the gap is absorbed, [absorbedSequences]).
      */
-    fun boundSequences(pkg: String, mode: String): Set<List<String>> {
+    fun boundSequences(pkg: String, mode: String): Set<List<String>> = sequences(pkg, mode).first
+
+    /**
+     * The sequences [boundSequences] leaves out because a shorter bound prefix does the same (default "hiss click" =
+     * back = "hiss"). The sequencer acts on the prefix at once and absorbs the rest if it follows within the gap, so
+     * "hiss click" is one back ([Sequencer]). None in cursor mode.
+     */
+    fun absorbedSequences(pkg: String, mode: String): Set<List<String>> = sequences(pkg, mode).second
+
+    private fun sequences(pkg: String, mode: String): Pair<Set<List<String>>, Set<List<String>>> {
         if (mode == "cursor") {
             val bound = cursorBindings().filter { it.action != "none" }.map { it.phrase }.toMutableSet()
-            // "click pop" names a target (intent cursor mode) unless a cursor rule claims the sequence.
+            // "pop pop" names a target (intent cursor mode) unless a cursor rule claims the sequence.
             if (cursorBindings().none { it.phrase == CURSOR_LISTEN }) bound += CURSOR_LISTEN
-            return bound
+            return bound to emptySet<List<String>>()
         }
         val table = LinkedHashMap<List<String>, String?>()
         for ((seq, a) in Vocab.DEFAULT_BINDINGS) table[seq] = a
-        for (b in globalBindings()) table[b.phrase] = b.action ?: "rule"
-        for (b in appBindings(pkg)) table[b.phrase] = b.action ?: "rule"
-        return table.filterValues { it != "none" }.keys
+        for ((seq, a) in Vocab.APP_ONLY_BINDINGS) table[seq] = a
+        for (b in globalBindings()) table[b.phrase] = b.action ?: RULE
+        for (b in appBindings(pkg)) table[b.phrase] = b.action ?: RULE
+        val live = table.filterValues { it != "none" }
+        val (bound, absorbed) = live.keys.partition { seq ->
+            val a = live[seq]
+            a == RULE || (1 until seq.size).none { live[seq.subList(0, it)] == a }
+        }
+        return LinkedHashSet(bound) to LinkedHashSet(absorbed)
     }
 
     /**
@@ -70,8 +88,9 @@ class Profile(val bindings: List<Binding>, val name: String = DEFAULT_NAME) {
     }
 
     companion object {
-        /** In cursor mode, "click pop" opens the listening window for a spoken target (handled by the app, not the model). */
-        val CURSOR_LISTEN = listOf("click", "pop")
+        /** In cursor mode, "pop pop" opens the listening window for a spoken target (handled by the app, not the model). */
+        val CURSOR_LISTEN = listOf("pop", "pop")
+        private const val RULE = "\u0000rule"   // a plain-language rule: the model decides, so never "the same action"
 
         const val DEFAULT_NAME = "default"
 

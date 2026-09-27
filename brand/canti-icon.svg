@@ -1,34 +1,135 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>Canti</title>
-  <!-- App icon: an original little robot head inspired by Canti, peeking in from the lower-left
-       corner on a full-bleed charcoal square (Android masks the shape). The head is drawn in its
-       own coordinates, centred on the screen, then moved, turned 15 degrees clockwise and scaled
-       by the group transform, so the left and bottom edges crop it and the upper right stays empty.
-       Parts, back to front: antenna with a signal-orange light (orange = listening); a teal-shade
-       copy of the head shifted right, which shows as the side of the box; the teal front; the
-       visor-navy screen; two screen-glow glare bands clipped to the screen's top-right corner.
-       No eyes, no mouth, no ink outline, no gradients. -->
+  <!-- App icon, ON state (default; shown while paired/connected): teal helmet with a brim and gold trim over a squared navy
+       screen, two lit EVE-style scanline eyes, a soft lens shine under the brim, and the orange lamp lit with a halo. -->
   <defs>
-    <path id="head" d="M-230 300V-70C-230 -185 -130 -225 0 -225S230 -185 230 -70V300Z"/>
-    <clipPath id="screen"><rect x="-180" y="-140" width="360" height="270" rx="72"/></clipPath>
+    <path id="canti_on-hood" d="M0 0 H512 V162 C512 202 508 232 494 232 C454 222 396 172 256 172 C116 172 58 222 18 232 C4 232 0 202 0 162 Z"/>
+    <clipPath id="canti_on-glass"><rect x="54" y="96" width="404" height="356" rx="128"/></clipPath>
+    <clipPath id="canti_on-hoodclip"><use href="#canti_on-hood"/></clipPath>
+    <clipPath id="canti_on-eyes"><path d="M138 340 C142 294 218 294 222 340 C220 358 200 340 180 340 C160 340 140 358 138 340 Z" transform="rotate(5 180 334) translate(180 334) scale(1.17) translate(-180 -334)"/><path d="M290 340 C294 294 370 294 374 340 C372 358 352 340 332 340 C312 340 292 358 290 340 Z" transform="rotate(-5 332 334) translate(332 334) scale(1.17) translate(-332 -334)"/></clipPath>
+    <filter id="canti_on-soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
+    <filter id="canti_on-edge" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="canti_on-soft" x="-40%" y="-200%" width="180%" height="500%"><feGaussianBlur stdDeviation="1.8"/></filter>
+    <filter id="canti_on-fine" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+    <radialGradient id="canti_on-glow">
+      <stop offset="0" stop-color="#7FE0C9" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#7FE0C9" stop-opacity="0"/>
+    </radialGradient>
+    <!-- rim light shows only on the lower part of the glass, fading up the sides -->
+    <linearGradient id="canti_on-lowfade" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="430">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="canti_on-low" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="url(#canti_on-lowfade)"/>
+    </mask>
+    <radialGradient id="canti_on-shell" gradientUnits="userSpaceOnUse" cx="256" cy="230" r="380">
+      <stop offset="0.45" stop-color="#16192B" stop-opacity="0"/>
+      <stop offset="1" stop-color="#16192B" stop-opacity="0.19"/>
+    </radialGradient>
+    <linearGradient id="canti_on-brim" gradientUnits="userSpaceOnUse" x1="0" y1="30" x2="0" y2="235">
+      <stop offset="0" stop-color="#DDEBD3" stop-opacity="0.20"/>
+      <stop offset="0.45" stop-color="#DDEBD3" stop-opacity="0"/>
+      <stop offset="1" stop-color="#16192B" stop-opacity="0.13"/>
+    </linearGradient>
+
+    <filter id="canti_on-occ" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="canti_on-wide" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="26"/></filter>
+    <linearGradient id="canti_on-bdown" gradientUnits="userSpaceOnUse" x1="0" y1="250" x2="0" y2="512">
+      <stop offset="0" stop-color="#2F7268" stop-opacity="0"/>
+      <stop offset="1" stop-color="#2F7268" stop-opacity="0.275"/>
+    </linearGradient>
+    <linearGradient id="canti_on-bside" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="512" y2="0">
+      <stop offset="0" stop-color="#2F7268" stop-opacity="0.225"/>
+      <stop offset="0.16" stop-color="#2F7268" stop-opacity="0"/>
+      <stop offset="0.84" stop-color="#2F7268" stop-opacity="0"/>
+      <stop offset="1" stop-color="#2F7268" stop-opacity="0.225"/>
+    </linearGradient>
+    <linearGradient id="canti_on-rlow" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="466">
+      <stop offset="0" stop-color="#DDEBD3" stop-opacity="0"/>
+      <stop offset="1" stop-color="#DDEBD3" stop-opacity="0.110"/>
+    </linearGradient>
+    <clipPath id="canti_on-ring"><path clip-rule="evenodd" d="M182 82 H330 A142 142 0 0 1 472 224 V324 A142 142 0 0 1 330 466 H182 A142 142 0 0 1 40 324 V224 A142 142 0 0 1 182 82 Z M182 96 H330 A128 128 0 0 1 458 224 V324 A128 128 0 0 1 330 452 H182 A128 128 0 0 1 54 324 V224 A128 128 0 0 1 182 96 Z"/></clipPath>
+    <radialGradient id="canti_on-bloom"><stop offset="0" stop-color="#BFF7EC" stop-opacity="0.75"/><stop offset="0.35" stop-color="#7FE0C9" stop-opacity="0.3"/><stop offset="1" stop-color="#7FE0C9" stop-opacity="0"/></radialGradient>
+    <linearGradient id="canti_on-streak"><stop offset="0" stop-color="#F4FFFB" stop-opacity="0"/><stop offset="0.5" stop-color="#F4FFFB" stop-opacity="1"/><stop offset="1" stop-color="#F4FFFB" stop-opacity="0"/></linearGradient>
+    <filter id="canti_on-hair" x="-20%" y="-300%" width="140%" height="700%"><feGaussianBlur stdDeviation="0.7"/></filter>
+    <radialGradient id="canti_on-halo" gradientUnits="userSpaceOnUse" cx="370" cy="104" r="78">
+      <stop offset="0.25" stop-color="#F6C945" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#F6C945" stop-opacity="0.17"/>
+      <stop offset="1" stop-color="#F6C945" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="canti_on-bulb" gradientUnits="userSpaceOnUse" cx="379" cy="89" r="20">
+      <stop offset="0" stop-color="#FFF1CF"/>
+      <stop offset="0.45" stop-color="#F2A33A"/>
+      <stop offset="1" stop-color="#F2A33A"/>
+    </radialGradient>
   </defs>
-
-  <rect width="512" height="512" fill="#1E1F24"/>
-
-  <g transform="translate(168 378) rotate(15) scale(1.07)">
-    <!-- antenna -->
-    <rect x="62" y="-300" width="16" height="90" rx="8" fill="#4A9488"/>
-    <circle cx="70" cy="-300" r="26" fill="#F2A33A"/>
-
-    <!-- head: side, then front -->
-    <use href="#head" transform="translate(44 0)" fill="#4A9488"/>
-    <use href="#head" fill="#6DB8A8"/>
-
-    <!-- screen and its glare -->
-    <rect x="-180" y="-140" width="360" height="270" rx="72" fill="#1D2757"/>
-    <g clip-path="url(#screen)" fill="none" stroke="#7FE0C9" opacity="0.32">
-      <path d="M-199 -264L331 17" stroke-width="40"/>
-      <path d="M-218 -229L312 52" stroke-width="14"/>
-    </g>
+  <!-- teal head, full bleed, soft falloff to the edges -->
+  <rect width="512" height="512" fill="#6DB8A8"/>
+  <rect width="512" height="512" fill="url(#canti_on-shell)"/>
+  <!-- body shading (B1z): light from above -->
+  <!-- lit band just under the brim, soft rounded highlights on the upper cheeks -->
+  <ellipse cx="256" cy="262" rx="300" ry="34" fill="#DDEBD3" opacity="0.130" filter="url(#canti_on-wide)"/>
+  <ellipse cx="14" cy="300" rx="34" ry="66" fill="#DDEBD3" opacity="0.170" filter="url(#canti_on-wide)"/>
+  <ellipse cx="498" cy="300" rx="34" ry="66" fill="#DDEBD3" opacity="0.170" filter="url(#canti_on-wide)"/>
+  <!-- darker toward the bottom and the outer edges -->
+  <rect width="512" height="512" fill="url(#canti_on-bdown)"/>
+  <rect y="200" width="512" height="312" fill="url(#canti_on-bside)"/>
+  <!-- occlusion: under the brim, and where the body turns into the recess -->
+  <use href="#canti_on-hood" transform="translate(0 36)" fill="#16192B" opacity="0.210" filter="url(#canti_on-occ)"/>
+  <rect x="40" y="82" width="432" height="384" rx="142" fill="none" stroke="#16192B" stroke-width="10" opacity="0.170" filter="url(#canti_on-occ)"/>
+  <!-- recess lip around the glass -->
+  <rect x="40" y="82" width="432" height="384" rx="142" fill="#4A9488"/>
+  <!-- lip ring: darker at the inner edge (occluded) and under the brim, catches light at the bottom -->
+  <g clip-path="url(#canti_on-ring)">
+    <rect x="54" y="96" width="404" height="356" rx="128" fill="none" stroke="#16192B" stroke-width="12" opacity="0.200" filter="url(#canti_on-fine)"/>
+    <use href="#canti_on-hood" transform="translate(0 40)" fill="#16192B" opacity="0.150" filter="url(#canti_on-occ)"/>
+    <rect x="40" y="330" width="432" height="140" fill="url(#canti_on-rlow)"/>
   </g>
+  <!-- glass -->
+  <g clip-path="url(#canti_on-glass)">
+    <rect width="512" height="512" fill="#1D2757"/>
+    <!-- depth: even dark band along all four edges and corners (rounded-rect falloff) -->
+    <rect x="54" y="96" width="404" height="356" rx="128" fill="none" stroke="#16192B" stroke-width="70" opacity="0.57" filter="url(#canti_on-edge)"/>
+    <!-- broad rounded-rect centre, brightest toward the top (light from above) -->
+    <rect x="118" y="196" width="276" height="170" rx="80" fill="#3C4C7E" opacity="0.60" filter="url(#canti_on-soft)"/>
+    <!-- lower rim light: follows the straight bottom and bends round both bottom corners -->
+    <g mask="url(#canti_on-low)">
+      <rect x="64" y="106" width="384" height="336" rx="118" fill="none" stroke="#7FE0C9" stroke-width="7" opacity="0.34" filter="url(#canti_on-fine)"/>
+    </g>
+    <!-- eye glow bleeding onto the glass -->
+    <ellipse cx="180" cy="334" rx="86" ry="70" fill="url(#canti_on-glow)"/>
+    <ellipse cx="332" cy="334" rx="86" ry="70" fill="url(#canti_on-glow)"/>
+    <!-- eyes: EVE lenses with LED scanlines -->
+    <path d="M138 340 C142 294 218 294 222 340 C220 358 200 340 180 340 C160 340 140 358 138 340 Z" transform="rotate(5 180 334) translate(180 334) scale(1.17) translate(-180 -334)" fill="#7FE0C9"/>
+    <path d="M290 340 C294 294 370 294 374 340 C372 358 352 340 332 340 C312 340 292 358 290 340 Z" transform="rotate(-5 332 334) translate(332 334) scale(1.17) translate(-332 -334)" fill="#7FE0C9"/>
+    <g clip-path="url(#canti_on-eyes)" fill="#1D2757" opacity="0.4"><rect x="100" y="308" width="312" height="3"/><rect x="100" y="314" width="312" height="3"/><rect x="100" y="320" width="312" height="3"/><rect x="100" y="326" width="312" height="3"/><rect x="100" y="332" width="312" height="3"/><rect x="100" y="338" width="312" height="3"/><rect x="100" y="344" width="312" height="3"/><rect x="100" y="350" width="312" height="3"/><rect x="100" y="356" width="312" height="3"/></g>
+    <!-- deep brim shadow -->
+    <use href="#canti_on-hood" transform="translate(0 88)" fill="#16192B" opacity="0.82"/>
+    <!-- shine: the B1x lozenge under the brim, feathered so it melts into the glass (no hard core) -->
+    <!-- nested lenses, each shorter and brighter, so the shine builds to a peak at its own centre -->
+    <ellipse cx="256" cy="208" rx="80" ry="11" fill="#7FE0C9" opacity="0.16" filter="url(#canti_on-fine)"/>
+    <path d="M196 212.5 Q256 195 316 212.5 Q256 217 196 212.5 Z" fill="#DDEBD3" opacity="0.28" filter="url(#canti_on-fine)"/>
+    <path d="M218 210.5 Q256 198.5 294 210.5 Q256 214.5 218 210.5 Z" fill="#EAF5EE" opacity="0.5" filter="url(#canti_on-soft)"/>
+    <path d="M236 209 Q256 202 276 209 Q256 212 236 209 Z" fill="#F4FFFB" opacity="0.8" filter="url(#canti_on-soft)"/>
+    <ellipse cx="256" cy="207.8" rx="13" ry="3" fill="#FFFFFF" opacity="0.75" filter="url(#canti_on-soft)"/>
+    <ellipse cx="256" cy="207.8" rx="5" ry="1.4" fill="#FFFFFF" opacity="0.7" filter="url(#canti_on-hair)"/>
+  </g>
+  <!-- brim underside and brim -->
+  <use href="#canti_on-hood" transform="translate(0 30)" fill="#4A9488"/>
+  <use href="#canti_on-hood" fill="#6DB8A8"/>
+  <use href="#canti_on-hood" fill="url(#canti_on-brim)"/>
+  <!-- gold trim on the hood's lip: follows the lip's main curve, ends cleanly before the curled tips -->
+  <g clip-path="url(#canti_on-hoodclip)">
+    <path d="M508.25 212 C505.5 224.5 501 232 494 232 C454 222 396 172 256 172 C116 172 58 222 18 232 C11 232 6.5 224.5 3.75 212" fill="none" stroke="#F6C945" stroke-width="18" stroke-linecap="round" opacity="0.9"/>
+    <path d="M508.25 212 C505.5 224.5 501 232 494 232 C454 222 396 172 256 172 C116 172 58 222 18 232 C11 232 6.5 224.5 3.75 212" fill="none" stroke="#6DB8A8" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <!-- crown: head curves away at the top corners (B1c) -->
+  <path d="M0 0 H512 V112 C452 40 364 18 256 18 C148 18 60 40 0 112 Z" fill="#4A9488"/>
+  <!-- orange signal lamp on the right of the brow -->
+  <!-- lamp lit: glow halo on the helmet, hot core, specular dot -->
+  <circle cx="370" cy="104" r="78" fill="url(#canti_on-halo)"/>
+  <circle cx="370" cy="104" r="27" fill="#4A9488"/>
+  <circle cx="370" cy="104" r="19" fill="url(#canti_on-bulb)"/>
+  <circle cx="363" cy="97" r="3.5" fill="#FFFFFF" opacity="0.9"/>
 </svg>

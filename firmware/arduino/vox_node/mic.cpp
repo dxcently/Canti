@@ -1,5 +1,6 @@
 #include "mic.h"
 #include "config.h"
+#include "ext.h"
 #include "out.h"
 #include <I2S.h>
 #include <math.h>
@@ -80,6 +81,7 @@ void mic_begin() {
     s_i2s.setBuffers(16, 256);      // 16 x 128 stereo frames = 128 ms of slack
     s_off = false;
     s_running = s_i2s.begin();
+    if (s_running) ext_stream_start();   // the on-device extractor starts a clean stream with the mic
     gpio_pull_down(PIN_MIC_DATA);   // an absent mic then reads as exact zeros, not noise
     win_reset();
     if (!s_running) {
@@ -103,6 +105,8 @@ void mic_poll(uint32_t now) {
     if (!s_running) return;
     if (s_i2s.getOverUnderflow()) s_overruns++;
     static int32_t buf[128];  // 64 stereo frames
+    static int16_t pcm[64];   // the same samples as `mic stream` sends, for the extractor (ext.cpp)
+    int shift = 16 - s_gain_db / 6;  // 0 dB = the top 16 bits (l >> 16); each 6 dB is one bit less
     for (int guard = 0; guard < 8; guard++) {
         int avail = s_i2s.available();          // bytes
         if (avail < (int)sizeof(buf)) break;
@@ -121,11 +125,11 @@ void mic_poll(uint32_t now) {
             if (l) s_w.nonzero_l++;
             if (r) s_w.nonzero_r++;
             if (s_w.n >= 1600) win_done(now);
+            int32_t v = l >> shift;
+            if (v > 32767) v = 32767;
+            if (v < -32768) v = -32768;
+            pcm[i] = (int16_t)v;
             if (s_mode == MicMode::Stream) {
-                int shift = 16 - s_gain_db / 6;  // 0 dB = the top 16 bits (l >> 16); each 6 dB is one bit less
-                int32_t v = l >> shift;
-                if (v > 32767) v = 32767;
-                if (v < -32768) v = -32768;
                 s_frame[s_frame_n++] = (int16_t)v;
                 if (s_frame_n == 160) {
                     out_frame('A', (const uint8_t *)s_frame, sizeof(s_frame));
@@ -134,6 +138,7 @@ void mic_poll(uint32_t now) {
                 }
             }
         }
+        ext_mic_push(pcm, frames);
     }
 }
 
@@ -156,6 +161,7 @@ void mic_end() {
     if (s_mode != MicMode::Off) mic_set_mode(MicMode::Off);
     if (s_running) s_i2s.end();
     s_running = false;
+    ext_stream_stop();
     s_off = true;
 }
 

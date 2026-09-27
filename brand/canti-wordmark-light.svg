@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 356 163.5" width="712" height="327">
+  <title>Canti</title>
+  <!-- Canti wordmark, all paths: no text elements, no fonts. Original lettering in the style of
+       the FLCL logo. Built on a 100-unit cap height: 26-unit strokes, outer radius 44
+       where a stroke turns (inner 18, concentric), square cuts where a stroke stops.
+       C, A, T, I are full height; the n is a 68-unit small cap tucked under the T bar.
+       Letters interlock with an even 6-unit gap: the C's top arm runs into the space
+       above the A's rounded shoulder, its end cut on a circle concentric with that corner
+       (r 50). The A's bar floats (the brand's detached-pieces motif), its top level with
+       the n's counter. Subtitle: geometric capitals, 13-unit cap height, 2.6-unit strokes
+       (stroked paths; M, N, W as filled outlines), centred under the wordmark.
+       Bullets: 3.4-unit filled circles, centred on the cap height and in each word gap.
+       Mint cream #DDEBD3 for dark backgrounds. canti-wordmark.svg: the ink primary. -->
+  <g fill="#DDEBD3">
+    <path d="M 86 0 H 44 A 44 44 0 0 0 0 44 V 56 A 44 44 0 0 0 44 100 H 66 V 74 H 44 A 18 18 0 0 1 26 56 V 44 A 18 18 0 0 1 44 26 H 69.35 A 50 50 0 0 1 86 4 V 0 Z"/><!-- C -->
+    <path d="M 72 100 V 44 A 44 44 0 0 1 116 0 H 120 A 44 44 0 0 1 164 44 V 100 H 138 V 44 A 18 18 0 0 0 120 26 H 116 A 18 18 0 0 0 98 44 V 100 Z"/><!-- A -->
+    <path d="M 104 58 h 28 v 18 h -28 Z"/><!-- A bar -->
+    <path d="M 170 100 V 32 H 210 A 44 44 0 0 1 254 76 V 100 H 228 V 76 A 18 18 0 0 0 210 58 H 196 V 100 Z"/><!-- n -->
+    <path d="M 220 0 H 304 V 26 H 286 V 100 H 260 V 26 H 220 Z"/><!-- T -->
+    <path d="M 310 0 h 26 v 100 h -26 Z"/><!-- I -->
+    <!-- [ HUM · SING · SWIPE ]: brackets, M, N, W, then the bullets -->
+    <path d="M 41.1 121.5 h -8 v 22 h 8 v -3.6 h -4.4 v -14.8 h 4.4 Z"/>
+    <path d="M 294.9 121.5 h 8 v 22 h -8 v -3.6 h 4.4 v -14.8 h -4.4 Z"/>
+    <path transform="translate(91.1 139)" d="M 0 -13 h 2.6 v 13 h -2.6 Z M 9.6 -13 h 2.6 v 13 h -2.6 Z M 0 -13 H 2.77 L 7.48 0 H 4.72 Z M 9.43 -13 H 12.2 L 7.48 0 H 4.72 Z"/>
+    <path transform="translate(153 139)" d="M 0 -13 h 2.6 v 13 h -2.6 Z M 7.4 -13 h 2.6 v 13 h -2.6 Z M 0 -13 H 2.96 L 10 0 H 7.04 Z"/>
+    <path transform="translate(223.9 139)" d="M 0 -13 H 2.64 L 4.95 0 H 2.3 Z M 5.9 -13 H 8.6 L 4.97 0 H 2.28 Z M 5.9 -13 H 8.6 L 12.22 0 H 9.53 Z M 11.86 -13 H 14.5 L 12.2 0 H 9.55 Z"/>
+    <circle cx="114.55" cy="132.5" r="1.7"/>
+    <circle cx="195.55" cy="132.5" r="1.7"/>
+  </g>
+  <g fill="none" stroke="#DDEBD3" stroke-width="2.6">
+    <path transform="translate(56.1 139)" d="M 1.3 0 V -13 M 8.7 0 V -13 M 1.3 -6.5 H 8.7"/>
+    <path transform="translate(73.6 139)" d="M 1.3 -13 V -4.6 A 3.7 3.7 0 0 0 8.7 -4.6 V -13"/>
+    <path transform="translate(125.8 139)" d="M 7.72 -10.35 A 3.15 2.8 0 1 0 4.8 -6.5 A 3.5 2.8 0 1 1 1.55 -2.65"/>
+    <path transform="translate(142.9 139)" d="M 1.3 0 V -13"/>
+    <path transform="translate(170.5 139)" d="M 11.19 -10.1 A 5.6 5.6 0 1 0 12.5 -6.5 H 7.18"/>
+    <path transform="translate(206.8 139)" d="M 7.72 -10.35 A 3.15 2.8 0 1 0 4.8 -6.5 A 3.5 2.8 0 1 1 1.55 -2.65"/>
+    <path transform="translate(245.9 139)" d="M 1.3 0 V -13"/>
+    <path transform="translate(256 139)" d="M 1.3 0 V -11.7 H 3.66 A 3.64 3.64 0 0 1 3.66 -4.42 H 1.3"/>
+    <path transform="translate(272.1 139)" d="M 7.8 -11.7 H 1.3 V -1.3 H 7.8 M 1.3 -6.5 H 7.18"/>
+  </g>
+</svg>

@@ -1,0 +1,120 @@
+{
+ "set": "tv2-apps",
+ "gold": "data/targets-v2/test_unseen_apps.jsonl",
+ "rows_in_file": 2000,
+ "rows_scored": 100,
+ "sample": [
+  "random",
+  100
+ ],
+ "model": "deepseek-v4.1-flash",
+ "endpoint": "https://ollama.com",
+ "kinds_in_sample": {
+  "name": 57,
+  "position": 3,
+  "name_pos": 11,
+  "none": 20,
+  "item": 4,
+  "unlabeled": 5
+ },
+ "models": {
+  "ollama-dsv41flash": {
+   "n": 97,
+   "coverage": 0.97,
+   "accuracy": 0.9484536082474226,
+   "nll": 1.0682095792240418,
+   "ece": 0.05154639175257736,
+   "false_trigger_rate": 0.21052631578947367,
+   "missed_command_rate": 0.01282051282051282,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.982,
+    "name_pos": 1.0,
+    "none": 0.789,
+    "position": 1.0,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 393,
+   "latency_ms_p95": 884
+  },
+  "ollama-dsv41flash+jevlike-fallback@2500ms": {
+   "n": 100,
+   "coverage": 1.0,
+   "accuracy": 0.95,
+   "nll": 1.0361633118473406,
+   "ece": 0.049999980000000055,
+   "false_trigger_rate": 0.2,
+   "missed_command_rate": 0.0125,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.982,
+    "name_pos": 1.0,
+    "none": 0.8,
+    "position": 1.0,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 392,
+   "latency_ms_p95": 884
+  },
+  "jevlike": {
+   "n": 100,
+   "coverage": 1.0,
+   "accuracy": 0.97,
+   "nll": 0.6217044456219019,
+   "ece": 0.029993530000000046,
+   "false_trigger_rate": 0.0,
+   "missed_command_rate": 0.0375,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.947,
+    "name_pos": 1.0,
+    "none": 1.0,
+    "position": 1.0,
+    "unlabeled": 1.0
+   },
+   "latency_ms_p50": 9.2,
+   "latency_ms_p95": 10.72
+  },
+  "verdict": {
+   "n": 100,
+   "coverage": 1.0,
+   "accuracy": 0.98,
+   "nll": 0.4144655267411332,
+   "ece": 0.019999789999999962,
+   "false_trigger_rate": 0.0,
+   "missed_command_rate": 0.025,
+   "by_kind": {
+    "item": 1.0,
+    "name": 0.965,
+    "name_pos": 1.0,
+    "none": 1.0,
+    "position": 1.0,
+    "unlabeled": 1.0
+   }
+  }
+ },
+ "cloud_calls": {
+  "n": 100,
+  "ok": 97,
+  "error_rate": 0.03,
+  "errors": {
+   "timeout": 3
+  },
+  "latency_ms_p50": 393,
+  "latency_ms_p95": 884,
+  "latency_ms_max": 20034,
+  "server_ms_p50": 199,
+  "budget_ms": 2500,
+  "within_budget_rate": 0.97,
+  "fallback_rate": 0.03,
+  "tokens_prompt_total": 20610,
+  "tokens_eval_total": 283,
+  "tokens_prompt_mean": 212.5,
+  "tokens_eval_mean": 2.9,
+  "think": false,
+  "parse": {
+   "json/bare (run 1)": 96,
+   "echo": 1
+  }
+ }
+}

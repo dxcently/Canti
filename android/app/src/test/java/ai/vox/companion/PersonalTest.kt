@@ -301,7 +301,7 @@ class PersonalTest {
         val ign = m.match(SoundFeatures(sneezeC, "fp1", DoubleArray(0)))
         assertEquals(Personal.Rewritten(Personal.ignoreLine(hum), "rise"), Personal.rewrite(ign, hum, "rise"))
         assertEquals(Personal.Rewritten(hum, "rise"), Personal.rewrite(MatchResult("none"), hum, "rise"))
-        assertEquals(Personal.Rewritten(hum, "rise"), Personal.rewrite(MatchResult("gesture", EnrollClass("gesture", "rise")), hum, "rise"))
+        assertEquals(Personal.Rewritten(hum, "rise", trusted = true), Personal.rewrite(MatchResult("gesture", EnrollClass("gesture", "rise")), hum, "rise"))   // [train] agreeing gesture: kept, trusted (relabel: GestureRelabelTest)
     }
 
     // --- deciding -------------------------------------------------------------------------------------------------------

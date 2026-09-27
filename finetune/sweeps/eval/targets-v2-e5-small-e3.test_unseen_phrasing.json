@@ -1,0 +1,21 @@
+{
+  "sweep-targets-v2-e5-small-e3.test_unseen_phrasing.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.564,
+    "nll": 5.145745142215645,
+    "ece": 0.396992625,
+    "false_trigger_rate": 0.0633245382585752,
+    "missed_command_rate": 0.40160394818013573,
+    "by_kind": {
+      "item": 0.143,
+      "name": 0.427,
+      "name_pos": 0.597,
+      "none": 0.937,
+      "position": 0.6,
+      "unlabeled": 0.875
+    },
+    "latency_ms_p50": 9.07,
+    "latency_ms_p95": 10.41
+  }
+}

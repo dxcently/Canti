@@ -1,0 +1,21 @@
+{
+  "sweep-targets-v2-e5-small-e3.test_unseen_apps.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.9495,
+    "nll": 0.8935375101914206,
+    "ece": 0.04742686799999996,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.061957868649318466,
+    "by_kind": {
+      "item": 1.0,
+      "name": 0.913,
+      "name_pos": 0.996,
+      "none": 1.0,
+      "position": 1.0,
+      "unlabeled": 1.0
+    },
+    "latency_ms_p50": 9.18,
+    "latency_ms_p95": 10.68
+  }
+}

@@ -1,0 +1,585 @@
+{
+ "name": "phrases_v1",
+ "version": 1,
+ "language": "en",
+ "about": "Spoken-command prompts for the ASR + PhraseGrammar tests (android/.../PhraseGrammar.kt). Not personal: the prompts only, no audio. Used by extractor/guided_session.py (block 'phrases'); reusable by the grammar tests and the phone test agent.",
+ "expect_format": "list of commands in the order said: OpenApp(<app label>) | Nav(<Vocab phrase: go back, go home, scroll down, scroll up, next, the one before, volume up, volume down, pause, play, show notifications, recent apps>) | Tap(<query>) | Timer(<seconds>) | NONE. The expectation is what the user MEANS; the grammar may not handle every case yet (fillers mid-sentence, self-corrections, two commands).",
+ "kinds": {
+  "clean": "plain command",
+  "filler": "filler words around / between the command words",
+  "repeat": "hesitations, repeats, cut-off words",
+  "correction": "self-correction, the last command wins",
+  "wake": "wake word / politeness",
+  "timer": "timer lengths in number words",
+  "two": "two commands in one breath",
+  "chatter": "talk that must do nothing",
+  "free": "the user's own wording; transcript from ASR"
+ },
+ "prompts": [
+  {
+   "id": "ph01",
+   "kind": "clean",
+   "say": "Open Instagram",
+   "expect": [
+    "OpenApp(Instagram)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph02",
+   "kind": "clean",
+   "say": "Scroll down",
+   "expect": [
+    "Nav(scroll down)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph03",
+   "kind": "clean",
+   "say": "Go back",
+   "expect": [
+    "Nav(go back)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph04",
+   "kind": "clean",
+   "say": "Go home",
+   "expect": [
+    "Nav(go home)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph05",
+   "kind": "clean",
+   "say": "Open YouTube",
+   "expect": [
+    "OpenApp(YouTube)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph06",
+   "kind": "clean",
+   "say": "Next video",
+   "expect": [
+    "Nav(next)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph07",
+   "kind": "clean",
+   "say": "Tap search",
+   "expect": [
+    "Tap(search)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph08",
+   "kind": "clean",
+   "say": "Set a timer for five minutes",
+   "expect": [
+    "Timer(300)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph09",
+   "kind": "clean",
+   "say": "Pause",
+   "expect": [
+    "Nav(pause)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph10",
+   "kind": "clean",
+   "say": "Scroll up",
+   "expect": [
+    "Nav(scroll up)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph11",
+   "kind": "clean",
+   "say": "Open WhatsApp",
+   "expect": [
+    "OpenApp(WhatsApp)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph12",
+   "kind": "filler",
+   "say": "Um, so can you, like, uh, scroll down a bit",
+   "expect": [
+    "Nav(scroll down)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph13",
+   "kind": "filler",
+   "say": "Okay, open, uh... Instagram, please",
+   "expect": [
+    "OpenApp(Instagram)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph14",
+   "kind": "filler",
+   "say": "Could you maybe go back",
+   "expect": [
+    "Nav(go back)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph15",
+   "kind": "filler",
+   "say": "Uh, yeah, just, like, open TikTok real quick",
+   "expect": [
+    "OpenApp(TikTok)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph16",
+   "kind": "filler",
+   "say": "So, um, I want to, uh, go to the next one",
+   "expect": [
+    "Nav(next)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph17",
+   "kind": "filler",
+   "say": "Can you, uh, tap on the, um, like button",
+   "expect": [
+    "Tap(like)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph18",
+   "kind": "filler",
+   "say": "Okay so, uh, open Discord for me",
+   "expect": [
+    "OpenApp(Discord)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph19",
+   "kind": "filler",
+   "say": "Hmm, let's see, uh, pause the video",
+   "expect": [
+    "Nav(pause)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph20",
+   "kind": "filler",
+   "say": "Um, could you, like, turn it down a little",
+   "expect": [
+    "Nav(volume down)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph21",
+   "kind": "filler",
+   "say": "Er, go to, um, Pinterest",
+   "expect": [
+    "OpenApp(Pinterest)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph22",
+   "kind": "filler",
+   "say": "Uh, can you open, um, what's it called, LinkedIn",
+   "expect": [
+    "OpenApp(LinkedIn)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph23",
+   "kind": "repeat",
+   "say": "Tap the, the search",
+   "expect": [
+    "Tap(search)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph24",
+   "kind": "repeat",
+   "say": "Open, open Chrome",
+   "expect": [
+    "OpenApp(Chrome)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph25",
+   "kind": "repeat",
+   "say": "Go, go back",
+   "expect": [
+    "Nav(go back)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph26",
+   "kind": "repeat",
+   "say": "Scroll d-, scroll down",
+   "expect": [
+    "Nav(scroll down)"
+   ],
+   "note": "cut-off word, then the full command",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph27",
+   "kind": "repeat",
+   "say": "Open Tele-, Telegram",
+   "expect": [
+    "OpenApp(Telegram)"
+   ],
+   "note": "cut-off word, then the full name",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph28",
+   "kind": "correction",
+   "say": "Go back, no wait, home",
+   "expect": [
+    "Nav(go home)"
+   ],
+   "note": "self-correction: last wins",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph29",
+   "kind": "correction",
+   "say": "Open Facebook, sorry, I mean Instagram",
+   "expect": [
+    "OpenApp(Instagram)"
+   ],
+   "note": "self-correction: last wins",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph30",
+   "kind": "correction",
+   "say": "Scroll up, no, down",
+   "expect": [
+    "Nav(scroll down)"
+   ],
+   "note": "self-correction: last wins",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph31",
+   "kind": "correction",
+   "say": "Set a timer for ten, no, fifteen minutes",
+   "expect": [
+    "Timer(900)"
+   ],
+   "note": "self-correction inside a timer",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph32",
+   "kind": "correction",
+   "say": "Open YouTube, actually no, open Chrome",
+   "expect": [
+    "OpenApp(Chrome)"
+   ],
+   "note": "self-correction: last wins",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph33",
+   "kind": "wake",
+   "say": "Hey Canti, open YouTube",
+   "expect": [
+    "OpenApp(YouTube)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph34",
+   "kind": "wake",
+   "say": "Canti, go home please",
+   "expect": [
+    "Nav(go home)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph35",
+   "kind": "wake",
+   "say": "Hey Canti, could you scroll down for me, thanks",
+   "expect": [
+    "Nav(scroll down)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph36",
+   "kind": "wake",
+   "say": "Please open Telegram, thank you",
+   "expect": [
+    "OpenApp(Telegram)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph37",
+   "kind": "timer",
+   "say": "Set a timer for like two and a half minutes",
+   "expect": [
+    "Timer(150)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph38",
+   "kind": "timer",
+   "say": "Timer, ninety seconds",
+   "expect": [
+    "Timer(90)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph39",
+   "kind": "timer",
+   "say": "Um, start a timer for an hour and a half",
+   "expect": [
+    "Timer(5400)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph40",
+   "kind": "timer",
+   "say": "Can you set a timer for, uh, twenty-five minutes",
+   "expect": [
+    "Timer(1500)"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph41",
+   "kind": "timer",
+   "say": "Timer for one minute thirty",
+   "expect": [
+    "Timer(90)"
+   ],
+   "note": "'one minute thirty' = 90 s (no unit on 'thirty')",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph42",
+   "kind": "two",
+   "say": "Go home and open Instagram",
+   "expect": [
+    "Nav(go home)",
+    "OpenApp(Instagram)"
+   ],
+   "note": "two commands in order",
+   "max_s": 9.0
+  },
+  {
+   "id": "ph43",
+   "kind": "two",
+   "say": "Open YouTube and scroll down",
+   "expect": [
+    "OpenApp(YouTube)",
+    "Nav(scroll down)"
+   ],
+   "note": "two commands in order",
+   "max_s": 9.0
+  },
+  {
+   "id": "ph44",
+   "kind": "two",
+   "say": "Pause it and turn the volume down",
+   "expect": [
+    "Nav(pause)",
+    "Nav(volume down)"
+   ],
+   "note": "two commands in order",
+   "max_s": 9.0
+  },
+  {
+   "id": "ph45",
+   "kind": "chatter",
+   "say": "Um, okay, yeah",
+   "expect": [
+    "NONE"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph46",
+   "kind": "chatter",
+   "say": "What was I doing",
+   "expect": [
+    "NONE"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph47",
+   "kind": "chatter",
+   "say": "Hmm, I don't know, maybe later",
+   "expect": [
+    "NONE"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph48",
+   "kind": "chatter",
+   "say": "Yeah no, that's fine",
+   "expect": [
+    "NONE"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph49",
+   "kind": "chatter",
+   "say": "Wait, what? Hold on a sec",
+   "expect": [
+    "NONE"
+   ],
+   "note": "contains 'hold on' (a pause word) inside chatter",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph50",
+   "kind": "chatter",
+   "say": "I should go home soon, honestly",
+   "expect": [
+    "NONE"
+   ],
+   "note": "contains 'go home' inside chatter",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph51",
+   "kind": "chatter",
+   "say": "Did you see that video on YouTube yesterday",
+   "expect": [
+    "NONE"
+   ],
+   "note": "names an app inside chatter",
+   "max_s": 8.0
+  },
+  {
+   "id": "ph52",
+   "kind": "chatter",
+   "say": "Ugh, this is so slow",
+   "expect": [
+    "NONE"
+   ],
+   "max_s": 8.0
+  },
+  {
+   "id": "ph53",
+   "kind": "free",
+   "say": null,
+   "instruction": "Ask Canti to SCROLL DOWN, however you'd naturally say it.",
+   "expect": [
+    "Nav(scroll down)"
+   ],
+   "max_s": 10.0
+  },
+  {
+   "id": "ph54",
+   "kind": "free",
+   "say": null,
+   "instruction": "Ask Canti to OPEN INSTAGRAM, in your own words.",
+   "expect": [
+    "OpenApp(Instagram)"
+   ],
+   "max_s": 10.0
+  },
+  {
+   "id": "ph55",
+   "kind": "free",
+   "say": null,
+   "instruction": "Ask Canti to GO BACK to the previous screen, your own way.",
+   "expect": [
+    "Nav(go back)"
+   ],
+   "max_s": 10.0
+  },
+  {
+   "id": "ph56",
+   "kind": "free",
+   "say": null,
+   "instruction": "Ask Canti to set a TIMER for about three minutes, your own way.",
+   "expect": [
+    "Timer(180)"
+   ],
+   "max_s": 10.0
+  },
+  {
+   "id": "ph57",
+   "kind": "free",
+   "say": null,
+   "instruction": "Ask Canti to SKIP to the next video, your own way.",
+   "expect": [
+    "Nav(next)"
+   ],
+   "max_s": 10.0
+  },
+  {
+   "id": "ph58",
+   "kind": "free",
+   "say": null,
+   "instruction": "Ask Canti to PAUSE what's playing, your own way.",
+   "expect": [
+    "Nav(pause)"
+   ],
+   "max_s": 10.0
+  },
+  {
+   "id": "ph59",
+   "kind": "free",
+   "say": null,
+   "instruction": "Ask Canti to PRESS THE SEARCH button, your own way.",
+   "expect": [
+    "Tap(search)"
+   ],
+   "max_s": 10.0
+  },
+  {
+   "id": "ph60",
+   "kind": "free",
+   "say": null,
+   "instruction": "Say something to a friend in the room, NOT to Canti (anything).",
+   "expect": [
+    "NONE"
+   ],
+   "max_s": 10.0
+  }
+ ]
+}

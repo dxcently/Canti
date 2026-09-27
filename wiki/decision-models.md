@@ -8,6 +8,13 @@
 - **Design A (hybrid, recommended)** calls it only for rule bindings, rejected sounds and spoken text. **Design B** calls it for every action, and **Jev cursor mode** is Design B applied to pointing. Both are benchmarked against A.
 - There are **no audio-native Jev-likes**.
 - The main ML deliverable, after the baseline works, is a **VOX student**: Verdict-118M, with Kev 0.8B as fallback. It is distilled from JevK5 + Decider 4B on the user's Strix Halo workstation and deployed as ONNX int8 behind `/v1/systemone`.
+  - **Update 2026-09-27 (librarian):**
+    - Kev 0.8B was dropped ([D061](decisions.md#d061)).
+    - Verdict is the chosen phone model ([D041](decisions.md#d041)). It is being retrained on real screens.
+    - It is not served anywhere yet: there is no ONNX runtime in the app, and `systemone.py` serves only jevlike,
+      decider-4b and jevk5.
+    - Hard cases go to DeepSeek V4.1 Flash on Ollama cloud, not to Jev.
+    - See [training.md](training.md) and [architecture.md](architecture.md#models-and-how-they-are-served).
 
 ## What Jev is, and which claims hold
 
@@ -77,7 +84,7 @@ Jev "struggles with tasks that require numeric precision" and "does not count re
 
 ## Jev cursor mode is Design B applied to pointing
 
-Only the device button or switch jack toggles cursor mode ([Gestures](gesture-vocabulary.md)). It is not a model action. The overlay shows a distinct cursor and a "CURSOR" badge. The model returns **intent, not positions**. Three parallel questions go in one request:
+Only the device button toggles cursor mode ([Gestures](gesture-vocabulary.md)). It is not a model action. The overlay shows a distinct cursor and a "CURSOR" badge. The model returns **intent, not positions**. Three parallel questions go in one request:
 
 | Question | Type | Options |
 |---|---|---|

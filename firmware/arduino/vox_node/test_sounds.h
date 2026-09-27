@@ -6,7 +6,7 @@
 
 #define VOX_TEST_SOUNDS_DIGEST "851a102482a68eb9"
 #define VOX_VOCAB_DIGEST "139d86bd72e13ae5"
-#define VOX_EXTRACTOR_SRC_SHA "4e039d79a043db3b"
+#define VOX_EXTRACTOR_SRC_SHA "fc94951efe059b20"
 
 struct VoxTestSound { const char *name; const char *label; const char *line; uint16_t dur_ms; };
 struct VoxTestSeq { const char *name; uint8_t n; uint8_t sound[3]; uint16_t gap_ms[2]; };

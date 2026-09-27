@@ -1,0 +1,1750 @@
+{
+ "_doc": "Target-list gaps the emulator harvest found (2026-09-26), rebuilt as synthetic screens (invented labels, the real apps' layout): TargetGapsTest.kt and `python3 suite/tree_targets.py --selftest` must both build exactly `options_v1`, `options_v2` and `bounds` (of the v1 targets, NONE_OPTION aside). Node keys as in target_format_parity.json, plus draw (AccessibilityNodeInfo drawing order among siblings, 0 = unknown); `covers`: windows above the app (status and navigation bars).",
+ "cases": [
+  {
+   "name": "fab half under the navigation bar (Gadgetbridge)",
+   "w": 1080,
+   "h": 2400,
+   "covers": [
+    [
+     0,
+     0,
+     1080,
+     128
+    ],
+    [
+     0,
+     2274,
+     1080,
+     2400
+    ]
+   ],
+   "root": {
+    "cls": "android.widget.FrameLayout",
+    "b": [
+     0,
+     0,
+     1080,
+     2400
+    ],
+    "kids": [
+     {
+      "cls": "android.view.ViewGroup",
+      "b": [
+       0,
+       128,
+       1080,
+       275
+      ],
+      "kids": [
+       {
+        "cls": "android.widget.ImageButton",
+        "desc": "Open navigation drawer",
+        "b": [
+         0,
+         138,
+         147,
+         275
+        ],
+        "click": true
+       },
+       {
+        "cls": "android.widget.TextView",
+        "text": "Devices",
+        "b": [
+         157,
+         162,
+         509,
+         240
+        ]
+       }
+      ]
+     },
+     {
+      "cls": "android.widget.RelativeLayout",
+      "b": [
+       0,
+       275,
+       1080,
+       2400
+      ],
+      "kids": [
+       {
+        "cls": "androidx.recyclerview.widget.RecyclerView",
+        "b": [
+         0,
+         275,
+         1080,
+         2400
+        ],
+        "scroll": true
+       },
+       {
+        "cls": "com.google.android.material.floatingactionbutton.FloatingActionButton",
+        "desc": "Add device",
+        "b": [
+         891,
+         2211,
+         1038,
+         2358
+        ],
+        "click": true
+       },
+       {
+        "cls": "android.widget.ImageButton",
+        "desc": "Sliver",
+        "b": [
+         40,
+         2250,
+         187,
+         2397
+        ],
+        "click": true
+       }
+      ]
+     }
+    ]
+   },
+   "options_v1": [
+    "Open navigation drawer (button, top left)",
+    "Add device (item, bottom right)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "options_v2": [
+    "Open navigation drawer (button, top left)",
+    "Add device (item, bottom right)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "bounds": [
+    [
+     0,
+     138,
+     147,
+     275
+    ],
+    [
+     891,
+     2211,
+     1038,
+     2274
+    ]
+   ]
+  },
+  {
+   "name": "a Request button per row (Gadgetbridge permissions)",
+   "w": 1080,
+   "h": 2400,
+   "covers": [],
+   "root": {
+    "cls": "android.widget.FrameLayout",
+    "b": [
+     0,
+     0,
+     1080,
+     2400
+    ],
+    "kids": [
+     {
+      "cls": "android.widget.ImageButton",
+      "desc": "Navigate up",
+      "b": [
+       0,
+       138,
+       147,
+       285
+      ],
+      "click": true
+     },
+     {
+      "cls": "android.widget.Button",
+      "text": "Request all",
+      "b": [
+       276,
+       797,
+       803,
+       923
+      ],
+      "click": true
+     },
+     {
+      "cls": "androidx.recyclerview.widget.RecyclerView",
+      "b": [
+       21,
+       976,
+       1059,
+       2274
+      ],
+      "scroll": true,
+      "kids": [
+       {
+        "cls": "android.view.ViewGroup",
+        "b": [
+         21,
+         976,
+         1059,
+         1164
+        ],
+        "kids": [
+         {
+          "cls": "android.widget.LinearLayout",
+          "b": [
+           47,
+           976,
+           769,
+           1164
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.TextView",
+            "text": "Run in background",
+            "b": [
+             47,
+             976,
+             523,
+             1027
+            ]
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "Keeps the connection alive",
+            "b": [
+             47,
+             1027,
+             769,
+             1164
+            ]
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.Button",
+          "text": "Request",
+          "b": [
+           795,
+           976,
+           1059,
+           1102
+          ],
+          "click": true
+         }
+        ]
+       },
+       {
+        "cls": "android.view.ViewGroup",
+        "b": [
+         21,
+         1164,
+         1059,
+         1295
+        ],
+        "kids": [
+         {
+          "cls": "android.widget.LinearLayout",
+          "b": [
+           47,
+           1179,
+           769,
+           1281
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.TextView",
+            "text": "Do Not Disturb",
+            "b": [
+             47,
+             1179,
+             435,
+             1230
+            ]
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "Changes the notification policy",
+            "b": [
+             47,
+             1230,
+             584,
+             1281
+            ]
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.Button",
+          "text": "Request",
+          "b": [
+           795,
+           1164,
+           1059,
+           1290
+          ],
+          "click": true
+         }
+        ]
+       },
+       {
+        "cls": "android.view.ViewGroup",
+        "b": [
+         21,
+         1295,
+         1059,
+         1440
+        ],
+        "kids": [
+         {
+          "cls": "android.widget.LinearLayout",
+          "b": [
+           47,
+           1295,
+           769,
+           1440
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.TextView",
+            "text": "Notifications",
+            "b": [
+             47,
+             1295,
+             263,
+             1346
+            ]
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "Forwards notifications",
+            "b": [
+             47,
+             1346,
+             769,
+             1440
+            ]
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.Button",
+          "text": "Request",
+          "b": [
+           795,
+           1295,
+           1059,
+           1421
+          ],
+          "click": true
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "options_v1": [
+    "Navigate up (button, top left)",
+    "Request all (button, center)",
+    "Request (button, right, 1st of 3)",
+    "Request (button, right, 2nd of 3)",
+    "Request (button, right, last of 3)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "options_v2": [
+    "Navigate up (button, top left)",
+    "Request all (button, center)",
+    "Request · Run in background (button, right, 1st of 3 down)",
+    "Request · Do Not Disturb (button, right, 2nd of 3 down)",
+    "Request · Notifications (button, right, last of 3 down)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "bounds": [
+    [
+     0,
+     138,
+     147,
+     285
+    ],
+    [
+     276,
+     797,
+     803,
+     923
+    ],
+    [
+     795,
+     976,
+     1059,
+     1102
+    ],
+    [
+     795,
+     1164,
+     1059,
+     1290
+    ],
+    [
+     795,
+     1295,
+     1059,
+     1421
+    ]
+   ]
+  },
+  {
+   "name": "rows named by their title, not their trend icon (RadioDroid); a vote button by its icon, not its count (Jerboa)",
+   "w": 1080,
+   "h": 2400,
+   "covers": [],
+   "root": {
+    "cls": "android.widget.FrameLayout",
+    "b": [
+     0,
+     0,
+     1080,
+     2400
+    ],
+    "kids": [
+     {
+      "cls": "androidx.recyclerview.widget.RecyclerView",
+      "b": [
+       0,
+       401,
+       1080,
+       2127
+      ],
+      "scroll": true,
+      "kids": [
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         401,
+         1080,
+         637
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.FrameLayout",
+          "b": [
+           0,
+           427,
+           236,
+           611
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.ImageView",
+            "desc": "Popularity increasing",
+            "b": [
+             0,
+             427,
+             79,
+             506
+            ]
+           },
+           {
+            "cls": "android.widget.ImageView",
+            "desc": "Add to favorites",
+            "b": [
+             13,
+             427,
+             197,
+             610
+            ],
+            "click": true
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.LinearLayout",
+          "b": [
+           236,
+           421,
+           949,
+           616
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.TextView",
+            "text": "Harbour Jazz FM",
+            "b": [
+             249,
+             442,
+             949,
+             493
+            ]
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "128 kbps, Lisbon",
+            "b": [
+             249,
+             493,
+             949,
+             544
+            ]
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.ImageButton",
+          "desc": "More",
+          "b": [
+           949,
+           401,
+           1080,
+           637
+          ],
+          "click": true
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         640,
+         1080,
+         876
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.FrameLayout",
+          "b": [
+           0,
+           666,
+           236,
+           850
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.ImageView",
+            "desc": "Popularity increasing",
+            "b": [
+             0,
+             666,
+             79,
+             745
+            ]
+           },
+           {
+            "cls": "android.widget.ImageView",
+            "desc": "Add to favorites",
+            "b": [
+             13,
+             666,
+             197,
+             849
+            ],
+            "click": true
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.LinearLayout",
+          "b": [
+           236,
+           660,
+           949,
+           855
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.TextView",
+            "text": "Northern Lights Radio",
+            "b": [
+             249,
+             681,
+             949,
+             732
+            ]
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "320 kbps, Oslo",
+            "b": [
+             249,
+             732,
+             949,
+             783
+            ]
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.ImageButton",
+          "desc": "More",
+          "b": [
+           949,
+           640,
+           1080,
+           876
+          ],
+          "click": true
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         879,
+         1080,
+         1115
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.ImageView",
+          "desc": "Station logo",
+          "b": [
+           0,
+           905,
+           236,
+           1089
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "cls": "android.view.View",
+      "b": [
+       600,
+       1200,
+       760,
+       1320
+      ],
+      "click": true,
+      "kids": [
+       {
+        "cls": "android.view.View",
+        "desc": "Upvote",
+        "b": [
+         610,
+         1230,
+         670,
+         1290
+        ]
+       },
+       {
+        "cls": "android.widget.TextView",
+        "text": "29",
+        "b": [
+         680,
+         1240,
+         750,
+         1280
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "options_v1": [
+    "Add to favorites (image, top left, 1st of 2)",
+    "Add to favorites (image, top left, last of 2)",
+    "Harbour Jazz FM (list item, top)",
+    "Northern Lights Radio (list item, top)",
+    "More (button, top right, 1st of 2)",
+    "More (button, top right, last of 2)",
+    "Station logo (list item, center)",
+    "Upvote (item, center)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "options_v2": [
+    "Add to favorites · Harbour Jazz FM (image, top left, 1st of 2 down)",
+    "Add to favorites · Northern Lights Radio (image, top left, last of 2 down)",
+    "Harbour Jazz FM (list item, top, 1st of 3 down)",
+    "Northern Lights Radio (list item, top, 2nd of 3 down)",
+    "More · Harbour Jazz FM (button, top right, 1st of 2 down)",
+    "More · Northern Lights Radio (button, top right, last of 2 down)",
+    "Station logo (list item, center, last of 3 down)",
+    "Upvote (item, center)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "bounds": [
+    [
+     13,
+     427,
+     197,
+     610
+    ],
+    [
+     13,
+     666,
+     197,
+     849
+    ],
+    [
+     0,
+     401,
+     1080,
+     637
+    ],
+    [
+     0,
+     640,
+     1080,
+     876
+    ],
+    [
+     949,
+     401,
+     1080,
+     637
+    ],
+    [
+     949,
+     640,
+     1080,
+     876
+    ],
+    [
+     0,
+     879,
+     1080,
+     1115
+    ],
+    [
+     600,
+     1200,
+     760,
+     1320
+    ]
+   ]
+  },
+  {
+   "name": "an overflow menu drawn in the window (Glider, Compose)",
+   "w": 1080,
+   "h": 2400,
+   "covers": [],
+   "root": {
+    "cls": "android.widget.FrameLayout",
+    "b": [
+     0,
+     0,
+     1080,
+     2400
+    ],
+    "kids": [
+     {
+      "cls": "android.view.View",
+      "b": [
+       0,
+       0,
+       1080,
+       2064
+      ],
+      "kids": [
+       {
+        "cls": "android.view.View",
+        "b": [
+         0,
+         0,
+         1080,
+         275
+        ],
+        "kids": [
+         {
+          "cls": "android.view.View",
+          "desc": "Frontpage",
+          "b": [
+           42,
+           165,
+           322,
+           238
+          ]
+         },
+         {
+          "cls": "android.widget.Button",
+          "desc": "Search",
+          "b": [
+           828,
+           139,
+           954,
+           265
+          ],
+          "click": true
+         },
+         {
+          "cls": "android.widget.Button",
+          "desc": "More options",
+          "b": [
+           954,
+           139,
+           1080,
+           265
+          ],
+          "click": true
+         },
+         {
+          "cls": "android.view.View",
+          "b": [
+           854,
+           265,
+           1080,
+           517
+          ],
+          "kids": [
+           {
+            "cls": "android.view.View",
+            "b": [
+             854,
+             275,
+             1080,
+             506
+            ],
+            "kids": [
+             {
+              "cls": "android.view.View",
+              "desc": "Settings",
+              "b": [
+               854,
+               275,
+               1080,
+               391
+              ],
+              "click": true
+             },
+             {
+              "cls": "android.view.View",
+              "desc": "Account",
+              "b": [
+               854,
+               391,
+               1080,
+               506
+              ],
+              "click": true
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.ScrollView",
+        "b": [
+         0,
+         0,
+         1080,
+         2064
+        ],
+        "scroll": true,
+        "kids": [
+         {
+          "cls": "android.widget.HorizontalScrollView",
+          "b": [
+           0,
+           275,
+           1080,
+           412
+          ],
+          "scroll": true,
+          "kids": [
+           {
+            "cls": "android.widget.Button",
+            "desc": "Top",
+            "b": [
+             42,
+             286,
+             247,
+             401
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.Button",
+            "desc": "New",
+            "b": [
+             268,
+             286,
+             488,
+             401
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.Button",
+            "desc": "Ask",
+            "b": [
+             748,
+             286,
+             951,
+             401
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.Button",
+            "desc": "Show",
+            "b": [
+             972,
+             286,
+             1080,
+             401
+            ],
+            "click": true
+           }
+          ]
+         },
+         {
+          "cls": "android.view.View",
+          "desc": "A story about rivers",
+          "b": [
+           0,
+           412,
+           1080,
+           653
+          ],
+          "click": true
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "options_v1": [
+    "Top (button, top left)",
+    "New (button, top)",
+    "A story about rivers (item, top)",
+    "Search (button, top right)",
+    "More options (button, top right)",
+    "Settings (item, top right)",
+    "Ask (button, top right)",
+    "Account (item, top right)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "options_v2": [
+    "Top (button, top left, 1st of 3 from left)",
+    "New (button, top, 2nd of 3 from left)",
+    "A story about rivers (item, top, last of 3 down)",
+    "Search (button, top right, 1st of 2 down)",
+    "More options · Frontpage (button, top right, last of 2 from left)",
+    "Settings (item, top right, 1st of 3 down)",
+    "Ask (button, top right, last of 3 from left)",
+    "Account (item, top right, 2nd of 3 down)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "bounds": [
+    [
+     42,
+     286,
+     247,
+     401
+    ],
+    [
+     268,
+     286,
+     488,
+     401
+    ],
+    [
+     0,
+     412,
+     1080,
+     653
+    ],
+    [
+     828,
+     139,
+     954,
+     265
+    ],
+    [
+     954,
+     139,
+     1080,
+     265
+    ],
+    [
+     854,
+     275,
+     1080,
+     391
+    ],
+    [
+     748,
+     286,
+     951,
+     401
+    ],
+    [
+     854,
+     391,
+     1080,
+     506
+    ]
+   ]
+  },
+  {
+   "name": "an expanded player sheet drawn over the page (AntennaPod); ids as names",
+   "w": 1080,
+   "h": 2400,
+   "covers": [
+    [
+     0,
+     0,
+     1080,
+     128
+    ],
+    [
+     0,
+     2274,
+     1080,
+     2400
+    ]
+   ],
+   "root": {
+    "cls": "android.widget.FrameLayout",
+    "b": [
+     0,
+     0,
+     1080,
+     2400
+    ],
+    "kids": [
+     {
+      "cls": "android.view.ViewGroup",
+      "id": "de.example.pod:id/coordinator",
+      "b": [
+       0,
+       0,
+       1080,
+       2106
+      ],
+      "kids": [
+       {
+        "cls": "android.widget.FrameLayout",
+        "id": "de.example.pod:id/playerSheet",
+        "b": [
+         0,
+         0,
+         1080,
+         2106
+        ],
+        "draw": 2,
+        "kids": [
+         {
+          "cls": "android.widget.RelativeLayout",
+          "b": [
+           0,
+           0,
+           1080,
+           2106
+          ],
+          "kids": [
+           {
+            "cls": "android.view.ViewGroup",
+            "b": [
+             0,
+             128,
+             1080,
+             296
+            ],
+            "kids": [
+             {
+              "cls": "android.widget.ImageButton",
+              "desc": "Back",
+              "b": [
+               0,
+               138,
+               147,
+               285
+              ],
+              "click": true
+             },
+             {
+              "cls": "android.widget.Button",
+              "desc": "Add to favorites",
+              "b": [
+               594,
+               148,
+               721,
+               274
+              ],
+              "click": true
+             },
+             {
+              "cls": "android.widget.Button",
+              "desc": "Share",
+              "b": [
+               848,
+               148,
+               975,
+               274
+              ],
+              "click": true
+             }
+            ]
+           },
+           {
+            "cls": "android.widget.ImageView",
+            "id": "de.example.pod:id/imgvCover",
+            "b": [
+             105,
+             426,
+             975,
+             1296
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "Morning Show · Sep 25",
+            "b": [
+             21,
+             1405,
+             1059,
+             1469
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "An episode about rivers",
+            "b": [
+             21,
+             1469,
+             1059,
+             1530
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.SeekBar",
+            "id": "de.example.pod:id/sbPosition",
+            "b": [
+             21,
+             1762,
+             1059,
+             1809
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.TextView",
+            "text": "00:00:27",
+            "b": [
+             63,
+             1820,
+             187,
+             1863
+            ]
+           },
+           {
+            "cls": "android.widget.ImageButton",
+            "id": "de.example.pod:id/butPlay",
+            "b": [
+             456,
+             1874,
+             624,
+             2042
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.ImageButton",
+            "desc": "Rewind",
+            "b": [
+             298,
+             1895,
+             424,
+             2021
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.ImageButton",
+            "desc": "Fast-forward",
+            "b": [
+             656,
+             1895,
+             782,
+             2021
+            ],
+            "click": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.FrameLayout",
+        "id": "de.example.pod:id/main_content_view",
+        "b": [
+         0,
+         0,
+         1080,
+         1938
+        ],
+        "draw": 1,
+        "kids": [
+         {
+          "cls": "android.view.ViewGroup",
+          "b": [
+           0,
+           128,
+           1080,
+           296
+          ],
+          "kids": [
+           {
+            "cls": "android.widget.ImageButton",
+            "desc": "Back",
+            "b": [
+             0,
+             138,
+             147,
+             285
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.Button",
+            "desc": "Visit website",
+            "b": [
+             848,
+             148,
+             975,
+             274
+            ],
+            "click": true
+           },
+           {
+            "cls": "android.widget.ImageView",
+            "desc": "More options",
+            "b": [
+             975,
+             148,
+             1080,
+             274
+            ],
+            "click": true
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.ImageView",
+          "desc": "Open podcast",
+          "b": [
+           42,
+           326,
+           189,
+           473
+          ],
+          "click": true
+         },
+         {
+          "cls": "android.widget.LinearLayout",
+          "b": [
+           42,
+           504,
+           540,
+           631
+          ],
+          "click": true,
+          "kids": [
+           {
+            "cls": "android.widget.TextView",
+            "text": "Pause",
+            "b": [
+             281,
+             542,
+             385,
+             593
+            ]
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.LinearLayout",
+          "b": [
+           540,
+           504,
+           1038,
+           631
+          ],
+          "click": true,
+          "kids": [
+           {
+            "cls": "android.widget.TextView",
+            "text": "Download",
+            "b": [
+             759,
+             542,
+             923,
+             593
+            ]
+           }
+          ]
+         },
+         {
+          "cls": "android.widget.ImageView",
+          "b": [
+           42,
+           700,
+           189,
+           847
+          ],
+          "click": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "cls": "android.widget.LinearLayout",
+      "b": [
+       0,
+       2106,
+       1080,
+       2274
+      ],
+      "kids": [
+       {
+        "cls": "android.widget.FrameLayout",
+        "desc": "Home",
+        "b": [
+         0,
+         2106,
+         540,
+         2274
+        ],
+        "click": true
+       },
+       {
+        "cls": "android.widget.FrameLayout",
+        "desc": "Queue",
+        "b": [
+         540,
+         2106,
+         1080,
+         2274
+        ],
+        "click": true
+       }
+      ]
+     }
+    ]
+   },
+   "options_v1": [
+    "Back (button, top left)",
+    "Add to favorites (button, top)",
+    "Share (button, top right)",
+    "cover image (image, center)",
+    "Morning Show · Sep 25 (item, center)",
+    "An episode about rivers (item, center)",
+    "Home (item, bottom left)",
+    "position seek bar (item, bottom)",
+    "play button (button, bottom)",
+    "Rewind (button, bottom)",
+    "Fast-forward (button, bottom)",
+    "Queue (item, bottom right)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "options_v2": [
+    "Back (button, top left, 1st of 3 from left)",
+    "Add to favorites (button, top, 2nd of 3 from left)",
+    "Share (button, top right, last of 3 from left)",
+    "cover image (image, center)",
+    "Morning Show · Sep 25 (item, center, 1st of 5 down)",
+    "An episode about rivers (item, center, 2nd of 5 down)",
+    "Home (item, bottom left, last of 4 down)",
+    "position seek bar (item, bottom, 3rd of 5 down)",
+    "play button (button, bottom, 2nd of 3 from left)",
+    "Rewind (button, bottom, 1st of 3 from left)",
+    "Fast-forward (button, bottom, last of 3 from left)",
+    "Queue (item, bottom right, last of 4 down)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "bounds": [
+    [
+     0,
+     138,
+     147,
+     285
+    ],
+    [
+     594,
+     148,
+     721,
+     274
+    ],
+    [
+     848,
+     148,
+     975,
+     274
+    ],
+    [
+     105,
+     426,
+     975,
+     1296
+    ],
+    [
+     21,
+     1405,
+     1059,
+     1469
+    ],
+    [
+     21,
+     1469,
+     1059,
+     1530
+    ],
+    [
+     0,
+     2106,
+     540,
+     2274
+    ],
+    [
+     21,
+     1762,
+     1059,
+     1809
+    ],
+    [
+     456,
+     1874,
+     624,
+     2042
+    ],
+    [
+     298,
+     1895,
+     424,
+     2021
+    ],
+    [
+     656,
+     1895,
+     782,
+     2021
+    ],
+    [
+     540,
+     2106,
+     1080,
+     2274
+    ]
+   ]
+  },
+  {
+   "name": "a clear layer drawn above holding only a floating button hides nothing",
+   "w": 1080,
+   "h": 2400,
+   "covers": [],
+   "root": {
+    "cls": "android.widget.FrameLayout",
+    "b": [
+     0,
+     0,
+     1080,
+     2400
+    ],
+    "kids": [
+     {
+      "cls": "androidx.recyclerview.widget.RecyclerView",
+      "b": [
+       0,
+       300,
+       1080,
+       2300
+      ],
+      "scroll": true,
+      "draw": 1,
+      "kids": [
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         300,
+         1080,
+         500
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 0",
+          "b": [
+           40,
+           330,
+           900,
+           470
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         500,
+         1080,
+         700
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 1",
+          "b": [
+           40,
+           530,
+           900,
+           670
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         700,
+         1080,
+         900
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 2",
+          "b": [
+           40,
+           730,
+           900,
+           870
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         900,
+         1080,
+         1100
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 3",
+          "b": [
+           40,
+           930,
+           900,
+           1070
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         1100,
+         1080,
+         1300
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 4",
+          "b": [
+           40,
+           1130,
+           900,
+           1270
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         1300,
+         1080,
+         1500
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 5",
+          "b": [
+           40,
+           1330,
+           900,
+           1470
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         1500,
+         1080,
+         1700
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 6",
+          "b": [
+           40,
+           1530,
+           900,
+           1670
+          ]
+         }
+        ]
+       },
+       {
+        "cls": "android.widget.LinearLayout",
+        "b": [
+         0,
+         1700,
+         1080,
+         1900
+        ],
+        "click": true,
+        "kids": [
+         {
+          "cls": "android.widget.TextView",
+          "text": "Note 7",
+          "b": [
+           40,
+           1730,
+           900,
+           1870
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "cls": "android.widget.FrameLayout",
+      "b": [
+       0,
+       0,
+       1080,
+       2400
+      ],
+      "draw": 2,
+      "kids": [
+       {
+        "cls": "com.google.android.material.floatingactionbutton.FloatingActionButton",
+        "desc": "New note",
+        "b": [
+         891,
+         2111,
+         1038,
+         2258
+        ],
+        "click": true
+       }
+      ]
+     }
+    ]
+   },
+   "options_v1": [
+    "Note 0 (list item, top)",
+    "Note 1 (list item, top)",
+    "Note 2 (list item, center)",
+    "Note 3 (list item, center)",
+    "Note 4 (list item, center)",
+    "Note 5 (list item, center)",
+    "Note 6 (list item, bottom)",
+    "Note 7 (list item, bottom)",
+    "New note (item, bottom right)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "options_v2": [
+    "Note 0 (list item, top, 1st of 8 down)",
+    "Note 1 (list item, top, 2nd of 8 down)",
+    "Note 2 (list item, center, 3rd of 8 down)",
+    "Note 3 (list item, center, 4th of 8 down)",
+    "Note 4 (list item, center, 5th of 8 down)",
+    "Note 5 (list item, center, 6th of 8 down)",
+    "Note 6 (list item, bottom, 7th of 8 down)",
+    "Note 7 (list item, bottom, last of 8 down)",
+    "New note (item, bottom right)",
+    "none of these (the thing I named is not on screen)"
+   ],
+   "bounds": [
+    [
+     0,
+     300,
+     1080,
+     500
+    ],
+    [
+     0,
+     500,
+     1080,
+     700
+    ],
+    [
+     0,
+     700,
+     1080,
+     900
+    ],
+    [
+     0,
+     900,
+     1080,
+     1100
+    ],
+    [
+     0,
+     1100,
+     1080,
+     1300
+    ],
+    [
+     0,
+     1300,
+     1080,
+     1500
+    ],
+    [
+     0,
+     1500,
+     1080,
+     1700
+    ],
+    [
+     0,
+     1700,
+     1080,
+     1900
+    ],
+    [
+     891,
+     2111,
+     1038,
+     2258
+    ]
+   ]
+  }
+ ]
+}
