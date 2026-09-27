@@ -28,6 +28,7 @@ mic ─► Pico 2 W ─(BLE)─► Android app ─► decision model ─► Acce
 | [`firmware/`](firmware/README.md) | The Pico 2 W firmware (Arduino toolchain, arduino-pico core). Bring-up sketches so far; it will port `extractor/vox_extract` and check itself against `extractor/vectors/` | `firmware/README.md` |
 | [`hardware/`](hardware/case/README.md) | The 3D-printed necklace case (parametric OpenSCAD), and a 1:1 layout template for the protoboard | `hardware/case/README.md` |
 | [`brand/`](brand/README.md) | Canti logo (wordmark and app icon, SVG), colour palette and UI shape rules | `brand/README.md` |
+| [`docs/`](docs/deck/README.md) | `canti-overview.pptx`, the project overview deck in the app's pixel kit, and the script that builds it | `docs/deck/README.md` |
 
 ## What is not in git
 

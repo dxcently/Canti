@@ -71,3 +71,7 @@ local.properties
 
 # --- android: CMake/NDK build intermediates (vx_jni)
 .cxx/
+
+# docs/deck build dependencies
+docs/deck/node_modules/
+docs/deck/package-lock.json

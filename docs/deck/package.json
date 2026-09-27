@@ -1,0 +1,11 @@
+{
+  "name": "canti-deck",
+  "private": true,
+  "description": "Builds ../canti-overview.pptx",
+  "scripts": { "build": "node build.js" },
+  "dependencies": {
+    "opentype.js": "^2.0.0",
+    "pngjs": "^7.0.0",
+    "pptxgenjs": "^4.0.1"
+  }
+}
