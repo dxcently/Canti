@@ -8,6 +8,8 @@ const path = require('path');
 const { PNG } = require('pngjs');
 const opentype = require('opentype.js');
 const PptxGenJS = require('pptxgenjs');
+const { execFileSync } = require('child_process');
+const { readStl, renderIso } = require('./iso');
 
 const REPO = path.join(__dirname, '..', '..');
 const OUT = path.join(__dirname, '..', 'canti-overview.pptx');
@@ -61,6 +63,21 @@ const BRAND = {
   wordmarkLight: readPng('ui/assets/brand/canti-wordmark-light@6.png'),
   badge: readPng('ui/assets/badge/canti_badge.png'),
 };
+// The case (hardware/case/out), and its first version from git: the mic under the board (f03313d).
+const stl = (rel) => readStl(fs.readFileSync(path.join(REPO, rel), 'utf8'));
+const stlAt = (rev, rel) => readStl(execFileSync('git', ['-C', REPO, 'show', `${rev}:${rel}`], { encoding: 'utf8', maxBuffer: 64 << 20 }));
+const CASE = {
+  base: stl('hardware/case/out/base.stl'),
+  lid: stl('hardware/case/out/lid.stl'),
+  plunger: stl('hardware/case/out/plunger.stl'),
+  clip: stl('hardware/case/out/mic_clip.stl'),
+  micTest: stl('hardware/case/out/mic_test.stl'),
+  baseV1: stlAt('f03313d', 'hardware/case/out/base.stl'),
+};
+// Mic pocket centres in each STL's coordinates (vox_case.scad: mic_x/mic_y; the lid is exported flipped, y -> -y).
+const POCKET_V1 = [32, 60, 2];
+const POCKET_V2 = [36.43, -60.4, 4];
+
 const BADGE = JSON.parse(fs.readFileSync(path.join(REPO, 'ui/assets/badge/canti_badge.json'), 'utf8'));
 
 const BAYER4 = [
@@ -299,6 +316,14 @@ class Slide {
     this.text(title, 31, 5, tw + 14, 20, { font: 'title', size: 36, bold: true, align: 'center' });
   }
 
+  // An iso render (iso.js) at art position (x, y); its paper pixels cover the field too.
+  iso(g, x, y) {
+    for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) {
+      const v = g.px[j * g.w + i];
+      if (v) this.rect(x + i, y + j, 1, 1, v === 1 ? 'ink' : 'paper');
+    }
+  }
+
   badgeFrame(state, x, y, k, { frame } = {}) {
     const s = BADGE.states[state];
     const f = frame ?? s.still ?? 0;
@@ -378,7 +403,7 @@ const bullets = (items, o = {}) => items.map((text, i) => ({
 const slides = [];
 
 // Title
-slides.push(() => {
+slides.push((n) => {
   const s = new Slide(DARK);
   s.pillars.push({ cx: 12, a: 9, top: 72 }, { cx: 26, a: 6, top: 80 }, { cx: 148, a: 8, top: 76 }, { cx: 136, a: 5, top: 83 });
   s.image(BRAND.icon, 28, 44, 3, { clear: true });
@@ -389,11 +414,11 @@ slides.push(() => {
   return s;
 });
 
-// 1. The idea
-slides.push(() => {
+// The idea
+slides.push((n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 6, a: 7, top: 80 }, { cx: 154, a: 6, top: 78 });
-  s.header(1, 'The idea');
+  s.header(n, 'The idea');
   const a = s.window(8, 31, 162, 140, 'WHAT CANTI IS');
   s.text([
     { text: 'You make a small sound. The phone swipes, taps or goes back.', options: { breakLine: true, bold: true } },
@@ -415,11 +440,11 @@ slides.push(() => {
   return s;
 });
 
-// 2. How it works
-slides.push(() => {
+// How it works
+slides.push((n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 8, a: 8, top: 82 }, { cx: 152, a: 7, top: 80 });
-  s.header(2, 'How it works');
+  s.header(n, 'How it works');
   const steps = [
     ['HEAR', 'sound', 'A Pico 2 W pendant with an I2S mic hears each sound.'],
     ['DESCRIBE', 'link', 'It writes the sound as one line of text and sends it over Bluetooth LE.'],
@@ -441,10 +466,10 @@ slides.push(() => {
   return s;
 });
 
-// 3. The sounds
-slides.push(() => {
+// The sounds
+slides.push((n) => {
   const s = new Slide(LIGHT);
-  s.header(3, 'The sounds');
+  s.header(n, 'The sounds');
   const a = s.window(8, 31, 304, 132, 'DEFAULT BINDINGS');
   const colW = 126;
   const singles = [['rise', 'swipe up'], ['fall', 'swipe down'], ['arch', 'swipe right'], ['dip', 'swipe left'], ['flat', 'long press'], ['hiss', 'back'], ['pop', 'tap']];
@@ -482,11 +507,11 @@ slides.push(() => {
   return s;
 });
 
-// 4. The pendant
-slides.push(() => {
+// The pendant
+slides.push((n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 150, a: 8, top: 78 });
-  s.header(4, 'The pendant');
+  s.header(n, 'The pendant');
   const a = s.window(8, 31, 170, 110, 'HARDWARE');
   s.panel(a.x, a.y, a.w, a.h);
   const rows = [
@@ -508,11 +533,178 @@ slides.push(() => {
   return s;
 });
 
-// 5. On the pendant: the extractor and the link
-slides.push(() => {
+// The case: the printed parts
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'The case');
+  const a = s.window(8, 31, 200, 142, 'PRINTED PARTS');
+  const T = { yaw: 30, el: 50, scale: 0.95 };
+  const base = renderIso(CASE.base, T), lid = renderIso(CASE.lid, T);
+  s.iso(base, a.x + 2, a.y + 1);
+  s.iso(lid, a.x + a.w - lid.w - 2, a.y + 3);
+  const ly = a.y + Math.max(base.h, lid.h + 2) + 1;
+  s.text('BASE', a.x + 2, ly, base.w, 9, { font: 'title', size: 18, bold: true, align: 'center' });
+  s.text('LID, INSIDE UP', a.x + a.w - lid.w - 2, ly, lid.w, 9, { font: 'title', size: 18, bold: true, align: 'center' });
+  const plunger = renderIso(CASE.plunger, { yaw: 30, el: 35, scale: 2 });
+  const clip = renderIso(CASE.clip, { yaw: 30, el: 55, scale: 2 });
+  const py = ly + 12;
+  s.iso(plunger, a.x + 12, py);
+  s.text('PLUNGER', a.x + 12 + plunger.w + 4, py + 4, 50, 9, { font: 'title', size: 18, bold: true });
+  s.text('presses the button through the lid', a.x + 12 + plunger.w + 4, py + 13, 60, 12, { size: 9, valign: 'top' });
+  s.iso(clip, a.x + a.w - clip.w - 50, py - 2);
+  s.text('MIC CLIP', a.x + a.w - 48, py + 4, 48, 9, { font: 'title', size: 18, bold: true });
+  s.text('holds the mic in the lid', a.x + a.w - 48, py + 13, 48, 12, { size: 9, valign: 'top' });
+
+  const b = s.window(214, 31, 98, 142, 'PRINT');
+  const parts = [
+    ['BASE', 'back face down · 1'],
+    ['LID', 'outer face down · 1'],
+    ['PLUNGER', 'flange down · 1'],
+    ['MIC CLIP', 'flat · print 2–3, tiny'],
+    ['FIT TEST', 'optional: board fit'],
+    ['MIC TEST', 'optional: pocket, 10 min'],
+  ];
+  parts.forEach(([name, how], i) => {
+    const y = b.y + i * 15;
+    s.text(name, b.x + 1, y, b.w - 2, 8, { font: 'title', size: 18, bold: true });
+    s.text(how, b.x + 1, y + 8, b.w - 2, 6, { size: 10 });
+  });
+  s.hline(b.x + 1, b.y + 91, b.w - 2);
+  s.text('PLA, 0.2 mm layers, no supports. About 55 × 75 × 20 mm plus the necklace loop.', b.x + 1, b.y + 94, b.w - 2, 28, { size: 10, valign: 'top' });
+  s.field();
+  return s;
+});
+
+// Moving the mic: v1 under the board, v2 in the lid
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Moving the mic');
+  const T = { yaw: 30, el: 50, scale: 0.9 };
+  const views = [
+    [8, 'V1 · UNDER THE BOARD', CASE.baseV1, POCKET_V1, [
+      'A pocket on the back wall, under the board, with the port through the back.',
+      'Six short wires soldered to the board.',
+      'Way too hard to work with: to reach the mic, the whole board comes out.',
+    ]],
+    [170, 'V2 · IN THE LID', CASE.lid, POCKET_V2, [
+      'Clipped into a pocket in the lid, over a 2 mm hole.',
+      'Five Dupont wires plug onto a header on the board.',
+      'Unplug the lid and the mic comes with it: easy to swap or take out.',
+    ]],
+  ];
+  views.forEach(([x, title, mesh, pocket, lines]) => {
+    const a = s.window(x, 31, 142, 142, title);
+    const g = renderIso(mesh, { ...T, marks: [pocket] });
+    const gx = a.x + Math.floor((a.w - g.w) / 2), gy = a.y;
+    s.iso(g, gx, gy);
+    const [mx, my] = g.marks[0];
+    s.brackets(gx + mx - 13, gy + my - 10, 26, 20, 'ink', 5, 1);
+    s.text(bullets(lines), a.x + 1, gy + g.h + 1, a.w - 2, a.y + a.h - gy - g.h - 2, { size: 10, valign: 'top', paraSpaceAfter: 2 });
+  });
+  s.glyph(G.Marks.right, 158, 92, 'ink', 2);
+  s.markClear(158, 92, 8, 14);
+  s.field();
+  return s;
+});
+
+// The mic in the lid: the pocket, the stack, the plug
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'The mic in the lid');
+  const a = s.window(8, 31, 150, 142, 'MIC POCKET');
+  const pocket = renderIso(CASE.micTest, { yaw: 30, el: 55, scale: 2.8 });
+  const clip = renderIso(CASE.clip, { yaw: 30, el: 55, scale: 2.4 });
+  s.iso(pocket, a.x, a.y);
+  s.iso(clip, a.x + a.w - clip.w, a.y + 44);
+  s.text('C-CLIP', a.x + a.w - clip.w, a.y + 34, clip.w, 8, { font: 'title', size: 18, bold: true, align: 'center' });
+  s.text('The lid\'s pocket, printed on its own as mic_test.stl (about 10 minutes) to check the module, foam and clip fit before the whole lid.',
+    a.x + 1, a.y + pocket.h + 2, a.w - 2, a.h - pocket.h - 3, { size: 10, valign: 'top' });
+
+  const b = s.window(164, 31, 148, 78, 'THE STACK');
+  const L = b.x + 2, R = b.x + 50, mid = Math.round((L + R) / 2);
+  const layers = [];
+  let y = b.y + 3;
+  const layer = (label, draw, h) => { draw(y, h); layers.push([label, y + Math.floor(h / 2)]); y += h + 5; };
+  layer('fabric disc', (yy, h) => s.hatch(L + 12, yy, R - L - 24, h, 'ink', 2), 3);
+  layer('lid, 2 mm hole', (yy, h) => { s.rect(L, yy, mid - 1 - L, h); s.rect(mid + 2, yy, R - mid - 2, h); }, 4);
+  layer('foam ring', (yy, h) => { s.hatch(L + 14, yy, mid - 2 - L - 14, h, 'ink', 2); s.hatch(mid + 3, yy, R - 14 - mid - 3, h, 'ink', 2); s.frame(L + 14, yy, R - L - 28, h, 'ink'); s.rect(mid - 1, yy, 3, h, 'paper'); }, 4);
+  layer('mic, label side up', (yy, h) => { s.rect(L + 4, yy, mid - L - 4, h); s.rect(mid + 1, yy, R - 4 - mid - 1, h); s.rect(mid - 5, yy + h, 11, 2); }, 3);
+  layer('C-clip', (yy, h) => { s.rect(L + 3, yy, 8, h); s.rect(R - 11, yy, 8, h); }, 2);
+  layer('5 wires to the board', (yy, h) => { for (let i = 0; i < 5; i++) s.vline(L + 14 + i * 6, yy - 2, h + 2); }, 6);
+  layers.forEach(([label, ly]) => {
+    s.leader(R + 3, R + 9, ly);
+    s.text(label, R + 11, ly - 4, b.x + b.w - R - 11, 8, { size: 10 });
+  });
+
+  const c = s.window(164, 113, 148, 60, 'THE PLUG');
+  ['GND', '3V3', 'SD', 'WS', 'SCK'].forEach((pin, i) => {
+    const x = c.x + i * 27;
+    s.box(x, c.y, 25, 11, { fill: i === 0 ? 'ink' : 'paper' });
+    s.text(pin, x, c.y, 25, 11, { font: 'title', size: 18, bold: true, align: 'center', color: i === 0 ? 'paper' : 'ink' });
+  });
+  s.text(bullets(['A right-angle header, column 9, rows 3–7: the plug lies flat under the lid.', '8–9 cm of cable: the lid sets down beside the case, still plugged in.', 'L/R is bridged to GND on the module, so 5 wires, not 6.']), c.x, c.y + 13, c.w, c.h - 13, { size: 9, valign: 'top', paraSpaceAfter: 1 });
+  s.field();
+  return s;
+});
+
+// Mapping the board, and the build book
+slides.push((n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Mapped, then built');
+  const a = s.window(8, 31, 150, 142, 'BOARD MAP');
+  // The protoboard at 4 art px per 2.54 mm hole (hardware/case/out/layout.svg), component side up, USB at the bottom.
+  const bx = a.x + 1, by = a.y + 1, bw = 79, bh = 110;
+  const X = (c) => bx + 5 + 4 * c, Y = (r) => by + bh - 10 - 4 * r;
+  s.box(bx, by, bw, bh);
+  for (let c = 0; c < 18; c++) for (let r = 0; r < 24; r++) s.rect(X(c), Y(r), 1, 1);
+  s.box(X(0) - 3, Y(19) - 3, X(7) - X(0) + 7, Y(0) - Y(19) + 7);
+  for (let r = 0; r < 20; r++) { s.rect(X(0), Y(r), 1, 1); s.rect(X(7), Y(r), 1, 1); }
+  s.text('PICO', X(0), Y(12), X(7) - X(0) + 1, 9, { font: 'title', size: 18, bold: true, align: 'center' });
+  s.box(X(3) - 3, Y(0) + 2, 8, 6, { fill: 'ink' });
+  s.box(X(13) - 5, Y(10.5) - 5, 11, 11);
+  s.block(X(13) - 2, Y(10.5) - 2, 5, 5, 'ink');
+  s.box(X(13) - 3, Y(16) - 3, 7, 7, { fill: 'ink' });
+  for (let r = 3; r <= 7; r++) s.rect(X(9), Y(r), 2, 2);
+  s.frame(X(9) + 3, Y(7) - 2, 25, Y(3) - Y(7) + 5, 'ink', { dotted: true });
+  const zr = 13.9, zx = X(13), zy = Y(21.5);
+  for (let t = 0; t < 360; t += 7) s.rect(Math.round(zx + zr * Math.cos((t * Math.PI) / 180)), Math.round(zy + zr * Math.sin((t * Math.PI) / 180)), 1, 1);
+  const lx = bx + bw + 3, lw = a.x + a.w - lx;
+  const labels = [
+    [zy, zx + zr + 1, 'MIC ZONE', 'parts under 4 mm'],
+    [Y(16), X(13) + 4, 'LED', 'GP13'],
+    [Y(10.5), X(13) + 6, 'BUTTON', 'GP14'],
+    [Y(5), X(9) + 29, 'MIC PLUG', 'col 9, rows 3–7'],
+    [Y(0) + 5, X(3) + 6, 'USB', ''],
+  ];
+  labels.forEach(([y, from, name, sub]) => {
+    s.leader(from + 1, lx - 1, Math.round(y));
+    s.text(name, lx, Math.round(y) - 8, lw, 8, { font: 'title', size: 18 });
+    s.text(sub, lx, Math.round(y) + 1, lw, 7, { size: 9 });
+  });
+  s.text('A 1:1 template (layout.svg): print it, check the 40 mm bar, build the board on it.', a.x + 1, by + bh + 1, a.w - 2, 13, { size: 9, valign: 'top' });
+
+  const b = s.window(164, 31, 148, 142, 'BUILD BOOK · 28 STEPS');
+  const stages = [
+    ['BREADBOARD · 1–10', ['1–4 Pico headers, button, LED, flash and test.', '5–10 rails, mic wires, L/R bridge, mic level.'], 2],
+    ['NECKLACE · 11–28', ['11–15 template, place and solder the Pico.', '16–21 LED, button, mic header, beep test.', '22–28 measure, print, foam ring, plug, mic into the lid, close.'], 4],
+    ['MEASURE FIRST', ['Measured values drive every hole in the OpenSCAD model. Asserts stop a change that breaks a fit, and the clash check must come out empty.'], 4],
+  ];
+  let y = b.y;
+  stages.forEach(([title, lines, rows]) => {
+    s.panel(b.x, y, b.w, 11);
+    s.text(title, b.x + 4, y + 1, b.w - 8, 9, { font: 'title', size: 18, bold: true, color: 'paper' });
+    s.text(lines.join('\n'), b.x + 1, y + 13, b.w - 2, rows * 6.5, { size: 10, valign: 'top' });
+    y += 13 + rows * 6.5 + 5;
+  });
+  s.field();
+  return s;
+});
+
+// On the pendant: the extractor and the link
+slides.push((n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 6, a: 6, top: 84 });
-  s.header(5, 'Listening');
+  s.header(n, 'Listening');
   const a = s.window(8, 31, 186, 140, 'EVERY 10 MS');
   const chain = ['16 KHZ MIC', 'PITCH', 'LABEL'];
   let x = a.x + 1;
@@ -544,10 +736,10 @@ slides.push(() => {
   return s;
 });
 
-// 6. On the phone
-slides.push(() => {
+// On the phone
+slides.push((n) => {
   const s = new Slide(LIGHT);
-  s.header(6, 'On the phone');
+  s.header(n, 'On the phone');
   const a = s.window(8, 31, 304, 64, 'ANDROID APP');
   const stages = [
     ['SOURCE', 'pendant, phone mic or USB mic'],
@@ -580,10 +772,10 @@ slides.push(() => {
   return s;
 });
 
-// 7. Deciding
-slides.push(() => {
+// Deciding
+slides.push((n) => {
   const s = new Slide(LIGHT);
-  s.header(7, 'Deciding');
+  s.header(n, 'Deciding');
   const a = s.window(8, 31, 176, 140, 'RULES FIRST');
   s.text('Seconds from the end of a sound to the action (estimates):', a.x + 1, a.y, a.w - 2, 16, { size: 11, valign: 'top' });
   const sx = a.x + 4, sw = a.w - 10, scale = (v) => sx + Math.round(v * sw);
@@ -621,10 +813,10 @@ slides.push(() => {
   return s;
 });
 
-// 8. Your voice
-slides.push(() => {
+// Your voice
+slides.push((n) => {
   const s = new Slide(LIGHT);
-  s.header(8, 'Your voice');
+  s.header(n, 'Your voice');
   const a = s.window(8, 31, 180, 140, 'TRAIN GESTURES');
   const cards = [['rise', 7, 8], ['fall', 0, 8], ['arch', 5, 8], ['dip', 0, 8], ['flat', 0, 8], ['pop', 4, 4], ['click', 2, 4], ['hiss', 0, 4]];
   const cw = Math.floor((a.w - 4) / 2), ch = 22;
@@ -659,10 +851,10 @@ slides.push(() => {
   return s;
 });
 
-// 9. The look
-slides.push(() => {
+// The look
+slides.push((n) => {
   const s = new Slide(LIGHT);
-  s.header(9, 'The look');
+  s.header(n, 'The look');
   const a = s.window(8, 31, 192, 140, 'THE PIXEL KIT');
   s.block(a.x, a.y, 30, 20, 'ink');
   s.text('INK', a.x, a.y + 2, 30, 8, { font: 'title', size: 18, bold: true, color: 'paper', align: 'center' });
@@ -699,10 +891,10 @@ slides.push(() => {
   return s;
 });
 
-// 10. Where it stands (the round 6 handoff)
-slides.push(() => {
+// Where it stands (the round 6 handoff)
+slides.push((n) => {
   const s = new Slide(LIGHT);
-  s.header(10, 'Where it stands');
+  s.header(n, 'Where it stands');
   const a = s.window(8, 31, 304, 142, 'ROUND 6 · 2026-09-27');
   const rows = [
     [null, 'JVM TESTS', '498 / 498 pass'],
@@ -724,11 +916,11 @@ slides.push(() => {
   return s;
 });
 
-// 11. Next
-slides.push(() => {
+// Next
+slides.push((n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 150, a: 8, top: 74 }, { cx: 138, a: 5, top: 80 });
-  s.header(11, 'Next');
+  s.header(n, 'Next');
   const a = s.window(8, 31, 196, 142, 'DO FIRST');
   const todo = [
     'Find why 11 emulator tests fail: gesture confirmation and cursor taps.',
@@ -752,7 +944,7 @@ slides.push(() => {
 });
 
 // End
-slides.push(() => {
+slides.push((n) => {
   const s = new Slide(DARK);
   s.pillars.push({ cx: 12, a: 9, top: 70 }, { cx: 148, a: 9, top: 72 }, { cx: 134, a: 5, top: 80 });
   s.badgeFrame('idle', 58, 38, 12);
@@ -767,6 +959,6 @@ const pres = new PptxGenJS();
 pres.layout = 'LAYOUT_16x9';
 pres.title = 'Canti: project overview';
 pres.company = 'VOX';
-slides.forEach((make, i) => emit(pres, make(), i + 1));
+slides.forEach((make, i) => emit(pres, make(i), i + 1));
 for (const w of warnings) console.warn('fit:', w);
 pres.writeFile({ fileName: OUT }).then((f) => console.log('wrote', f));
