@@ -78,6 +78,10 @@ const CASE = {
 const POCKET_V1 = [32, 60, 2];
 const POCKET_V2 = [36.43, -60.4, 4];
 
+// Inspiration photos (docs/deck/inspiration), shown in colour.
+const photo = (f) => { const p = path.join(__dirname, 'inspiration', f); const i = PNG.sync.read(fs.readFileSync(p)); return { path: p, w: i.width, h: i.height }; };
+const PHOTOS = { yondu: photo('yondu.png'), canti: photo('canti-flcl.png') };
+
 const BADGE = JSON.parse(fs.readFileSync(path.join(REPO, 'ui/assets/badge/canti_badge.json'), 'utf8'));
 
 const BAYER4 = [
@@ -96,6 +100,7 @@ class Slide {
     this.t = theme;
     this.png = new PNG({ width: W * K, height: H * K });
     this.texts = [];
+    this.photos = [];
     this.clear = new Uint8Array(W * H); // art pixels where ink sits straight on the dot field
     this.pillars = [];
     this.covered = new Uint8Array(W * K * H * K); // device pixels the kit drew; the field stays under them
@@ -181,6 +186,13 @@ class Slide {
 
   markClear(x, y, w, h) {
     for (let j = Math.max(0, y); j < Math.min(H, y + h); j++) for (let i = Math.max(0, x); i < Math.min(W, x + w); i++) this.clear[j * W + i] = 1;
+  }
+
+  // A photo, contained in (x, y, w, h) on a paper box, as a pptx picture over the art (kept in colour).
+  photo(p, x, y, w, h) {
+    const k = Math.min(w / p.w, h / p.h), pw = p.w * k, ph = p.h * k;
+    this.box(x, y, w, h);
+    this.photos.push({ path: p.path, x: x + (w - pw) / 2, y: y + (h - ph) / 2, w: pw, h: ph });
   }
 
   text(str, x, y, w, h, o = {}) {
@@ -378,6 +390,7 @@ function emit(pres, s, slideNo) {
   const buf = PNG.sync.write(s.png);
   const slide = pres.addSlide();
   slide.background = { data: 'image/png;base64,' + buf.toString('base64') };
+  for (const p of s.photos) slide.addImage({ path: p.path, x: IN(p.x), y: IN(p.y), w: IN(p.w), h: IN(p.h) });
   for (const t of s.texts) {
     checkFit(slideNo, t);
     const o = t.o;
@@ -399,11 +412,10 @@ const bullets = (items, o = {}) => items.map((text, i) => ({
 }));
 
 // --- the slides ----------------------------------------------------------------------------------------------------
-
-const slides = [];
+const SLIDES = {};
 
 // Title
-slides.push((n) => {
+SLIDES.title = (n) => {
   const s = new Slide(DARK);
   s.pillars.push({ cx: 12, a: 9, top: 72 }, { cx: 26, a: 6, top: 80 }, { cx: 148, a: 8, top: 76 }, { cx: 136, a: 5, top: 83 });
   s.image(BRAND.icon, 28, 44, 3, { clear: true });
@@ -412,95 +424,64 @@ slides.push((n) => {
   s.text('PROJECT OVERVIEW  ·  VOX / CANTI', 130, 144, 180, 8, { font: 'title', size: 18, onField: true });
   s.field({ top: 30 });
   return s;
-});
+};
 
-// The idea
-slides.push((n) => {
+// Who it helps
+SLIDES.who = (n) => {
   const s = new Slide(LIGHT);
-  s.pillars.push({ cx: 6, a: 7, top: 80 }, { cx: 154, a: 6, top: 78 });
-  s.header(n, 'The idea');
-  const a = s.window(8, 31, 162, 140, 'WHAT CANTI IS');
-  s.text([
-    { text: 'You make a small sound. The phone swipes, taps or goes back.', options: { breakLine: true, bold: true } },
-    { text: 'No words needed: hums that rise, fall, arch or dip, lip pops, tongue clicks, hisses and whistles, plus sounds you invent.', options: { breakLine: true } },
-    { text: 'Spoken phrases are an opt-in extra, opened by "pop pop".', options: { breakLine: true } },
-    { text: 'Pitch is read relative to where each hum starts, never as an absolute note. Absolute notes lost in the prior art: 2.6 s against 1.4 s per target (Sporka 2006).', options: {} },
-  ], a.x + 2, a.y + 1, a.w - 4, a.h - 3, { size: 13, valign: 'top', paraSpaceAfter: 7 });
-
-  const b = s.window(176, 31, 136, 104, 'EIGHT SOUNDS');
-  s.panel(b.x, b.y, b.w, b.h);
-  const names = ['rise', 'fall', 'arch', 'dip', 'flat', 'pop', 'click', 'hiss'];
-  const cw = 30, ch = 40, gx = b.x + Math.floor((b.w - 4 * cw) / 2), gy = b.y + 4;
-  names.forEach((n, i) => {
-    const cx = gx + (i % 4) * cw, cy = gy + Math.floor(i / 4) * ch;
-    s.glyph(G.GestureGlyphs[n], cx + 3, cy + 3, 'paper', 2);
-    s.text(n.toUpperCase(), cx, cy + 29, cw, 8, { font: 'title', size: 18, color: 'paper', align: 'center' });
-  });
-  s.field();
-  return s;
-});
-
-// Why I built it
-slides.push((n) => {
-  const s = new Slide(LIGHT);
-  s.pillars.push({ cx: 154, a: 6, top: 80 });
-  s.header(n, 'Why I built it');
-  const a = s.window(8, 31, 150, 142, 'THE SPARK');
-  s.text([
-    { text: 'Augmental\'s VOX: a mic pendant worn on the skin, so you can whisper to type. $200 in beta, shipping late 2026.', options: { breakLine: true } },
-    { text: 'But it is just a microphone pointed at yourself, so I built my own.', options: { bold: true } },
-  ], a.x + 1, a.y, a.w - 2, 58, { size: 11, valign: 'top', paraSpaceAfter: 6 });
-  const prices = [['AUGMENTAL VOX', 200, '$200'], ['CANTI', 20, '~$15–20']];
-  const px = a.x + 1, pw = a.w - 2, per = (pw - 2) / 200;
-  prices.forEach(([label, v, txt], i) => {
-    const y = a.y + 50 + i * 24;
-    s.text(label, px, y, 90, 8, { font: 'title', size: 18, bold: true });
-    s.text(txt, px + pw - 40, y, 40, 8, { size: 11, align: 'right' });
-    s.block(px, y + 10, Math.max(4, Math.round(v * per)), 8, 'ink');
-  });
-  s.text('Parts: a $7 Pico 2 W, a $2–4 I2S mic, a button, an LED, a printed case.', a.x + 1, a.y + 104, a.w - 2, 13, { size: 9, valign: 'top' });
-
-  const b = s.window(164, 31, 148, 96, 'WHY SWIPES');
-  s.text(bullets([
-    'On TikTok and reels I kept wishing for an auto-scroller. You are not always holding the phone, and waiting out every video is annoying.',
-    'So it scrolls for you, or dictates.',
-    'It helps people with accessibility needs use their phone at all.',
-    'Full range of motion: gestures, plus a cursor.',
-  ]), b.x + 1, b.y, b.w - 2, b.h, { size: 10, valign: 'top', paraSpaceAfter: 3 });
-  const c = s.window(164, 133, 148, 40, 'NEXT');
-  s.text('Desktop and web control (computer use). A prototype exists.', c.x + 1, c.y, c.w - 2, c.h, { size: 10, valign: 'top' });
-  s.field();
-  return s;
-});
-
-// How it works
-slides.push((n) => {
-  const s = new Slide(LIGHT);
-  s.pillars.push({ cx: 8, a: 8, top: 82 }, { cx: 152, a: 7, top: 80 });
-  s.header(n, 'How it works');
-  const steps = [
-    ['HEAR', 'sound', 'A Pico 2 W pendant with an I2S mic hears each sound.'],
-    ['DESCRIBE', 'link', 'It writes the sound as one line of text and sends it over Bluetooth LE.'],
-    ['DECIDE', 'decider', 'The phone groups sounds, reads the screen, and picks the action.'],
-    ['ACT', 'hand', 'Android swipes, taps or goes back, then checks that it worked.'],
+  s.header(n, 'Who it helps');
+  const a = s.window(8, 31, 198, 142, 'ACCESSIBILITY');
+  const rows = [
+    ['hand', 'NO TOUCH', 'Limited hand use, tremor, or busy hands: swipe, tap and scroll by sound.'],
+    ['sound', 'NO WORDS', 'Hums, pops and clicks work where speech is hard to recognise; your own sounds count too.'],
+    ['gear', 'YOUR RANGE', 'Calibration and training fit each voice. Pitch is relative, never an absolute note.'],
+    ['device', 'ONE BUTTON', 'Arm, stop and pair with presses. Stopping never depends on the mic.'],
+    ['cursor', 'REACH IT ALL', 'The cursor and "tap the search button" reach what gestures cannot.'],
   ];
-  const ww = 70, gap = 8;
-  steps.forEach(([title, icon, body], i) => {
-    const x = 8 + i * (ww + gap);
-    const a = s.window(x, 31, ww, 92, `${i + 1} ${title}`);
-    s.glyph(G.Icons7[icon], a.x + 2, a.y + 2, 'ink', 3);
-    s.text(body, a.x + 2, a.y + 27, a.w - 3, a.h - 28, { size: 12, valign: 'top' });
-    if (i < 3) { s.glyph(G.Marks.right, x + ww + 2, 72, 'ink'); s.markClear(x + ww + 2, 72, 4, 7); }
+  rows.forEach(([icon, label, d], i) => {
+    const y = a.y + i * 23;
+    s.frame(a.x, y, 11, 11, 'ink', { notch: true });
+    s.glyph(G.Icons7[icon], a.x + 2, y + 2);
+    s.text(label, a.x + 15, y + 1, 80, 9, { font: 'title', size: 18, bold: true });
+    s.text(d, a.x + 15, y + 10, a.w - 16, 13, { size: 9, valign: 'top' });
   });
-  s.panel(8, 130, 304, 36);
-  s.text('WHAT THE PENDANT SENDS', 16, 134, 200, 9, { font: 'title', size: 18, bold: true, color: 'paper' });
-  s.text('hum that rises from low to high; pitch change large; duration short; …', 16, 146, 290, 14, { size: 13, color: 'paper' });
+  s.text('Designed for this; not yet tested with disabled users.', a.x + 1, a.y + 116, a.w - 2, 8, { size: 8 });
+
+  const b = s.window(212, 31, 100, 142, 'LIKE A WIZARD');
+  s.text([
+    { text: 'Whistle, and it moves.', options: { bold: true, breakLine: true } },
+    { text: 'Scroll a recipe with flour on your hands.', options: { breakLine: true } },
+    { text: 'Skip a video from across the couch.', options: { breakLine: true } },
+    { text: 'Let reels auto-scroll while you do something else.', options: { breakLine: true } },
+    { text: 'Next: the desktop and the web.', options: {} },
+  ], b.x + 1, b.y, b.w - 2, b.h, { size: 10, valign: 'top', paraSpaceAfter: 5 });
   s.field();
   return s;
-});
+};
+
+// Tech stack
+SLIDES.stack = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Tech stack');
+  const cells = [
+    ['PENDANT', ['Pico 2 W: RP2350, BLE', 'INMP441 I2S mic', 'OpenSCAD case, PLA']],
+    ['FIRMWARE', ['C++, arduino-pico 6.1.1', 'BTstack GATT, LESC', 'extractor on core 1']],
+    ['PHONE', ['Kotlin 2.2, no AndroidX', 'NDK + JNI: same C++', 'AccessibilityService', 'on-device speech']],
+    ['UI', ['Flutter add-to-app', 'Material 3, no packages', 'pixel kit + shader']],
+    ['MODELS', ['PyTorch on ROCm', 'transformers, ONNX int8', 'e5: jevlike, Verdict']],
+    ['CLOUD + TOOLS', ['Jev API, Ollama', 'DeepSeek executors', 'Claude agents, Eidolon', 'NixOS flakes']],
+  ];
+  cells.forEach(([t, lines], i) => {
+    const x = 8 + (i % 3) * 104, y = 31 + Math.floor(i / 3) * 72;
+    const a = s.window(x, y, 100, 68, t);
+    s.text(bullets(lines), a.x + 1, a.y, a.w - 2, a.h, { size: 9, valign: 'top', paraSpaceAfter: 2 });
+  });
+  s.field();
+  return s;
+};
 
 // The sounds
-slides.push((n) => {
+SLIDES.sounds = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'The sounds');
   const a = s.window(8, 31, 304, 132, 'DEFAULT BINDINGS');
@@ -538,10 +519,10 @@ slides.push((n) => {
     x2, a.y + 5 * rowH + 15, w2, 28, { size: 11, valign: 'top' });
   s.field();
   return s;
-});
+};
 
 // The pendant
-slides.push((n) => {
+SLIDES.pendant = (n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 150, a: 8, top: 78 });
   s.header(n, 'The pendant');
@@ -564,10 +545,10 @@ slides.push((n) => {
   s.text('A sound cannot reliably stop the thing that is misreading sounds, so stop lives on the button.', 184, 137, 128, 30, { size: 11, onField: true, valign: 'top' });
   s.field();
   return s;
-});
+};
 
 // The case: the printed parts
-slides.push((n) => {
+SLIDES.case = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'The case');
   const a = s.window(8, 31, 200, 142, 'PRINTED PARTS');
@@ -606,42 +587,10 @@ slides.push((n) => {
   s.text('PLA, 0.2 mm layers, no supports. About 55 × 75 × 20 mm plus the necklace loop.', b.x + 1, b.y + 94, b.w - 2, 28, { size: 10, valign: 'top' });
   s.field();
   return s;
-});
-
-// Moving the mic: v1 under the board, v2 in the lid
-slides.push((n) => {
-  const s = new Slide(LIGHT);
-  s.header(n, 'Moving the mic');
-  const T = { yaw: 30, el: 50, scale: 0.9 };
-  const views = [
-    [8, 'V1 · UNDER THE BOARD', CASE.baseV1, POCKET_V1, [
-      'A pocket on the back wall, under the board, with the port through the back.',
-      'Six short wires soldered to the board.',
-      'Way too hard to work with: to reach the mic, the whole board comes out.',
-    ]],
-    [170, 'V2 · IN THE LID', CASE.lid, POCKET_V2, [
-      'Clipped into a pocket in the lid, over a 2 mm hole.',
-      'Five Dupont wires plug onto a header on the board.',
-      'Unplug the lid and the mic comes with it: easy to swap or take out.',
-    ]],
-  ];
-  views.forEach(([x, title, mesh, pocket, lines]) => {
-    const a = s.window(x, 31, 142, 142, title);
-    const g = renderIso(mesh, { ...T, marks: [pocket] });
-    const gx = a.x + Math.floor((a.w - g.w) / 2), gy = a.y;
-    s.iso(g, gx, gy);
-    const [mx, my] = g.marks[0];
-    s.brackets(gx + mx - 13, gy + my - 10, 26, 20, 'ink', 5, 1);
-    s.text(bullets(lines), a.x + 1, gy + g.h + 1, a.w - 2, a.y + a.h - gy - g.h - 2, { size: 10, valign: 'top', paraSpaceAfter: 2 });
-  });
-  s.glyph(G.Marks.right, 158, 92, 'ink', 2);
-  s.markClear(158, 92, 8, 14);
-  s.field();
-  return s;
-});
+};
 
 // The mic in the lid: the pocket, the stack, the plug
-slides.push((n) => {
+SLIDES.miclid = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'The mic in the lid');
   const a = s.window(8, 31, 150, 142, 'MIC POCKET');
@@ -678,10 +627,10 @@ slides.push((n) => {
   s.text(bullets(['A right-angle header, column 9, rows 3–7: the plug lies flat under the lid.', '8–9 cm of cable: the lid sets down beside the case, still plugged in.', 'L/R is bridged to GND on the module, so 5 wires, not 6.']), c.x, c.y + 13, c.w, c.h - 13, { size: 9, valign: 'top', paraSpaceAfter: 1 });
   s.field();
   return s;
-});
+};
 
 // Mapping the board, and the build book
-slides.push((n) => {
+SLIDES.mapped = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'Mapped, then built');
   const a = s.window(8, 31, 150, 142, 'BOARD MAP');
@@ -731,10 +680,10 @@ slides.push((n) => {
   });
   s.field();
   return s;
-});
+};
 
 // On the pendant: the extractor and the link
-slides.push((n) => {
+SLIDES.listening = (n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 6, a: 6, top: 84 });
   s.header(n, 'Listening');
@@ -767,10 +716,10 @@ slides.push((n) => {
   ]), b.x + 1, b.y + 49, b.w - 2, b.h - 50, { size: 11, valign: 'top', paraSpaceAfter: 4 });
   s.field();
   return s;
-});
+};
 
 // On the phone
-slides.push((n) => {
+SLIDES.phone = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'On the phone');
   const a = s.window(8, 31, 304, 64, 'ANDROID APP');
@@ -803,10 +752,10 @@ slides.push((n) => {
   ]), p.x + 1, p.y, p.w - 2, p.h, { size: 12, valign: 'top', paraSpaceAfter: 4 });
   s.field();
   return s;
-});
+};
 
 // Deciding
-slides.push((n) => {
+SLIDES.deciding = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'Deciding');
   const a = s.window(8, 31, 176, 140, 'RULES FIRST');
@@ -842,10 +791,10 @@ slides.push((n) => {
   });
   s.field();
   return s;
-});
+};
 
 // Verdict: the phrase model on the phone
-slides.push((n) => {
+SLIDES.verdict = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'Verdict');
   const a = s.window(8, 31, 150, 142, 'ON THE PHONE');
@@ -877,10 +826,10 @@ slides.push((n) => {
   });
   s.field();
   return s;
-});
+};
 
 // Raising the numbers
-slides.push((n) => {
+SLIDES.numbers = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'Raising the numbers');
   const a = s.window(8, 31, 176, 142, 'ACCURACY');
@@ -914,10 +863,10 @@ slides.push((n) => {
   s.text('"none" recall 0.62, gate is 0.8', b.x + 14, b.y + 111, b.w - 14, 11, { size: 9 });
   s.field();
   return s;
-});
+};
 
 // When it's unsure: the cloud fallback
-slides.push((n) => {
+SLIDES.unsure = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, "When it's unsure");
   const a = s.window(8, 31, 304, 62, 'THE CHAIN');
@@ -945,10 +894,10 @@ slides.push((n) => {
   ]), c.x + 1, c.y, c.w - 2, c.h, { size: 10, valign: 'top', paraSpaceAfter: 2 });
   s.field();
   return s;
-});
+};
 
 // Your voice
-slides.push((n) => {
+SLIDES.voice = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'Your voice');
   const a = s.window(8, 31, 180, 140, 'TRAIN GESTURES');
@@ -983,50 +932,77 @@ slides.push((n) => {
   s.text('3–5 examples each, matched on the phone before any model.', b.x + 1, y + 1, b.w - 2, 14, { size: 10, valign: 'top' });
   s.field();
   return s;
-});
+};
 
-// The look
-slides.push((n) => {
+// Built with agents
+SLIDES.agents = (n) => {
   const s = new Slide(LIGHT);
-  s.header(n, 'The look');
-  const a = s.window(8, 31, 192, 140, 'THE PIXEL KIT');
-  s.block(a.x, a.y, 30, 20, 'ink');
-  s.text('INK', a.x, a.y + 2, 30, 8, { font: 'title', size: 18, bold: true, color: 'paper', align: 'center' });
-  s.text('1D2757', a.x, a.y + 10, 30, 8, { size: 9, color: 'paper', align: 'center' });
-  s.box(a.x + 34, a.y, 36, 20);
-  s.text('PAPER', a.x + 34, a.y + 2, 36, 8, { font: 'title', size: 18, bold: true, align: 'center' });
-  s.text('DDEBD3', a.x + 34, a.y + 10, 36, 8, { size: 9, align: 'center' });
-  s.text('Two tones, no greys. A shade is a density of dots.', a.x + 76, a.y - 1, a.w - 76, 22, { size: 11, valign: 'middle' });
-  const bw = Math.floor(a.w / 4);
-  const btn = [['MAIN', { main: true }], ['PRESS', { pressed: true }], ['OFF', { disabled: true }], ['FOCUS', { focused: true }]];
-  btn.forEach(([l, o], i) => s.button(a.x + i * bw, a.y + 25, bw - 2, 19, l, o));
-  s.text('Buttons: double frame for the main action, inverted when pressed, dotted when disabled, corner brackets for focus.',
-    a.x, a.y + 46, a.w, 20, { size: 11, valign: 'top' });
-  s.hatch(a.x, a.y + 70, 60, 34, 'ink');
-  s.box(a.x + 12, a.y + 81, 36, 12);
-  s.text('EMPTY', a.x + 12, a.y + 81, 36, 12, { font: 'title', size: 18, bold: true, align: 'center' });
-  s.pips(a.x + 66, a.y + 70, 3, 4);
-  s.meter(a.x + 66, a.y + 86, 60, 0.6);
-  s.text('Hatch for empty areas; pips and bars for meters; motion flickers on in whole steps, never fades.',
-    a.x + 132, a.y + 67, a.w - 132, 40, { size: 10, valign: 'top' });
-  s.text('Type here: Silkscreen for titles and labels, IBM Plex Mono for reading. The app uses Press Start 2P and Tiny5.',
-    a.x, a.y + 107, a.w, 20, { size: 10, valign: 'top' });
-
-  const b = s.window(206, 31, 106, 66, 'SIGNALS');
-  [[COLORS.signalOrange, 'LISTENING'], [COLORS.signalYellow, 'WAITING'], [COLORS.signalRed, 'STOP']].forEach(([c, l], i) => {
-    s.lamp(b.x + 1, b.y + 1 + i * 15, c);
-    s.text(l, b.x + 16, b.y + 2 + i * 15, 70, 9, { font: 'title', size: 18, bold: true });
+  s.header(n, 'Built with agents');
+  const a = s.window(8, 31, 170, 142, 'THE LOOP');
+  const steps = [
+    ['PLAN', 'Graph out and document everything first: the wiki, a decision log, the risks.'],
+    ['DECIDE', 'I pick the designs and libraries from the options the agents lay out.'],
+    ['BUILD', 'Agents each own one folder and its tests; subagents fan out the grunt work.'],
+    ['ITERATE', 'Try it on the phone, measure, and loop.'],
+  ];
+  steps.forEach(([k, d], i) => {
+    const y = a.y + i * 30;
+    s.box(a.x, y, 13, 13, { fill: 'ink' });
+    s.text(String(i + 1), a.x, y, 13, 13, { font: 'title', size: 18, bold: true, align: 'center', color: 'paper' });
+    s.text(k, a.x + 17, y + 1, 60, 9, { font: 'title', size: 18, bold: true });
+    s.text(d, a.x + 17, y + 11, a.w - 18, 17, { size: 9, valign: 'top' });
+    if (i < 3) s.glyph(G.Marks.down, a.x + 3, y + 20);
   });
-  s.badgeFrame('idle', 214, 110, 6);
-  s.badgeFrame('scroll_up', 254, 110, 6);
-  s.text('Canti, the badge', 208, 160, 100, 8, { size: 10, onField: true, align: 'center' });
-  s.pillars.push({ cx: 150, a: 7, top: 60 });
+  const b = s.window(184, 31, 128, 142, 'THE CREW');
+  const rows = [
+    ['LEAD', 'Claude (Anthropic)'],
+    ['AGENTS', 'up to ~12 at once'],
+    ['SUBAGENTS', '62 for labelling'],
+    ['HARNESS', 'Eidolon, custom'],
+    ['EXECUTORS', 'DeepSeek V4.1'],
+    ['OLLAMA PRO', '$20 a month'],
+    ['DECISIONS', '140+ logged'],
+    ['FIRST BUILD', '~24 hours'],
+  ];
+  rows.forEach(([label, value], i) => s.statRow(b.x, b.y + i * 14, b.w, { label, value, valueSize: 9 }));
   s.field();
   return s;
-});
+};
+
+// Challenges
+SLIDES.challenges = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Challenges');
+  const a = s.window(8, 31, 150, 142, 'THE PHONE MIC');
+  s.text('Videos made gestures: 30–47 would-act sounds a minute, even with Android\'s echo cancelling. So, layers:', a.x + 1, a.y, a.w - 2, 22, { size: 9, valign: 'top' });
+  const layers = ['NDK: the pendant\'s C++ extractor', 'level gate', 'media lock, "pop pop" unlocks', 'no taps from phone-mic pops', 'lone "up"/"down": pendant only', 'calibration at the end'];
+  layers.forEach((l, i) => {
+    const y = a.y + 24 + i * 15;
+    s.box(a.x + i * 3, y, a.w - i * 6, 12, { fill: i % 2 ? 'paper' : 'ink' });
+    s.text(l, a.x + i * 3, y, a.w - i * 6, 12, { size: 9, align: 'center', color: i % 2 ? 'ink' : 'paper' });
+  });
+  s.text('The video alone: 0 "pop pop"s in 5.4 min.', a.x + 1, a.y + 115, a.w - 2, 8, { size: 8 });
+
+  const b = s.window(164, 31, 148, 142, 'ALSO HARD');
+  const items = [
+    ['MOBILE DEV', 'New to Android and Dart: accessibility, BLE, a launch crash. Now: emulator suite + launch check before any install.'],
+    ['FINE-TUNING', 'Strong on synthetic data, weak on real screens (0.447) until real screens, blind labels and cross-fit.'],
+    ['DATASETS', '4,648 real rows from 613 screens; phone data never leaves the box; a sealed test.'],
+    ['CALIBRATION', 'A last step that fits the thresholds to each voice. It holds up well across profiles.'],
+  ];
+  let y = b.y;
+  items.forEach(([k, d]) => {
+    s.panel(b.x, y, b.w, 11);
+    s.text(k, b.x + 4, y + 1, b.w - 8, 9, { font: 'title', size: 18, bold: true, color: 'paper' });
+    s.text(d, b.x + 1, y + 12, b.w - 2, 19, { size: 9, valign: 'top' });
+    y += 31;
+  });
+  s.field();
+  return s;
+};
 
 // Where it stands (the round 6 handoff)
-slides.push((n) => {
+SLIDES.where = (n) => {
   const s = new Slide(LIGHT);
   s.header(n, 'Where it stands');
   const a = s.window(8, 31, 304, 142, 'ROUND 6 · 2026-09-27');
@@ -1048,10 +1024,10 @@ slides.push((n) => {
   });
   s.field();
   return s;
-});
+};
 
 // Next
-slides.push((n) => {
+SLIDES.next = (n) => {
   const s = new Slide(LIGHT);
   s.pillars.push({ cx: 150, a: 8, top: 74 }, { cx: 138, a: 5, top: 80 });
   s.header(n, 'Next');
@@ -1075,24 +1051,244 @@ slides.push((n) => {
     b.x + 1, b.y, b.w - 2, b.h, { size: 10, valign: 'top' });
   s.field();
   return s;
-});
+};
 
-// End
-slides.push((n) => {
+// Why: the spark and the inspirations
+SLIDES.why = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Why');
+  const ca = s.window(8, 31, 96, 142, 'CANTI · FLCL');
+  s.photo(PHOTOS.canti, ca.x, ca.y, ca.w, 88);
+  s.text('The look: FLCL\'s robot gives the app its name and colours.', ca.x + 1, ca.y + 91, ca.w - 2, 30, { size: 9, valign: 'top' });
+  const ya = s.window(110, 31, 100, 142, 'YONDU');
+  s.photo(PHOTOS.yondu, ya.x, ya.y, ya.w, 88);
+  s.text('The feeling: whistle, and something across the room moves.', ya.x + 1, ya.y + 91, ya.w - 2, 30, { size: 9, valign: 'top' });
+  const va = s.window(216, 31, 96, 142, 'THE SPARK');
+  s.text('Augmental VOX: a $200 mic you wear to whisper-type. It is just a mic pointed at yourself, so I built my own.',
+    va.x + 1, va.y, va.w - 2, 44, { size: 9, valign: 'top' });
+  [['AUGMENTAL', 200, '$200'], ['CANTI', 20, '~$15–20']].forEach(([label, v, txt], i) => {
+    const y = va.y + 47 + i * 20;
+    s.text(label, va.x, y, 66, 8, { font: 'title', size: 18, bold: true });
+    s.text(txt, va.x + va.w - 36, y, 36, 8, { size: 9, align: 'right' });
+    s.block(va.x, y + 9, Math.max(4, Math.round((v * (va.w - 2)) / 200)), 6, 'ink');
+  });
+  s.text('And I always wanted an auto-scroller for reels.', va.x + 1, va.y + 90, va.w - 2, 20, { size: 9, valign: 'top', bold: true });
+  s.text('Photos: Marvel; Production I.G / Gainax.', va.x + 1, va.y + 113, va.w - 2, 9, { size: 7 });
+  s.field();
+  return s;
+};
+
+// What it is: the pipeline and the sounds
+SLIDES.what = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'What it is');
+  const a = s.window(8, 31, 150, 142, 'HOW IT WORKS');
+  const steps = [
+    ['sound', 'HEAR', 'The pendant or the phone mic hears a sound.'],
+    ['link', 'DESCRIBE', 'It becomes one line of text, sent over Bluetooth.'],
+    ['decider', 'DECIDE', 'Rules first; a small model for spoken phrases.'],
+    ['hand', 'ACT', 'Android swipes, taps or goes back, then checks.'],
+  ];
+  steps.forEach(([icon, k, d], i) => {
+    const y = a.y + i * 31;
+    s.frame(a.x, y, 17, 17, 'ink', { notch: true });
+    s.glyph(G.Icons7[icon], a.x + 2, y + 2, 'ink', 2);
+    s.text(k, a.x + 21, y, 80, 9, { font: 'title', size: 18, bold: true });
+    s.text(d, a.x + 21, y + 9, a.w - 22, 16, { size: 9, valign: 'top' });
+    if (i < 3) s.glyph(G.Marks.down, a.x + 5, y + 22);
+  });
+  const b = s.window(164, 31, 148, 142, 'EIGHT SOUNDS');
+  s.panel(b.x, b.y, b.w, 82);
+  ['rise', 'fall', 'arch', 'dip', 'flat', 'pop', 'click', 'hiss'].forEach((g, i) => {
+    const cx = b.x + 8 + (i % 4) * 34, cy = b.y + 5 + Math.floor(i / 4) * 39;
+    s.glyph(G.GestureGlyphs[g], cx + 1, cy, 'paper', 2);
+    s.text(g.toUpperCase(), cx - 4, cy + 27, 34, 8, { font: 'title', size: 18, color: 'paper', align: 'center' });
+  });
+  s.text('rise/fall swipe up/down · arch/dip swipe sideways · hiss back · click click home · pop pop listens for a phrase',
+    b.x + 1, b.y + 85, b.w - 2, 36, { size: 9, valign: 'top' });
+  s.field();
+  return s;
+};
+
+// Demo: the recorded video and its shot list
+SLIDES.demo = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Demo');
+  const a = s.window(8, 31, 190, 142, 'UNDER 60 SECONDS');
+  s.hatch(a.x, a.y, a.w, a.h, 'ink');
+  s.box(a.x + 45, a.y + 50, a.w - 90, 22);
+  s.text('VIDEO', a.x + 45, a.y + 51, a.w - 90, 10, { font: 'title', size: 18, bold: true, align: 'center' });
+  s.text('drop the recording here', a.x + 45, a.y + 61, a.w - 90, 9, { size: 8, align: 'center' });
+  const b = s.window(204, 31, 108, 142, 'SHOT LIST');
+  const shots = [
+    ['0:00', 'rise, fall: scroll a list'],
+    ['0:10', 'arch, dip: swipe sideways'],
+    ['0:18', 'hiss: back'],
+    ['0:24', 'click click: home'],
+    ['0:30', 'pop pop, "open YouTube"'],
+    ['0:40', 'in Shorts: pop pop, then rise'],
+    ['0:50', 'pop pop, "tap search"'],
+  ];
+  shots.forEach(([t, d], i) => {
+    const y = b.y + i * 16;
+    s.text(t, b.x, y, 20, 8, { size: 9, bold: true });
+    s.text(d, b.x + 22, y, b.w - 22, 15, { size: 9, valign: 'top' });
+  });
+  s.text('Phone mic. While a video plays, only "pop pop" gets through.', b.x, b.y + 112, b.w, 12, { size: 7, valign: 'top' });
+  s.field();
+  return s;
+};
+
+// How it's built: the pendant and the case, v1 to v2
+SLIDES.built = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, "How it's built");
+  const a = s.window(8, 31, 104, 142, 'THE PENDANT');
+  [['BOARD', 'Pico 2 W'], ['MIC', 'INMP441'], ['INPUT', 'one button'], ['CASE', 'OpenSCAD'], ['TOTAL', '~$15–20']]
+    .forEach(([label, value], i) => s.statRow(a.x, a.y + i * 14, a.w, { label, value, valueSize: 9 }));
+  s.text('Worn as a necklace, lid against the chest. Or skip it: the phone mic works too.', a.x + 1, a.y + 74, a.w - 2, 40, { size: 9, valign: 'top' });
+  const b = s.window(118, 31, 194, 142, 'MOVING THE MIC');
+  const T = { yaw: 30, el: 50, scale: 0.92 };
+  const v1 = renderIso(CASE.baseV1, { ...T, marks: [POCKET_V1] }), v2 = renderIso(CASE.lid, { ...T, marks: [POCKET_V2] });
+  const put = (g, x) => { s.iso(g, x, b.y); const [mx, my] = g.marks[0]; s.brackets(x + mx - 10, b.y + my - 8, 20, 16, 'ink', 4, 1); };
+  put(v1, b.x);
+  put(v2, b.x + b.w - v2.w);
+  s.glyph(G.Marks.right, b.x + Math.round(b.w / 2) - 4, b.y + 34, 'ink', 2);
+  const ty = b.y + Math.max(v1.h, v2.h) + 2, cw = Math.floor(b.w / 2) - 3;
+  s.text([{ text: 'V1: under the board. ', options: { bold: true } }, { text: 'Way too hard to work with.' }], b.x, ty, cw, 30, { size: 11, valign: 'top' });
+  s.text([{ text: 'V2: in the lid, on Dupont wires. ', options: { bold: true } }, { text: 'Unplug the lid and swap the mic.' }], b.x + b.w - cw, ty, cw, 30, { size: 11, valign: 'top' });
+  s.field();
+  return s;
+};
+
+// Models: code, then Verdict, then the cloud
+SLIDES.models = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Models');
+  const a = s.window(8, 31, 304, 60, 'THE CHAIN');
+  const chain = [['CODE', 'gestures: instant, exact. No LLM needed.'], ['VERDICT', 'phrases: 118M, fully on the phone*'], ['CLOUD', 'the rest: Jev API or Ollama, slower']];
+  const bw = 84, gap = (a.w - 3 * bw) / 2;
+  chain.forEach(([t, d], i) => {
+    const x = Math.round(a.x + i * (bw + gap));
+    s.box(x, a.y, bw, 14, { fill: i === 2 ? 'paper' : 'ink' });
+    s.text(t, x, a.y, bw, 14, { font: 'title', size: 18, bold: true, align: 'center', color: i === 2 ? 'ink' : 'paper' });
+    s.text(d, x, a.y + 17, bw, 20, { size: 9, valign: 'top', align: 'center' });
+    if (i < 2) s.glyph(G.Marks.right, Math.round(x + bw + gap / 2 - 2), a.y + 4, 'ink');
+  });
+  const b = s.window(8, 97, 180, 76, 'REAL SCREENS');
+  const bx = b.x, bw2 = b.w - 72;
+  [['JEVLIKE', 0.465], ['VERDICT', 0.738], ['CLOUD', 0.852]].forEach(([label, v], i) => {
+    const y = b.y + i * 11;
+    s.text(label, bx, y, 48, 8, { font: 'title', size: 18, bold: true });
+    s.block(bx + 50, y + 2, Math.round(v * bw2), 5, 'ink');
+    s.text(v.toFixed(3), bx + 52 + Math.round(v * bw2), y, 20, 8, { size: 8 });
+  });
+  s.text('jevlike first → Verdict chosen for phrases → jevlike as teacher → ~12–14 h on the Strix Halo.', b.x, b.y + 35, b.w, 20, { size: 9, valign: 'top' });
+  const c = s.window(194, 97, 118, 76, 'PRIVACY');
+  s.text(bullets([
+    'Verdict: nothing leaves the phone.',
+    'Ollama, $20/mo: as long as you don\'t mind giving your info away to China.',
+    '*Not shipped yet: "none" recall 0.62, gate 0.8.',
+  ]), c.x, c.y, c.w, c.h, { size: 8, valign: 'top', paraSpaceAfter: 2 });
+  s.field();
+  return s;
+};
+
+// Method and challenges
+SLIDES.method = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Method');
+  const a = s.window(8, 31, 168, 142, 'MY AGENTIC LOOP');
+  const loop = [
+    ['ASK', 'find the hidden edges; confirm before acting'],
+    ['PLAN', 'graph out and document everything first'],
+    ['DECIDE', 'I pick designs and libraries'],
+    ['DISPATCH', 'Claude plans; Eidolon + DeepSeek execute'],
+    ['VERIFY', 'tests, parity checks: "looks done" isn\'t done'],
+    ['ITERATE', 'measure, loop, hand off'],
+  ];
+  loop.forEach(([k, d], i) => {
+    const y = a.y + i * 20;
+    s.box(a.x, y, 56, 12, { fill: 'ink' });
+    s.text(k, a.x, y, 56, 12, { font: 'title', size: 18, bold: true, align: 'center', color: 'paper' });
+    s.text(d, a.x + 60, y - 1, a.w - 60, 17, { size: 9, valign: 'top' });
+    if (i < 5) s.glyph(G.Marks.down, a.x + 25, y + 14);
+  });
+  const b = s.window(182, 31, 130, 142, 'CHALLENGES');
+  const items = [
+    ['MOBILE DEV', 'New to Android and Dart.'],
+    ['FINE-TUNING', '0.447 on real screens at first.'],
+    ['PHONE MIC', 'Videos made gestures: six layers of guards.'],
+    ['CALIBRATION', 'A final step per voice; holds up across profiles.'],
+  ];
+  items.forEach(([k, d], i) => {
+    const y = b.y + i * 31;
+    s.panel(b.x, y, b.w, 11);
+    s.text(k, b.x + 4, y + 1, b.w - 8, 9, { font: 'title', size: 18, bold: true, color: 'paper' });
+    s.text(d, b.x + 1, y + 12, b.w - 2, 17, { size: 9, valign: 'top' });
+  });
+  s.field();
+  return s;
+};
+
+// End: FOSS, try it today***
+SLIDES.end = (n) => {
   const s = new Slide(DARK);
   s.pillars.push({ cx: 12, a: 9, top: 70 }, { cx: 148, a: 9, top: 72 }, { cx: 134, a: 5, top: 80 });
-  s.badgeFrame('idle', 58, 38, 12);
-  s.text('Thanks.', 150, 62, 150, 22, { font: 'title', size: 54, bold: true, onField: true });
-  s.text('Questions?', 150, 88, 150, 12, { size: 18, onField: true });
-  s.text('Design docs: wiki/index.md  ·  Brand: brand/README.md', 150, 106, 160, 16, { size: 11, onField: true, valign: 'top' });
+  s.badgeFrame('idle', 44, 40, 10);
+  s.text('Try it today***', 130, 50, 180, 22, { font: 'title', size: 32, bold: true, onField: true });
+  s.text('FOSS, MIT licensed: github.com/dxcently/Canti', 130, 76, 180, 10, { size: 13, onField: true });
+  s.text('*** HUGE asterisks: you still build the APK and turn on the accessibility service. With an Android phone it should just work. Probably. The pendant is optional: the phone mic works.',
+    130, 92, 180, 34, { size: 9, onField: true, valign: 'top' });
+  s.text('Questions?', 130, 130, 180, 12, { size: 16, onField: true, bold: true });
   s.field({ top: 30 });
   return s;
-});
+};
+
+// Appendix divider
+SLIDES.appendix = () => {
+  const s = new Slide(DARK);
+  s.pillars.push({ cx: 12, a: 8, top: 74 }, { cx: 150, a: 8, top: 76 });
+  s.text('APPENDIX', 40, 70, 240, 26, { font: 'title', size: 54, bold: true, align: 'center', onField: true });
+  s.text('The details, for questions.', 40, 100, 240, 12, { size: 14, align: 'center', onField: true });
+  s.field({ top: 30 });
+  return s;
+};
+
+// Where it could have been cheaper
+SLIDES.cheaper = (n) => {
+  const s = new Slide(LIGHT);
+  s.header(n, 'Could be cheaper');
+  const cols = [
+    [8, 'HARDWARE', [
+      'Start with no pendant: the phone mic alone works, for $0 of parts.',
+      'Print the 10-minute fit tests first: v1 of the case was a whole wasted print.',
+      'Skip the LiPo ($8–12): a power bank you already own does the job.',
+    ]],
+    [164, 'COMPUTE + MODELS', [
+      'Gestures ended up as plain code, so the gesture-model track could go: jevlike sweeps (8.75 h logged) and Kev 0.8B (dropped).',
+      'The teacher labellers scored 0.69–0.79 and never replaced the code labels.',
+      'Train only the model you ship. Once Verdict is on the phone, the $20/mo cloud key is optional.',
+    ]],
+  ];
+  cols.forEach(([x, t, list]) => {
+    const w = s.window(x, 31, 148, 142, t);
+    s.text(bullets(list), w.x + 1, w.y, w.w - 2, w.h, { size: 12, valign: 'top', paraSpaceAfter: 9 });
+  });
+  s.field();
+  return s;
+};
+
+const ORDER = [
+  'title', 'why', 'what', 'who', 'demo', 'built', 'models', 'method', 'end',
+  'appendix', 'stack', 'sounds', 'pendant', 'case', 'miclid', 'mapped', 'listening', 'phone', 'deciding',
+  'verdict', 'numbers', 'unsure', 'voice', 'agents', 'challenges', 'cheaper', 'where', 'next',
+];
 
 const pres = new PptxGenJS();
 pres.layout = 'LAYOUT_16x9';
 pres.title = 'Canti: project overview';
 pres.company = 'VOX';
-slides.forEach((make, i) => emit(pres, make(i), i + 1));
+ORDER.forEach((k, i) => emit(pres, SLIDES[k](i), i + 1));
 for (const w of warnings) console.warn('fit:', w);
 pres.writeFile({ fileName: OUT }).then((f) => console.log('wrote', f));
