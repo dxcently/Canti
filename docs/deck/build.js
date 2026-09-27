@@ -447,14 +447,14 @@ slides.push((n) => {
   s.header(n, 'Why I built it');
   const a = s.window(8, 31, 150, 142, 'THE SPARK');
   s.text([
-    { text: 'An AI service was selling a box that records your voice all day, and a dictation model sends it wherever you want.', options: { breakLine: true } },
-    { text: 'It cost $200. But it is just a microphone pointed at yourself, so I built my own.', options: { bold: true } },
+    { text: 'Augmental\'s VOX: a mic pendant worn on the skin, so you can whisper to type. $200 in beta, shipping late 2026.', options: { breakLine: true } },
+    { text: 'But it is just a microphone pointed at yourself, so I built my own.', options: { bold: true } },
   ], a.x + 1, a.y, a.w - 2, 58, { size: 11, valign: 'top', paraSpaceAfter: 6 });
-  const prices = [['THEIR BOX', 200, '$200'], ['CANTI', 20, '~$15–20']];
+  const prices = [['AUGMENTAL VOX', 200, '$200'], ['CANTI', 20, '~$15–20']];
   const px = a.x + 1, pw = a.w - 2, per = (pw - 2) / 200;
   prices.forEach(([label, v, txt], i) => {
     const y = a.y + 50 + i * 24;
-    s.text(label, px, y, 60, 8, { font: 'title', size: 18, bold: true });
+    s.text(label, px, y, 90, 8, { font: 'title', size: 18, bold: true });
     s.text(txt, px + pw - 40, y, 40, 8, { size: 11, align: 'right' });
     s.block(px, y + 10, Math.max(4, Math.round(v * per)), 8, 'ink');
   });
