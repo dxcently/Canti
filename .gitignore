@@ -71,3 +71,6 @@ local.properties
 
 # --- android: CMake/NDK build intermediates (vx_jni)
 .cxx/
+
+# Z Flip session data (event logs, measurement recordings): personal, never committed
+/zflip/
