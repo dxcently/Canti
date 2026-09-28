@@ -74,7 +74,7 @@ class Ctx:
     def reset(self) -> None:
         self.vox.control("reset")
         self.vox.control("config", decider="rules", gap_ms=600, confirm_timeout_ms=1500, http_timeout_ms=2000, min_confidence=0.5,
-                         target_model="", target_min_confidence=0.6, target_choose_ms=6000)
+                         target_model="", target_min_confidence=0.6, target_choose_ms=6000, asr_engine="off")
         self.vox.control("profile", profile=None)
         self.vox.mode("gesture")
 
@@ -141,7 +141,8 @@ def expect(o: dict, action: str, confirm: str | None = "confirmed (events)") -> 
 def fixture_rise_swipes_up_to_next_video(c: Ctx):
     c.open(FEED)
     o = c.act("rise")
-    assert "screen: video feed; media playing; scroll at the top; keyboard hidden" in o["state"]["text"], o["state"]["text"]
+    # A rule-decided gesture is decided locally (fast path): no screen line, the screen read is skipped.
+    assert "screen:" not in o["state"]["text"] and o["state"].get("screen") == "skipped (decided locally)", o["state"]
     expect(o, "swipe_up")
     c.texts_until("feed_index", "Video 2 of 20")
 
@@ -208,17 +209,25 @@ def fixture_pop_pop_listens_then_phrase_uses_screen_tiebreak(c: Ctx):
     assert c.vox.sounds("pop")["waiting"] is True, "pop should wait for a possible second pop"
     time.sleep(0.15)
     c.vox.sounds("pop")
-    o = c.outcome(m)
-    assert o["resolve"]["sequence"] == "pop pop" and o["resolve"]["waited"], o["resolve"]
-    expect(o, "listen_for_phrase", confirm=None)
-    assert o["decision"]["source"] == "app:listen", o["decision"]
+    # pop pop = listen, owned by the app: it resolves and acts at once, with no state event (no model is asked).
+    r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
+    assert r and r["sequence"] == "pop pop" and r["waited"], r
+    d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("n") == r["n"], 2)
+    assert d and d["action"] == "listen_for_phrase" and d["source"] == "app:listen", d
+    e = c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("n") == r["n"], 2)
+    assert e and e["ok"], e
+    assert not any(x["ev"] == "state" and x.get("n") == r["n"] for x in c.ev.since(m)), "app-owned listen must not build a state"
     assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
     m2 = c.ev.mark()
     c.vox.phrase("next")
-    o2 = c.outcome(m2)
-    assert 'spoken phrase: "next"' in o2["state"]["text"] and "mode: listening" in o2["state"]["text"]
-    # "next" in a video feed means swipe up (generate.py SCREEN_NEXT): the screen line broke the tie.
-    expect(o2, "swipe_up")
+    # "next" is a nav phrase decided by the rules (no resolve event, the screen line still breaks the tie).
+    st = c.ev.wait(m2, lambda e: e["ev"] == "state", 2)
+    assert st, [e["ev"] for e in c.ev.since(m2)]
+    assert 'spoken phrase: "next"' in st["text"] and "mode: listening" in st["text"], st["text"]
+    d2 = c.ev.wait(m2, lambda e: e["ev"] == "decision" and e.get("n") == st["n"], 2)
+    assert d2 and d2["action"] == "swipe_up", d2
+    e2 = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("n") == st["n"], 2)
+    assert e2 and e2["ok"], e2
     c.texts_until("feed_index", "Video 2 of 20")
 
 
@@ -239,7 +248,7 @@ def fixture_list_scrolls(c: Ctx):
     before = c.vox.all_text()
     assert "|Item 1|" in before
     o = c.act("rise")
-    assert "screen: scrolling list; media none; scroll at the top; keyboard hidden" in o["state"]["text"], o["state"]["text"]
+    assert "screen:" not in o["state"]["text"] and o["state"].get("screen") == "skipped (decided locally)", o["state"]
     expect(o, "swipe_up")
     time.sleep(0.5)
     assert "|Item 1|" not in c.vox.all_text(), "list did not scroll"
@@ -273,24 +282,45 @@ def timing_lonely_click_waits_one_gap_then_resolves(c: Ctx):
 def timing_an_app_rule_can_claim_pop_pop(c: Ctx):
     c.open(FEED)
     c.vox.control("profile", profile={"app:ai.vox.fixture": [{"phrase": ["pop", "pop"], "kind": "fixed", "action": "like"}]})
-    # pop pop -> like (double-tap)
+    # pop pop -> like (double-tap). Liking is outward, so it waits for a confirm pop before it runs.
     m = c.ev.mark()
     assert c.vox.sounds("pop")["waiting"] is True
     time.sleep(0.15)
     c.vox.sounds("pop")
-    o = c.outcome(m)
-    assert o["resolve"]["sequence"] == "pop pop", o["resolve"]
-    rules = o["state"]["text"].split("my rules:")[1]
+    r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
+    assert r and r["sequence"] == "pop pop", r
+    st = c.ev.wait(m, lambda e: e["ev"] == "state" and e.get("n") == r["n"], 2)
+    assert st, "no state event"
+    rules = st["text"].split("my rules:")[1]
     assert "VOX fixture" in rules and "like / favourite the current item" in rules, rules
-    expect(o, "like")
+    d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("n") == r["n"], 2)
+    assert d and d["action"] == "like", d
+    ask = c.ev.wait(m, lambda e: e["ev"] == "confirm_ask" and e.get("n") == r["n"], 2)
+    assert ask and ask["why"] == "outward action", ask
+    assert not any(x["ev"] == "exec" and x.get("n") == r["n"] for x in c.ev.since(m)), "like must wait for its confirm pop"
+    # the confirm pop runs it
+    m3 = c.ev.mark()
+    c.vox.sounds("pop")
+    cf = c.ev.wait(m3, lambda e: e["ev"] == "confirm_ask" and e.get("event") == "confirmed", 2)
+    assert cf, [e["ev"] for e in c.ev.since(m3)]
+    e = c.ev.wait(m3, lambda e: e["ev"] == "exec" and e.get("n") == r["n"] and e.get("action") == "like", 3)
+    assert e and e["ok"], e
+    w = e.get("watch")
+    if w is not None:
+        cnf = c.ev.wait(m3, lambda e: e["ev"] == "confirm" and e.get("watch") == w, 5)
+        assert cnf and cnf["result"] == "confirmed (events)", cnf
     c.texts_until("feed_likes", "likes: 1")
-    # other apps keep the default: pop pop opens the listen window there
+    # other apps keep the default: pop pop opens the listen window there (no state, no confirm)
     sh("input keyevent KEYCODE_HOME")
     time.sleep(1.0)
     m = c.ev.mark()
     c.vox.sounds("pop"); time.sleep(0.15); c.vox.sounds("pop")
-    o3 = c.outcome(m)
-    expect(o3, "listen_for_phrase", confirm=None)
+    r3 = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
+    assert r3 and r3["sequence"] == "pop pop", r3
+    d3 = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("n") == r3["n"], 2)
+    assert d3 and d3["action"] == "listen_for_phrase" and d3["source"] == "app:listen", d3
+    e3 = c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("n") == r3["n"], 2)
+    assert e3 and e3["ok"], e3
 
 
 @test
@@ -379,7 +409,8 @@ def confirmer_reports_no_visible_change_on_static_screen(c: Ctx):
 def screen_never_vetoes_an_explicit_gesture(c: Ctx):
     c.open(STATIC)
     o = c.act("rise")
-    assert "scroll not scrollable" in o["state"]["text"]
+    # An explicit gesture is never vetoed by the screen; it is decided locally (no screen line) and still performed.
+    assert "screen:" not in o["state"]["text"] and o["state"].get("screen") == "skipped (decided locally)", o["state"]
     expect(o, "swipe_up", confirm="no visible change")   # still performed, then honestly reported
 
 
@@ -414,6 +445,7 @@ def cursor_mode_moves_stops_and_clicks(c: Ctx):
     m = c.ev.mark()
     c.vox.mode("cursor")
     assert c.ev.wait(m, lambda e: e["ev"] == "mode" and e.get("mode") == "cursor", 2)
+    c.vox.control("joy_recentre")            # the cursor position persists across tests; put it back at the centre
     o = c.act("pop", mode="cursor")          # cursor starts at the centre: click lands on the Toggle button
     assert "mode: cursor" in o["state"]["text"] and "cursor: stopped" in o["state"]["text"], o["state"]["text"]
     expect(o, "click")
@@ -607,37 +639,27 @@ def split(cands: list[str], ps: list[float]):
 
 @test
 def intent_cursor_confident_target_is_tapped(c: Ctx):
-    srv = FakeSystemOne()
-    try:
-        use_fake_targets(c, srv)
-        open_newpipe(c)
-        start = selected_tab(c)
-        want = "What's New (tab, top)"
-        srv.target_answer = lambda opts: {"choice": want, "confidence": 0.93,
-                                          "probabilities": {o: 0.93 if o == want else 0.07 / (len(opts) - 1) for o in opts}}
-        enter_cursor(c)
-        r = name_target(c, "the what's new tab")
-        st, opts = r["state"]["text"], r["state"]["options"]
-        c.note(f"{len(opts)} options: {opts}")
-        assert st.startswith("mode: cursor\napp: NewPipe (org.schabi.newpipe)\nscreen: "), st
-        assert st.endswith('\nspoken target: "the what\'s new tab"') and st.count("\n") == 3, st
-        assert opts[-1] == TARGETS.NONE_OPTION and want in opts and len(opts) == len(set(opts)) <= 40, opts
-        for o in opts[:-1]:
-            mt = OPTION_RE.fullmatch(o)
-            assert mt and mt[2] in TARGETS.ROLE_WORDS and mt[3] in TARGETS.POSITIONS, o
-        req = srv.requests[-1]
-        assert req["model"] == "vox-targets-fake" and req["state"] == st, req
-        q = req["questions"]["target"]
-        assert list(req["questions"]) == ["target"] and q["type"] == "choice" and q["instructions"] == POLICY_TARGETS, q
-        assert list(q["criteria"]) == opts, "criteria must go out in the logged reading order, none last"
-        t = r["target"]
-        assert t and t["result"] == "tap" and t["option"] == want and t["ok"], t
-        cf = c.ev.wait(r["mark"], lambda e: e["ev"] == "confirm" and e.get("watch") == t["watch"], 5)
-        assert cf and cf["result"] == "confirmed (events)", cf
-        selected_tab_becomes(c, "What's New")
-        c.note(f"tab {start!r} -> 'What's New'; confirm {cf['result']} by {cf['by']} in {cf['ms']} ms")
-    finally:
-        srv.close()
+    open_newpipe(c)
+    start = selected_tab(c)
+    want = "What's New (tab, top)"
+    enter_cursor(c)
+    m = c.ev.mark()
+    assert c.vox.sounds("pop", mode="cursor")["waiting"] is True, "in cursor mode pop must wait for a second pop"
+    time.sleep(0.15)
+    c.vox.sounds("pop", mode="cursor")
+    d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("source") == "app:cursor-listen", 3)
+    assert d and d["action"] == "listen_for_phrase", [e["ev"] for e in c.ev.since(m)]
+    assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
+    m2 = c.ev.mark()
+    c.vox.phrase("the what's new tab")
+    # A confident target is matched locally (TargetMatcher) and tapped at once: no model question, no target_state.
+    t = c.ev.wait(m2, lambda e: e["ev"] == "target" and e.get("result") == "tap", 5)
+    assert t and t["option"] == want and t["why"] == "named" and t["ok"], t
+    assert not any(e["ev"] in ("target_state", "target_decision") for e in c.ev.since(m2)), "a confident target must not go to the model"
+    cf = c.ev.wait(m2, lambda e: e["ev"] == "confirm" and e.get("watch") == t["watch"], 5)
+    assert cf and cf["result"] == "confirmed (events)", cf
+    selected_tab_becomes(c, "What's New")
+    c.note(f"tab {start!r} -> 'What's New' (matched locally); confirm {cf['result']} by {cf['by']} in {cf['ms']} ms")
 
 
 @test
@@ -652,6 +674,19 @@ def intent_cursor_low_confidence_highlights_top3_and_rise_rise_pop_taps_third(c:
         start = selected_tab(c)
         before = screenshot()
         r = name_target(c, "the tab")
+        # What goes to the target model: the cursor state, the logged options (none last) as the criteria, the policy.
+        st, opts = r["state"]["text"], r["state"]["options"]
+        assert st.startswith("mode: cursor\napp: NewPipe (org.schabi.newpipe)\nscreen: "), st
+        assert st.endswith('\nspoken target: "tab"') and st.count("\n") == 3, st   # TargetQuery drops the article
+        assert opts[-1] == TARGETS.NONE_OPTION and all(x in opts for x in cands) and len(opts) == len(set(opts)) <= 40, opts
+        for o in opts[:-1]:
+            mt = OPTION_RE.fullmatch(o)
+            assert mt and mt[2] in TARGETS.ROLE_WORDS and mt[3] in TARGETS.POSITIONS, o
+        req = srv.requests[-1]
+        assert req["model"] == "vox-targets-fake" and req["state"] == st, req
+        q = req["questions"]["target"]
+        assert list(req["questions"]) == ["target"] and q["type"] == "choice" and q["instructions"] == POLICY_TARGETS, q
+        assert list(q["criteria"]) == opts, "criteria must go out in the logged reading order, none last"
         t = r["target"]
         assert t and t["result"] == "choose" and t["candidates"] == cands, t
         assert r["decision"]["confidence"] < 0.6
@@ -711,10 +746,17 @@ def intent_cursor_not_on_screen_cancel_and_timeout(c: Ctx):
         time.sleep(0.3)
         assert c.vox.texts()["toggle_state"] == "State: OFF", "nothing may have been tapped"
         assert not any(x["ev"] == "target" and x.get("result") == "tap" for x in c.ev.since(m0))
-        # with the rule decider there is no model to ask
+        # with the rule decider there is no model to ask: a local miss is a toast, nothing is tapped
         c.vox.control("config", decider="rules")
-        r = name_target(c, "the switch", timeout=1)
-        assert r["target"]["result"] == "no model (decider=rules)", r["target"]
+        m4 = c.ev.mark()
+        assert c.vox.sounds("pop", mode="cursor")["waiting"] is True
+        time.sleep(0.15)
+        c.vox.sounds("pop", mode="cursor")
+        assert c.ev.wait(m4, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
+        c.vox.phrase("the switch")
+        t = c.ev.wait(m4, lambda e: e["ev"] == "toast" and "on screen" in e.get("text", ""), 3)
+        assert t, [e["ev"] for e in c.ev.since(m4)]
+        assert not any(x["ev"] == "target" for x in c.ev.since(m4)), "no model to ask: nothing may be tapped or highlighted"
     finally:
         srv.close()
 
