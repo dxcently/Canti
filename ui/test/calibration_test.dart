@@ -580,6 +580,38 @@ void main() {
       expect(calls(b).last, 'calib_cancel');
       handle.dispose();
     });
+
+    testWidgets('a refused start surfaces the reason in a snackbar, not only at the top', (tester) async {
+      await pumpCalib(tester, FakeBackend(initial: phoneCursor()), source: 'pico');
+      await tapKey(tester, 'calib_begin');
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.textContaining('Pico'), findsWidgets); // the snackbar names the refusal
+      expect(find.byKey(const Key('calib_begin')), findsOneWidget); // back on the intro
+    });
+
+    testWidgets('Begin again after a refusal starts the run (the old refusal does not undo it)', (tester) async {
+      final b = await pumpCalib(tester, FakeBackend(initial: phoneCursor()), source: 'usb');
+      await tapKey(tester, 'calib_begin');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calib_begin')), findsOneWidget); // refused: usb is not the sound source
+      b.current = b.current.copyWith(soundSource: 'usb'); // the user switched the source
+      await tapKey(tester, 'calib_begin');
+      await tester.pumpAndSettle();
+      expect(calls(b).where((c) => c.startsWith('calib_start')), hasLength(2));
+      expect(find.byKey(const Key('calib_begin')), findsNothing); // on the first step, not flipped back
+      await tapKey(tester, 'calib_back');
+      expect(calls(b).last, 'calib_cancel'); // and leaving still ends the run
+    });
+
+    testWidgets('a run the service ended (the app was left in the background) says so', (tester) async {
+      final b = await pumpCalib(tester, FakeBackend(initial: phoneCursor()));
+      await tapKey(tester, 'calib_begin');
+      await tester.pumpAndSettle();
+      b.emitCalib({'active': false, 'source': 'phone', 'error': 'The calibration stopped: Canti was left in the background.'});
+      await tester.pumpAndSettle();
+      expect(textOf(tester, 'calib_error'), contains('left in the background'));
+    });
   });
 
   group('status screen', () {

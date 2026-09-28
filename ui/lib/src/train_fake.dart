@@ -141,6 +141,9 @@ class FakeTrainBackend implements TrainBackend {
   /// Why a take cannot be recorded (null = it can).
   String? blocked;
 
+  /// The one action that fixes [blocked] (`resume` or `gesture_mode`), or null.
+  String? blockedAction;
+
   /// When set, a recording take ends by itself after this long (with a live trace every 20 ms).
   Duration? autoTake;
 
@@ -438,6 +441,7 @@ class FakeTrainBackend implements TrainBackend {
       'profile': 'default',
       'live_trace': liveTrace,
       'blocked': blocked,
+      'blocked_action': blockedAction,
       'done': st.values.fold<int>(0, (a, g) => a + g.length),
       'total': _total,
       'gestures': [

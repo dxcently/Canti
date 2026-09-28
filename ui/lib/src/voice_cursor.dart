@@ -13,13 +13,16 @@ import 'theme/pixel.dart';
 /// profile per source), the current mic's saved result, and Recalibrate. A profile with missing steps (saved before
 /// calibration v2) shows a nudge that records only those. [version] changing (a calibration saved elsewhere) reloads it.
 class VoiceCursorWindow extends StatefulWidget {
-  const VoiceCursorWindow({super.key, required this.backend, required this.source, this.version, this.onCalibrated});
+  const VoiceCursorWindow({super.key, required this.backend, required this.source, this.version, this.openCalibrate, this.onCalibrated});
 
   final VoxBackend backend;
 
   /// The current sound source: the one Recalibrate calibrates.
   final String source;
   final Listenable? version;
+
+  /// Opens calibration through the status screen's guard (no stacking); null = open here directly (tests, the desktop).
+  final Future<void> Function({List<String>? steps})? openCalibrate;
 
   /// After a calibration was saved from here.
   final VoidCallback? onCalibrated;
@@ -122,6 +125,11 @@ class _VoiceCursorWindowState extends State<VoiceCursorWindow> {
   }
 
   Future<void> _calibrate({List<String>? steps}) async {
+    final open = widget.openCalibrate;
+    if (open != null) {
+      await open(steps: steps);   // the status screen's guard; its version bump reloads this window
+      return;
+    }
     final saved = await openCalibration(context, widget.backend, widget.source, steps: steps);
     if (!mounted) return;
     await _load();

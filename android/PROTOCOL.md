@@ -459,7 +459,7 @@ While a calibration runs, every mic sound is dropped (`mic_sound{dropped: "calib
 | `calib_retry` | Only from `failed`: records the failed step again. |
 | `calib_skip` | Allowed from `failed`, from `waiting`, on `pops` / `clicks` / `hiss` before anything countable was heard, or during `room`. The step keeps its defaults and goes into `skipped`. **The run's next unfinished step after it then starts by itself** (the UI sends no `calib_step` after a skip). It never wraps round and never starts a step outside the run: with none after it, the state is `done` when every step of the run is finished, else `step_done` (an earlier step is still open: the UI picks it). |
 | `calib_save` | Stores the draft (`saved_at_ms`), applies it to the joystick, and ends the run. It answers the inactive map. |
-| `calib_cancel` | Ends the run without saving. It answers the inactive map. |
+| `calib_cancel` | Ends the run without saving. It answers the inactive map. The service also ends an open run by itself (log `calib{event: cancel, by}`): `idle` (no command for 5 min), `app background` (every Canti screen stopped for 10 s: Home, another app, the screen off), `ui closed` (the Flutter screen that owned it went away); for the first two a `calib_status` push carries the inactive map with an `error` saying so. A refused `calib_start` logs `calib{event: refused, reason, source}`. |
 | `calib_status` | Changes nothing. |
 | `calib_get {source}` | Answers the saved profile, or null. |
 
@@ -729,7 +729,9 @@ connects it to the running accessibility service through two platform channels. 
     `ble_blocked` (refused with "don't ask again"), and with the Pico as the source `ble_adapter` (`on`|`off`|`none`),
     `ble_target` (the address being connected), `ble_target_name` (its advertised name, e.g. `VOX-2807`) and
     `ble_scan` (`scanning`, `none found` when the last search ended empty, or null). `calibrated` (bool): a voice-joystick
-    calibration is saved for the current sound source (always false for the Pico); `bindings`: the bindings window's
+    calibration is saved for the current sound source (always false for the Pico); `calibrating` (bool): a calibration
+    run is open now (its sounds are dropped as "calibrating", so Canti is deaf until it ends); `training` (bool): a
+    gesture-training round is open now. `bindings`: the bindings window's
     picture (`ui/lib/src/status_screen.dart` "Bindings") — `{gesture: {sounds, combos, note}, cursor: {sounds, combos,
     note}}`, one `{label, source}` per single sound (null = unbound, `source` one of `default`, `app-only`, `global`,
     `app`, `cursor`) and one `{seq, label, source}` per multi-sound combo, resolved like the rule decider
@@ -1177,7 +1179,7 @@ take records from `train_record` until 0.9 s after its first sound (so a split a
 
 | check | reason code | e.g. |
 |---|---|---|
-| a sound was heard | `nothing` | "Heard nothing in 8 s." |
+| a sound was heard | `nothing` | "Heard nothing in 8 s." (sounds heard but dropped by the mic: "Heard 3 sounds, all below the level gate.") |
 | exactly one sound | `count` | "Heard 2 sounds (rise then fall): make it one unbroken sound." |
 | it carries an fp1 fingerprint | `features` | |
 | the extractor's label is the prompted gesture | `label` | "Heard a dip (down then up): an arch goes up then down." |
@@ -1210,7 +1212,7 @@ a refused one adds `error`.
 SKIP / KEEP ANYWAY) → ... → `done`.
 
 **Status map** (`train_status`): `active`, `source` (whose cards), `current_source`, `profile`, `live_trace` (the
-source gives live pitch ticks: phone / USB mic, not the Pico), `blocked` (why a take cannot start now, or null),
+source gives live pitch ticks: phone / USB mic, not the Pico), `blocked` (why a take cannot start now, or null), `blocked_action` (the one fix for it: `resume` | `gesture_mode`, or null),
 `done`, `total` (52), `sources{pico|phone|usb: {done, total}}`, `gestures[{name, kind (contour|discrete), done, total,
 examples, extra (examples not from training), active (3+), kept, cells[{id, prompt, done, tags}]}]`, and `session`
 (null when no round is open): `source`, `gesture`, `state`, `cell`, `prompt`, `hint`, `tags`, `index`, `count`,

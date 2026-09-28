@@ -325,6 +325,67 @@ void main() {
     }
   });
 
+  testWidgets('a disarmed phone mic is shown as its own state and resume re-arms it', (tester) async {
+    final b = await pumpApp(tester,
+        backend: FakeBackend(initial: VoxStatus.fromMap({
+          'service': true, 'armed': false, 'paused': false, 'mode': 'gesture', 'app': 'x.y', 'decider': 'rules',
+          'sound_source': 'phone',
+        })));
+    expect(find.text('Disarmed'), findsOneWidget);
+    expect(find.text('Resume Canti'), findsOneWidget);
+    await tester.tap(find.text('Resume Canti'));
+    await tester.pumpAndSettle();
+    expect(b.current.armed, isTrue);
+    expect(find.text('Listening for sounds'), findsOneWidget);
+  });
+
+  testWidgets('an open calibration shows "Calibrating" with a Stop button', (tester) async {
+    final b = await pumpApp(tester,
+        backend: FakeBackend(initial: VoxStatus.fromMap({
+          'service': true, 'armed': true, 'paused': false, 'mode': 'cursor', 'app': 'x.y', 'decider': 'rules',
+          'sound_source': 'phone', 'calibrating': true,
+        })));
+    expect(find.text('Calibrating — sounds are paused.'), findsOneWidget);
+    expect(find.text('Stop calibrating'), findsOneWidget);
+    await tester.tap(find.text('Stop calibrating'));
+    await tester.pumpAndSettle();
+    expect(b.calibCalls.last.$1, 'calib_cancel');
+  });
+
+  testWidgets('tapping the header head opens the badge actions (pause, mode, calibrate)', (tester) async {
+    final b = await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('head_menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('head_pause')), findsOneWidget);
+    expect(find.byKey(const Key('head_mode')), findsOneWidget);
+    expect(find.byKey(const Key('head_calibrate')), findsNothing); // the Pico: no voice-cursor setup (as the badge menu)
+    // Pause works through the same path as the status button.
+    await tester.tap(find.byKey(const Key('head_pause')));
+    await tester.pumpAndSettle();
+    expect(b.current.deviceArmed, isFalse);
+  });
+
+  testWidgets('with a phone mic the head menu switches mode and opens calibration', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.view.reset);
+    final b = await pumpApp(tester,
+        backend: FakeBackend(initial: VoxStatus.fromMap({
+          'service': true, 'armed': true, 'paused': false, 'mode': 'gesture', 'app': 'x.y', 'decider': 'rules',
+          'sound_source': 'phone', 'mic_state': 'listening',
+        })));
+    await tester.tap(find.byKey(const Key('head_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byKey(const Key('head_mode')), matching: find.text('Cursor')));
+    await tester.pumpAndSettle();
+    expect(b.current.mode, 'cursor');
+    await tester.tap(find.byKey(const Key('head_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('head_calibrate')));
+    await tester.pumpAndSettle();
+    expect(find.byType(CalibrationScreen), findsOneWidget);
+  });
+
   group('ChannelBackend', () {
     const methods = MethodChannel(ChannelBackend.methodsName);
     const events = EventChannel(ChannelBackend.eventsName);

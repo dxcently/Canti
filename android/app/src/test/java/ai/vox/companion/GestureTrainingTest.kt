@@ -36,6 +36,7 @@ class GestureTrainingTest {
         val tasks = mutableListOf<Pair<Long, () -> Unit>>()
         var src = "phone"
         var block: String? = null
+        var drop: String? = null
         var ticksOn = false
         val stores = mutableMapOf<String, EnrollmentStore>()
         val logs = mutableListOf<Map<String, Any?>>()
@@ -54,6 +55,7 @@ class GestureTrainingTest {
         }
         override fun source() = src
         override fun blocker() = block
+        override fun dropSummary(sinceMs: Long) = drop
         override fun liveTrace() = src != "pico"
         override fun ticks(on: Boolean) { ticksOn = on }
         override fun profile() = "default"
@@ -199,6 +201,16 @@ class GestureTrainingTest {
         assertEquals("failed", r["state"]); assertEquals(h.block, r["reason"])
     }
 
+    @Test fun heardButDroppedSoundsReportTheDropReasonInsteadOfSilence() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "pop")); t.command("train_record", emptyMap())
+        // The mic heard sounds but dropped them (level gate, touch, a calibration): the timeout says so.
+        h.drop = "Heard 3 sounds, all below the level gate"
+        h.advance(GestureTrainer.TAKE_TIMEOUT_MS)
+        val s = session(t.status(null))
+        assertEquals("failed", s["state"]); assertEquals("Heard 3 sounds, all below the level gate", s["reason"])
+    }
+
     @Test fun twoSoundsInOneTakeFail() {
         val h = FakeHost(); val t = GestureTrainer(h)
         t.command("train_start", mapOf("gesture" to "arch")); t.command("train_record", emptyMap())
@@ -264,6 +276,53 @@ class GestureTrainingTest {
         h.advance(GestureTrainer.IDLE_MS)
         assertFalse(t.active)
         assertTrue(h.logs.any { it["event"] == "end" && it["by"] == "idle" })
+        // the screen (if still there) hears that the session ended
+        assertEquals(false, h.pushes.last()["active"])
+    }
+
+    @Test fun aCancelFromOutsideTheScreenIsPushedToIt() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "click"))
+        val n = h.pushes.size
+        t.cancel("app background")
+        assertFalse(t.active)
+        assertEquals(n + 1, h.pushes.size); assertEquals(false, h.pushes.last()["active"])
+        assertTrue(h.logs.any { it["event"] == "end" && it["by"] == "app background" })
+        t.cancel("app background")   // nothing open: nothing logged or pushed
+        assertEquals(n + 1, h.pushes.size)
+    }
+
+    // --- the "Not ready" blocker and its one button (TrainBlock) ------------------------------------------------------------
+
+    private fun block(calibrating: Boolean = false, paused: Boolean = false, armed: Boolean = true, usesMic: Boolean = true,
+                      cursor: Boolean = false, mic: String? = "listening", ready: Boolean = false) =
+        TrainBlock.of(TrainBlock.Inputs(calibrating, paused, armed, usesMic, cursor, mic, ready))
+
+    @Test fun trainBlockStatesTheCauseAndTheButtonThatFixesIt() {
+        assertNull(block())
+        assertNull(block(usesMic = false, mic = null, ready = true))
+        assertEquals("Canti is calibrating." to null, block(calibrating = true, paused = true))   // calibrating wins, no button
+        assertEquals("Canti is paused." to "resume", block(paused = true))
+        // a disarmed phone / USB mic is Canti paused (resume re-arms); a disarmed Pico: resume only while it is connected
+        assertEquals("Canti is paused." to "resume", block(armed = false))
+        assertEquals("Canti is not listening (the device is paused or asleep)." to "resume", block(armed = false, usesMic = false, ready = true))
+        assertEquals(null, block(armed = false, usesMic = false, ready = false)!!.second)
+        assertEquals("gesture_mode", block(cursor = true)!!.second)
+        // armed, not paused, mic off (permission, no USB mic, a refused service): resuming changes nothing, so no button
+        assertEquals("The mic is off (needs microphone permission)." to null, block(mic = "needs microphone permission"))
+        assertEquals("The mic is off (off)." to null, block(mic = null))
+        assertEquals("The Canti device is not connected." to null, block(usesMic = false, mic = null, ready = false))
+    }
+
+    @Test fun micDropsSayWhatHappenedToTheSounds() {
+        assertNull(ai.vox.companion.audio.MicDrops.line(emptyList()))
+        assertEquals("Heard 3 sounds, all below the level gate.", ai.vox.companion.audio.MicDrops.line(List(3) { "below level gate" }))
+        assertEquals("Heard 1 sound, dropped while a calibration ran.", ai.vox.companion.audio.MicDrops.line(listOf("calibrating")))
+        assertEquals("Heard 2 sounds, all while you touched the screen.", ai.vox.companion.audio.MicDrops.line(listOf("touch", "touch")))
+        // mixed reasons are each counted, not collapsed into "all <the most frequent>"
+        assertEquals("Heard 3 sounds, none used: 2 below the level gate, 1 while you touched the screen.",
+            ai.vox.companion.audio.MicDrops.line(listOf("below level gate", "touch", "below level gate")))
+        assertEquals("Heard 1 sound, dropped by the dry run.", ai.vox.companion.audio.MicDrops.line(listOf("dry_run")))
     }
 
     // --- per-source store ------------------------------------------------------------------------------------------------
