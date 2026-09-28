@@ -26,6 +26,7 @@ class CantiHead extends StatefulWidget {
     final b = s.badge;
     if (b != null && b.isNotEmpty) return b;
     if (s.hasDevice && !s.deviceReady) return 'off';
+    if (s.calibrating) return 'paused';   // a calibration drops every sound: the paused look, no new art
     if (s.paused || (s.deviceReady ? s.deviceArmed != true : !s.armed)) return 'paused';
     if (s.deviceError != null) return 'error';
     if ((s.deviceReady ? s.deviceMode ?? s.mode : s.mode) == 'cursor') return 'cursor';

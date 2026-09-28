@@ -34,6 +34,8 @@ class VoxStatus {
     this.asrEngine,
     this.asrStatus,
     this.calibrated,
+    this.calibrating = false,
+    this.training = false,
     this.bindings,
   });
 
@@ -125,6 +127,12 @@ class VoxStatus {
   /// The voice cursor has a saved calibration for the current sound source (null from a service without one).
   final bool? calibrated;
 
+  /// A calibration run is open now (its sounds are dropped as "calibrating": Canti is deaf until it ends).
+  final bool calibrating;
+
+  /// A gesture-training round is open now (its sounds go to the trainer, not to actions).
+  final bool training;
+
   /// The bindings window's picture (null from a service without one, or when the service is off): the effective
   /// sound -> action per mode, resolved on the Kotlin side (`Bindings.kt`), for the current app.
   final VoxBindings? bindings;
@@ -163,6 +171,8 @@ class VoxStatus {
         asrEngine: m['asr_engine'] as String?,
         asrStatus: m['asr_status'] as String?,
         calibrated: m['calibrated'] as bool?,
+        calibrating: m['calibrating'] == true,
+        training: m['training'] == true,
         bindings: VoxBindings.fromMapOrNull(m['bindings']),
       );
 
@@ -215,6 +225,8 @@ class VoxStatus {
         asrEngine: asrEngine,
         asrStatus: asrStatus,
         calibrated: calibrated,
+        calibrating: calibrating,
+        training: training,
         bindings: bindings,
       );
 

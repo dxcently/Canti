@@ -258,6 +258,7 @@ class TrainStatus {
     this.profile,
     this.liveTrace = false,
     this.blocked,
+    this.blockedAction,
     this.done = 0,
     this.total = 0,
     this.gestures = const [],
@@ -280,6 +281,10 @@ class TrainStatus {
 
   /// Why a take cannot be recorded now (paused, cursor mode, mic off, ...), or null.
   final String? blocked;
+
+  /// The one action that fixes [blocked] (`resume` or `gesture_mode`), or null (no single button).
+  final String? blockedAction;
+
   final int done;
   final int total;
   final List<TrainGesture> gestures;
@@ -310,6 +315,7 @@ class TrainStatus {
       profile: _s(m['profile']),
       liveTrace: m['live_trace'] == true,
       blocked: _s(m['blocked']),
+      blockedAction: _s(m['blocked_action']),
       done: _i(m['done']) ?? 0,
       total: _i(m['total']) ?? 0,
       gestures: [for (final g in _l(m['gestures'])) TrainGesture.fromMap(g)],

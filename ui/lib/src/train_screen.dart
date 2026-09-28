@@ -13,8 +13,8 @@ import 'train.dart';
 
 /// Opens the gesture training screen.
 Future<void> openTraining(BuildContext context, VoxBackend backend, {TrainBackend? train}) =>
-    Navigator.of(context)
-        .push<void>(MaterialPageRoute(builder: (_) => TrainScreen(train: train ?? trainBackendFor(backend))));
+    Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => TrainScreen(train: train ?? trainBackendFor(backend), backend: backend)));
 
 String _cap(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
@@ -25,12 +25,15 @@ String _secs(int ms) => '${(ms / 1000).toStringAsFixed(1)} s';
 /// each take. A failed take stops with the reason and waits for Retry or Skip (Keep anyway when only the shape was
 /// wrong). Resumable: every accepted take is stored at once.
 class TrainScreen extends StatefulWidget {
-  const TrainScreen({super.key, required this.train, this.flow});
+  const TrainScreen({super.key, required this.train, this.flow, this.backend});
 
   final TrainBackend train;
 
   /// A flow to drive (tests, the desktop preview); by default the screen makes its own.
   final TrainFlow? flow;
+
+  /// The main backend, for the "Not ready" note's fix button (Resume / switch to gesture mode); null without it.
+  final VoxBackend? backend;
 
   static const intro =
       'Record your own version of each gesture, with its variations: hummed and whistled, starting '
@@ -97,7 +100,7 @@ class _TrainScreenState extends State<TrainScreen> {
                   else if (session != null)
                     _SessionWindow(flow: f, status: s, session: session)
                   else ...[
-                    _GridWindow(flow: f, status: s),
+                    _GridWindow(flow: f, status: s, backend: widget.backend),
                     if (f.selected != null && s.gesture(f.selected!) != null) ...[
                       gap,
                       _CardWindow(flow: f, status: s, gesture: s.gesture(f.selected!)!),
@@ -116,10 +119,11 @@ class _TrainScreenState extends State<TrainScreen> {
 // --- the cards --------------------------------------------------------------------------------------------------
 
 class _GridWindow extends StatelessWidget {
-  const _GridWindow({required this.flow, required this.status});
+  const _GridWindow({required this.flow, required this.status, this.backend});
 
   final TrainFlow flow;
   final TrainStatus status;
+  final VoxBackend? backend;
 
   @override
   Widget build(BuildContext context) {
@@ -157,6 +161,10 @@ class _GridWindow extends StatelessWidget {
               text: 'Not ready to record: ${s.blocked}',
               textKey: const Key('train_blocked'),
             ),
+            if (s.blockedAction != null && backend != null) ...[
+              SizedBox(height: p(3)),
+              Align(alignment: Alignment.centerLeft, child: _fixButton(context, s.blockedAction!)),
+            ],
           ],
           gap,
           _CardGrid(flow: flow, status: s),
@@ -178,6 +186,32 @@ class _GridWindow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// The one button that fixes [action] (the "Not ready" note's cause): resume, or switch to gesture mode.
+  Widget _fixButton(BuildContext context, String action) {
+    final b = backend!;
+    if (action == 'gesture_mode') {
+      return OutlinedButton.icon(
+        key: const Key('train_fix_mode'),
+        icon: const PixelGlyph(Icons7.hand),
+        label: const Text('Switch to gesture mode'),
+        onPressed: () async {
+          await b.deviceCommand(mode: 'gesture');
+          await flow.refresh();
+        },
+      );
+    }
+    return FilledButton.icon(
+      key: const Key('train_fix_resume'),
+      icon: const PixelGlyph(Icons7.play),
+      label: const Text('Resume Canti'),
+      onPressed: () async {
+        await b.setPaused(false);
+        await b.deviceCommand(armed: true);
+        await flow.refresh();
+      },
     );
   }
 }

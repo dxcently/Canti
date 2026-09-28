@@ -219,6 +219,37 @@ void main() {
       expect(textOf(tester, 'train_state'), startsWith('Listening'));
     });
 
+    testWidgets('the "Not ready" note gets the one button that fixes its cause', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.625;
+      addTearDown(tester.view.reset);
+      final b = FakeBackend(initial: phone({'paused': true}));
+      final t = FakeTrainBackend(blocked: 'Canti is paused.')..blockedAction = 'resume';
+      useTrainBackend(b, t);
+      await tester.pumpWidget(VoxUiApp(backend: b, home: TrainScreen(train: t, backend: b)));
+      await tester.pumpAndSettle();
+      expect(textOf(tester, 'train_blocked'), contains('Canti is paused.'));
+      expect(find.byKey(const Key('train_fix_resume')), findsOneWidget);
+      await tapKey(tester, 'train_fix_resume');
+      expect(b.current.paused, isFalse);
+      expect(b.current.armed, isTrue);
+    });
+
+    testWidgets('cursor mode\'s "Not ready" note offers the gesture-mode switch', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.625;
+      addTearDown(tester.view.reset);
+      final b = FakeBackend(initial: phone({'mode': 'cursor'}));
+      final t = FakeTrainBackend(blocked: 'Canti is in cursor mode: switch to gesture mode to train gestures.')
+        ..blockedAction = 'gesture_mode';
+      useTrainBackend(b, t);
+      await tester.pumpWidget(VoxUiApp(backend: b, home: TrainScreen(train: t, backend: b)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('train_fix_mode')), findsOneWidget);
+      await tapKey(tester, 'train_fix_mode');
+      expect(b.current.mode, 'gesture');
+    });
+
     testWidgets('the last take finishes the round; Back to cards shows the full card; Delete / redo asks first',
         (tester) async {
       final t = FakeTrainBackend()..fill('hiss', cells: ['soft-1', 'soft-2', 'loud-1']);

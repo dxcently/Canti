@@ -192,6 +192,10 @@ interface TrainHost : Scheduler {
     fun source(): String
     /** Why a take cannot be recorded right now (paused, cursor mode, mic off, ...), or null. */
     fun blocker(): String?
+    /** What single action fixes [blocker] (for the training screen's "Not ready" button), or null. */
+    fun blockerAction(): String? = null
+    /** Sounds the mic heard but dropped since [sinceMs] (level gate, touch, the joystick's filter), as one line, or null. */
+    fun dropSummary(sinceMs: Long): String? = null
     /** The current source gives live pitch ticks (the phone / USB mic). */
     fun liveTrace(): Boolean
     fun ticks(on: Boolean)
@@ -203,6 +207,34 @@ interface TrainHost : Scheduler {
     fun wallMs(): Long
     fun log(vararg fields: Pair<String, Any?>)
     fun push(status: Map<String, Any?>)
+}
+
+/**
+ * Why a take cannot be recorded now, and the one action that fixes it (the training screen's "Not ready" button:
+ * `resume` or `gesture_mode`; null = no single button does). [TrainHost.blocker] / [TrainHost.blockerAction] in the
+ * service; pure for the tests.
+ */
+object TrainBlock {
+    data class Inputs(
+        val calibrating: Boolean, val paused: Boolean, val armed: Boolean, val usesMic: Boolean, val cursorMode: Boolean,
+        val micState: String?, val deviceReady: Boolean,
+    )
+
+    fun of(i: Inputs): Pair<String, String?>? = when {
+        // the calibration screen ends it (Stop / Back); leaving the app ends it too (VoxService's background guard)
+        i.calibrating -> "Canti is calibrating." to null
+        i.paused -> "Canti is paused." to "resume"
+        // a phone / USB mic: the app disarmed it (resume re-arms). The Pico: the device is paused (resume arms it over
+        // the link) or asleep / gone (nothing to command)
+        !i.armed -> if (i.usesMic) "Canti is paused." to "resume"
+            else "Canti is not listening (the device is paused or asleep)." to (if (i.deviceReady) "resume" else null)
+        i.cursorMode -> "Canti is in cursor mode: switch to gesture mode to train gestures." to "gesture_mode"
+        // armed and not paused, yet the mic is off (no permission, no USB mic, a refused foreground service, an error):
+        // resuming would change nothing, so no button
+        i.usesMic && i.micState != "listening" -> "The mic is off (${i.micState ?: "off"})." to null
+        !i.usesMic && !i.deviceReady -> "The Canti device is not connected." to null
+        else -> null
+    }
 }
 
 /**
@@ -325,8 +357,11 @@ class GestureTrainer(private val host: TrainHost) {
         val c = s ?: return
         if (c.state != "recording" || c.labels.isNotEmpty()) return
         c.cancelTimer = null
+        // Sounds were heard but dropped (level gate, touch, a calibration): say that, not "heard nothing".
+        val dropped = host.dropSummary(c.startedAt)
         val why = host.blocker()
-        fail(c, TrainVerdict(listOf("nothing" to "Heard nothing in ${TAKE_TIMEOUT_MS / 1000} s." + (why?.let { " $it" } ?: "")), false, emptyMap()))
+        val msg = dropped ?: "Heard nothing in ${TAKE_TIMEOUT_MS / 1000} s." + (why?.let { " $it" } ?: "")
+        fail(c, TrainVerdict(listOf("nothing" to msg), false, emptyMap()))
     }
 
     private fun skip() {
@@ -368,7 +403,8 @@ class GestureTrainer(private val host: TrainHost) {
         }
     }
 
-    fun cancel(by: String) { if (s != null) finish(by) }
+    /** Ends the session; one the screen did not end itself (idle, the app in the background) is pushed to it now. */
+    fun cancel(by: String) { if (s != null) { finish(by); if (by != "ui") host.push(status(null)) } }
 
     private fun finish(by: String) {
         val c = s ?: return
@@ -396,7 +432,7 @@ class GestureTrainer(private val host: TrainHost) {
     private fun armIdle() {
         idleCancel?.invoke(); idleCancel = null
         if (s == null) return
-        idleCancel = host.schedule(IDLE_MS) { if (host.now() - lastCmdAt >= IDLE_MS) finish("idle") }
+        idleCancel = host.schedule(IDLE_MS) { if (host.now() - lastCmdAt >= IDLE_MS) cancel("idle") }
     }
 
     // --- sounds ----------------------------------------------------------------------------------------------------
@@ -548,7 +584,7 @@ class GestureTrainer(private val host: TrainHost) {
         }
         return linkedMapOf(
             "active" to (c != null), "source" to src, "current_source" to cur, "profile" to host.profile(),
-            "live_trace" to host.liveTrace(), "blocked" to host.blocker(),
+            "live_trace" to host.liveTrace(), "blocked" to host.blocker(), "blocked_action" to host.blockerAction(),
             "done" to doneCount(st), "total" to TrainPlan.TOTAL,
             "gestures" to gestures, "session" to session, "sources" to progress(),
         )

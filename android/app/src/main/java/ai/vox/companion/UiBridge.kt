@@ -47,12 +47,15 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
                     "status" -> result.success(status())
                     "setPaused" -> {
                         val p = call.argument<Boolean>("paused") ?: throw IllegalArgumentException("setPaused needs {paused: bool}")
+                        // [phone-mic] a resume from the screen retries a refused foreground-service start (visible now)
+                        if (!p) ai.vox.companion.audio.PhoneMicSource.current?.appVisible()
                         VoxService.instance?.setPaused(p, "app")
                         result.success(status())
                     }
                     "deviceCommand" -> {
                         val c = DeviceLink.Command.from(JSONObject(call.arguments as? Map<*, *> ?: emptyMap<String, Any>()))
                         val svc = VoxService.instance
+                        if (c.armed == true) ai.vox.companion.audio.PhoneMicSource.current?.appVisible()   // as setPaused(false)
                         if (svc == null) result.success(mapOf("ok" to false, "result" to "failed", "error" to "the Canti service is off"))
                         // Only the status screen's buttons call this: a confirmed mode change is the user's (UserMode).
                         else svc.deviceCommand(c, "status-screen") { r -> result.success(r.keys().asSequence().associateWith { k -> r.get(k).takeIf { it != JSONObject.NULL } }) }
@@ -223,7 +226,9 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
         trainMethods.setMethodCallHandler(null)
         if (VoxService.trainSink === trainSink) { VoxService.trainSink = null; VoxService.instance?.train?.cancel("ui closed") }
         removeListener()
-        if (VoiceJoystick.uiSink === calibSink) VoiceJoystick.uiSink = null
+        // A calibration left open makes Canti deaf (every mic sound is dropped as "calibrating"): this screen's one ends
+        // with it (another Canti screen that took over the calibration pushes keeps its run).
+        if (VoiceJoystick.uiSink === calibSink) { VoiceJoystick.uiSink = null; VoxService.instance?.joy?.cancelCalibration("ui closed") }
         permissionResult?.success(mapOf("service" to (VoxService.instance != null))); permissionResult = null
         methods.setMethodCallHandler(null)
         events.setStreamHandler(null)

@@ -586,6 +586,7 @@ class CalibFlow extends ChangeNotifier {
   Future<void> begin() async {
     if (_started || _busy) return;
     _started = true;
+    _error = null;   // an earlier refusal must not read as this start failing (the run would go on, unseen)
     _show(CalibPage.ofStep(steps.first));
     await _call('start', () => backend.calibStart(source, steps: partial ? steps : null));
     if (_error != null) {

@@ -102,6 +102,15 @@ class _CalibrationScreenState extends State<CalibrationScreen> {
     if (mounted) Navigator.of(context).pop(false);
   }
 
+  /// Begins, and if the service refuses (the mic is off, the source does not match, ...) surfaces that where the user
+  /// is looking — a snackbar — in addition to the error window at the top.
+  Future<void> _begin() async {
+    await _flow.begin();
+    if (mounted && _flow.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_flow.error!)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = Px.of(context);
@@ -203,7 +212,7 @@ class _CalibrationScreenState extends State<CalibrationScreen> {
               key: const Key('calib_begin'),
               icon: const PixelGlyph(Icons7.play),
               label: const Text('Begin'),
-              onPressed: f.busy || f.started ? null : f.begin,
+              onPressed: f.busy || f.started ? null : _begin,
             ),
           ]),
         ];

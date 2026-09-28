@@ -38,6 +38,9 @@ class VoxService : AccessibilityService() {
 
         /** Moving between Canti screens pauses one and resumes the next within this: the head stays tucked. */
         const val TUCK_DEBOUNCE_MS = 150L
+        /** Every Canti screen stopped this long = the app is in the background ([BackgroundGuard]): an open calibration or
+         *  training round is ended. Long enough for a quick look away mid-step; short next to Canti being deaf. */
+        const val BACKGROUND_GRACE_MS = 10_000L
         /** The main-thread lag probe's tick while armed ([MainLoad] `main:lag`). */
         const val HEARTBEAT_MS = 50L
         const val LAUNCHER_CACHE_MS = 60_000L
@@ -250,6 +253,7 @@ class VoxService : AccessibilityService() {
             active = { !paused && (armed || settings.mic.whileDisarmed) }, mode = { deviceMode }).also { mic = it }
         try {
             joy = VoiceJoystick(this, overlay, settings, main, { Targets.build(TreeReader.targetLayers(this), screenW(), screenH()) }, { screenW() to screenH() })
+            joy?.onCalibChanged = { updateBadge("") }   // a calibration shows the paused face while it runs
         } catch (e: Exception) { EventLog.ev("error", "where" to "joystick", "error" to e.toString()) }
         train = GestureTrainer(trainHost(scheduler))   // [train]
         if (settings.debugSource) sources += DebugSocketSource(this)
@@ -276,7 +280,8 @@ class VoxService : AccessibilityService() {
         main.removeCallbacks(mediaWindowEnd); main.removeCallbacks(mediaRecheck)
         listenWindow.cancel("service stopped"); dictation.stop("service stopped"); asr.cancel(); fileAsr.cancel("service stopped")
         ai.vox.companion.audio.SoundSource.removeListener(sourceListener)
-        application.unregisterActivityLifecycleCallbacks(screenCallbacks); resumedScreens.clear(); main.removeCallbacks(tuckCheck)
+        application.unregisterActivityLifecycleCallbacks(screenCallbacks); resumedScreens.clear(); background.clear()
+        main.removeCallbacks(tuckCheck)
         joy?.close(); joy = null
         sources.forEach { it.stop() }; sources.clear(); ble = null; mic = null; sink = null   // [phone-mic] mic, sink
         try { overlay.remove() } catch (_: Exception) {}
@@ -628,6 +633,8 @@ class VoxService : AccessibilityService() {
         "media_locked" to (settings.mic.usesMic && mediaLocked(SystemClock.elapsedRealtime())),
         // the voice joystick: a saved calibration for the current sound source (the Pico: always false for now)
         "calibrated" to (joy?.calibrated() ?: false),
+        // a calibration run is open now (its sounds are dropped as "calibrating"); a training round is open ([train])
+        "calibrating" to (joy?.calibrating ?: false), "training" to (train?.active ?: false),
         // the bindings window: the effective sound -> action per mode (Bindings), for the current app
         "bindings" to Bindings.view(profile, currentApp(), settings.mic.usesMic),
     ) + (ble?.setup() ?: emptyMap())
@@ -1355,18 +1362,32 @@ class VoxService : AccessibilityService() {
     private val resumedScreens = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<android.app.Activity, Boolean>())
     private val tuckCheck = Runnable { try { overlay.tuckBadge(resumedScreens.isNotEmpty()) } catch (e: Exception) { EventLog.ev("error", "where" to "badge tuck", "error" to e.toString()) } }
     private fun screensChanged() { main.removeCallbacks(tuckCheck); main.postDelayed(tuckCheck, TUCK_DEBOUNCE_MS) }
+    // Canti in the background (Home, another app, the screen off: every Canti screen stopped for BACKGROUND_GRACE_MS).
+    // A calibration left open then makes it deaf everywhere (every mic sound is dropped as "calibrating"), so an open
+    // calibration and training round are ended here. The grace keeps a quick look away mid-step (and moving between
+    // Canti screens) from ending them.
+    private val background = BackgroundGuard(object : Scheduler {
+        override fun now() = SystemClock.elapsedRealtime()
+        override fun schedule(delayMs: Long, task: () -> Unit): () -> Unit {
+            val r = Runnable(task); main.postDelayed(r, delayMs); return { main.removeCallbacks(r) }
+        }
+    }, BACKGROUND_GRACE_MS) { away ->
+        if (train?.active == true || joy?.calibrating == true) EventLog.ev("ui", "what" to "background", "away_ms" to away)
+        train?.cancel("app background")
+        joy?.cancelCalibration("app background", "The calibration stopped: Canti was left in the background.")
+    }
     private val screenCallbacks = object : android.app.Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(a: android.app.Activity) { resumedScreens += a; screensChanged() }
         override fun onActivityPaused(a: android.app.Activity) { resumedScreens -= a; screensChanged() }
         override fun onActivityDestroyed(a: android.app.Activity) { if (resumedScreens.remove(a)) screensChanged() }
         override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
-        override fun onActivityStarted(a: android.app.Activity) {}
-        override fun onActivityStopped(a: android.app.Activity) {}
+        override fun onActivityStarted(a: android.app.Activity) { background.started(a) }
+        override fun onActivityStopped(a: android.app.Activity) { background.stopped(a) }
         override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
     }
 
     private fun badgeState(): BadgeState = BadgeStates.held(BadgeStates.Inputs(
-        armed = armed, paused = paused, mode = deviceMode, holdScrolling = holdScroll.active,
+        armed = armed, paused = paused || joy?.calibrating == true, mode = deviceMode, holdScrolling = holdScroll.active,
         pending = sequencer.isWaiting || deciding.isNotEmpty() || confirm != null || choice != null,
         // dictating shows the same listening face (no new art)
         listening = ::listenWindow.isInitialized && (listenWindow.isOpen || dictation.active),
@@ -1595,14 +1616,12 @@ class VoxService : AccessibilityService() {
     /** [train] What the gesture trainer needs from the service (main thread). */
     private fun trainHost(scheduler: Scheduler) = object : TrainHost, Scheduler by scheduler {
         override fun source() = settings.mic.source
-        override fun blocker(): String? = when {
-            paused -> "Canti is paused: resume it first."
-            !armed -> "Canti is not listening (the device is paused or asleep): resume it first."
-            deviceMode == "cursor" -> "Canti is in cursor mode: switch to gesture mode to train gestures."
-            settings.mic.usesMic && mic?.state != "listening" -> "The mic is not listening (${mic?.state ?: "off"})."
-            !settings.mic.usesMic && ble?.link?.ready != true -> "The Canti device is not connected."
-            else -> null
-        }
+        private fun block() = TrainBlock.of(TrainBlock.Inputs(calibrating = joy?.calibrating == true, paused = paused,
+            armed = armed, usesMic = settings.mic.usesMic, cursorMode = deviceMode == "cursor", micState = mic?.state,
+            deviceReady = ble?.link?.ready == true))
+        override fun blocker(): String? = block()?.first
+        override fun blockerAction(): String? = block()?.second
+        override fun dropSummary(sinceMs: Long): String? = mic?.dropSummary(sinceMs)
         override fun liveTrace() = settings.mic.usesMic && mic != null
         override fun ticks(on: Boolean) {
             val m = mic ?: return

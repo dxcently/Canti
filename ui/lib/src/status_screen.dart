@@ -41,7 +41,7 @@ class StatusScreen extends StatefulWidget {
 
 class _StatusScreenState extends State<StatusScreen> {
   /// Events after which the status is fetched again.
-  static const _statusEvents = {'arm', 'pause', 'mode', 'service', 'ble', 'reset', 'app', 'source', 'device_cmd'};
+  static const _statusEvents = {'arm', 'pause', 'mode', 'service', 'ble', 'reset', 'app', 'source', 'device_cmd', 'calib', 'train'};
 
   VoxStatus? _status;
   String? _error;
@@ -117,7 +117,11 @@ class _StatusScreenState extends State<StatusScreen> {
   }
 
   /// Whether sounds act, as far as the main button is concerned.
-  static bool _on(VoxStatus s) => s.deviceReady ? s.deviceArmed == true && !s.paused : !s.paused;
+  static bool _on(VoxStatus s) =>
+      s.deviceReady ? s.deviceArmed == true && !s.paused : (!_mic(s) || s.armed) && !s.paused;
+
+  /// A phone or USB mic source: the phone owns the arm state and mode (no device), so the app can disarm and re-arm it.
+  static bool _mic(VoxStatus s) => s.soundSource == 'phone' || s.soundSource == 'usb';
 
   Future<void> _busyWhile(String what, Future<void> Function() f) async {
     if (_busy) return;
@@ -135,14 +139,19 @@ class _StatusScreenState extends State<StatusScreen> {
   }
 
   /// Pause or resume. With a device connected this commands the device (and a resume also lifts an app-side pause);
-  /// otherwise it is the app-side pause.
+  /// otherwise it is the app-side pause (a disarmed mic source is re-armed first, since resuming is a no-op then).
   Future<void> _togglePause() async {
     final s = _status;
     if (s == null) return;
     await _busyWhile('pause', () async {
       if (!s.deviceReady) {
-        final n = await widget.backend.setPaused(!s.paused);
-        if (mounted) setState(() => _status = n);
+        if (_on(s)) {
+          await widget.backend.setPaused(true);
+        } else {
+          if (_mic(s) && !s.armed) await widget.backend.deviceCommand(armed: true);
+          if (s.paused) await widget.backend.setPaused(false);
+        }
+        await _refresh();
         return;
       }
       if (_on(s)) {
@@ -179,14 +188,77 @@ class _StatusScreenState extends State<StatusScreen> {
   /// The mic the voice cursor is calibrated for: the current sound source.
   String get _calibSource => _status?.soundSource ?? 'phone';
 
-  /// The voice cursor's setup (once, however many times it is asked for); the status is fetched again after.
-  Future<void> _openCalib() async {
+  /// The voice cursor's setup (once, however many times it is asked for); the status is fetched again after. Every
+  /// Calibrate entry goes through this one guard ([steps]: a profile's missing steps), so screens never stack.
+  Future<void> _openCalib({List<String>? steps}) async {
     if (_calibOpen || !mounted) return;
     _calibOpen = true;
-    final saved = await openCalibration(context, widget.backend, _calibSource);
+    final saved = await openCalibration(context, widget.backend, _calibSource, steps: steps);
     _calibOpen = false;
     if (saved) _calibVersion.value++;
     if (mounted) _refresh();
+  }
+
+  /// Ends an open calibration (the status screen's "Calibrating" Stop button).
+  Future<void> _stopCalib() => _busyWhile('calibrate', () async {
+        await widget.backend.calibCancel();
+        await _refresh();
+      });
+
+  /// Tapping the in-app header head: the same actions as the badge menu (pause/resume, mode, calibrate), so they stay
+  /// reachable while the floating head is tucked away. Reuses the status screen's own buttons and toggle.
+  Future<void> _openHeadMenu() async {
+    final s = _status;
+    if (s == null || !s.service || !mounted) return;
+    final paused = !_on(s);
+    final micSource = _mic(s);
+    final p = Px.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => Padding(
+        padding: EdgeInsets.all(p(5)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              key: const Key('head_pause'),
+              icon: PixelGlyph(paused ? Icons7.play : Icons7.pause),
+              label: Text(paused ? 'Resume Canti' : 'Pause Canti'),
+              onPressed: () {
+                Navigator.of(sheet).pop();
+                _togglePause();
+              },
+            ),
+            if (s.deviceReady || micSource) ...[
+              SizedBox(height: p(3)),
+              PixelToggle<String>(
+                key: const Key('head_mode'),
+                options: const [('gesture', 'Gesture', Icons7.hand), ('cursor', 'Cursor', Icons7.cursor)],
+                selected: s.deviceMode ?? s.mode,
+                onChanged: (v) {
+                  Navigator.of(sheet).pop();
+                  _busyWhile('mode', () => _device(mode: v));
+                },
+              ),
+            ],
+            // the voice cursor's setup: phone / USB mics only (as the badge menu; the Pico's mic can't be calibrated)
+            if (micSource) ...[
+              SizedBox(height: p(3)),
+              OutlinedButton.icon(
+                key: const Key('head_calibrate'),
+                icon: const PixelGlyph(Icons7.target),
+                label: const Text('Calibrate'),
+                onPressed: () {
+                  Navigator.of(sheet).pop();
+                  _openCalib();
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   /// Cursor mode on a mic with no calibration (the service's `calibrated: false`): offer the setup.
@@ -324,19 +396,40 @@ class _StatusScreenState extends State<StatusScreen> {
             ),
           )
         : null;
+    // A calibration is running: sounds are dropped as "calibrating", so say so plainly and offer to stop it.
+    final calibrating = s != null && s.service && s.calibrating
+        ? PixelWindow(
+            title: 'Calibrating',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Note(signal: Signal.waiting, text: 'Calibrating — sounds are paused.', textKey: const Key('calibrating_note')),
+                SizedBox(height: p(3)),
+                FilledButton.icon(
+                  key: const Key('calibrating_stop'),
+                  icon: const PixelGlyph(Icons7.pause),
+                  label: const Text('Stop calibrating'),
+                  onPressed: _busy ? null : _stopCalib,
+                ),
+              ],
+            ),
+          )
+        : null;
     final left = <Widget>[
-      _Header(status: s, events: widget.backend.events(), onRefresh: _refresh),
+      _Header(status: s, events: widget.backend.events(), onRefresh: _refresh, onHeadTap: _openHeadMenu),
       ?error,
       s == null ? const _Loading() : _StatusWindow(status: s),
       ?setup,
       ?pairing,
       ?calibPrompt,
+      ?calibrating,
       control,
       if (s != null && s.service) TrainGesturesWindow(backend: widget.backend, source: _calibSource), // [train]
       VoiceCursorWindow(
         backend: widget.backend,
         source: _calibSource,
         version: _calibVersion,
+        openCalibrate: _openCalib,
         onCalibrated: _refresh,
       ),
     ];
@@ -408,11 +501,12 @@ class _StatusScreenState extends State<StatusScreen> {
 /// Canti (the animated character, showing the live state), the wordmark and refresh, in a clearing of the dot field
 /// so the wordmark and its subtitle read. The brand art keeps its own colours.
 class _Header extends StatelessWidget {
-  const _Header({required this.status, required this.events, required this.onRefresh});
+  const _Header({required this.status, required this.events, required this.onRefresh, required this.onHeadTap});
 
   final VoxStatus? status;
   final Stream<VoxEvent> events;
   final VoidCallback onRefresh;
+  final VoidCallback onHeadTap;
 
   /// Art px across Canti's place in the row (at least the sprite's frame width).
   static const _slotArtPx = 40;
@@ -428,7 +522,16 @@ class _Header extends StatelessWidget {
           // centre line is the frame's), so the head and the wordmark keep their places.
           SizedBox(
             width: Px.of(context)(_slotArtPx),
-            child: Align(alignment: Alignment.topCenter, heightFactor: 1, child: CantiHead(status: status, events: events)),
+            child: Semantics(
+              button: true,
+              label: 'Canti menu',
+              child: GestureDetector(
+                key: const Key('head_menu'),
+                behavior: HitTestBehavior.opaque,
+                onTap: onHeadTap,
+                child: Align(alignment: Alignment.topCenter, heightFactor: 1, child: CantiHead(status: status, events: events)),
+              ),
+            ),
           ),
           SizedBox(width: Px.of(context)(4)),
           // The wordmark (41 art px) sits 8 art px down, level with the head's dome (47 tall; the row is 49, the head 1 down).
@@ -517,7 +620,9 @@ class _StatusWindow extends StatelessWidget {
       }
     }
     if (s.paused) return 'Paused';
-    if (s.deviceReady ? s.deviceArmed != true : !s.armed) return s.deviceReady ? 'Device paused' : 'Disarmed by the device';
+    if (s.deviceReady ? s.deviceArmed != true : !s.armed) {
+      return s.deviceReady ? 'Device paused' : (s.soundSource == 'phone' || s.soundSource == 'usb' ? 'Disarmed' : 'Disarmed by the device');
+    }
     return 'Listening for sounds';
   }
 

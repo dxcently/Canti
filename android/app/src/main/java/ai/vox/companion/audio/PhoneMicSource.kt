@@ -63,6 +63,8 @@ class PhoneMicSource(
     private var hissGated = 0L                     // of mediaGated: the media-hiss rule (PhoneGate.hissReason)
     private var levelGated = 0L                    // pop / click / hiss / unknown under the level gate (calibration v2)
     private var relabelled = 0L                    // pop <-> click by the person's own rule
+    // Sounds heard but dropped while judging, as (elapsedRealtime, reason): for the training take's "Heard N, all ..." line.
+    private val dropped = ArrayDeque<Pair<Long, String>>()
     private val latencies = ArrayDeque<Double>()   // ms, end of sound -> delivered to the service (main thread)
     private var lastCaptureInfo: JSONObject? = null
     /** Touch safety (`mic_touch_guard`): sounds overlapping a finger on the screen are dropped. */
@@ -200,6 +202,11 @@ class PhoneMicSource(
             serviceRefused = error
             refresh(if (error == null) "service started" else "service refused")
         }
+    }
+
+    /** From [MicListenService.onDestroy]: the foreground service went away, so the state is re-derived now. */
+    fun serviceDestroyed() {
+        main.post { if (!serviceAsked) refresh("service destroyed") }
     }
 
     private fun permission() = ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -347,7 +354,16 @@ class PhoneMicSource(
             "tick" to if (n.optBoolean("tick")) true else null,
             "media" to playing, "media_speaker" to onSpeaker, "gated" to gated)   // media playing at judge time (speaker: its route)
         if (touch == null && level == null && joy == null && !dry) s.deliver(out, source)
+        else noteDrop(touch?.let { "touch" } ?: level?.reason ?: joy ?: "dry_run")
     }
+
+    private fun noteDrop(reason: String) {
+        dropped.addLast(SystemClock.elapsedRealtime() to reason)
+        while (dropped.size > 64) dropped.removeFirst()
+    }
+
+    /** Sounds heard but dropped since [sinceMs] (elapsedRealtime), as one line for the training take's timeout, or null. */
+    fun dropSummary(sinceMs: Long): String? = MicDrops.line(dropped.filter { it.first >= sinceMs }.map { it.second })
 
     // --- status and debug ops ------------------------------------------------------------------------------------
 
@@ -450,5 +466,28 @@ class PhoneMicSource(
         @Volatile var current: PhoneMicSource? = null; internal set
         /** A Canti screen is visible (onResume): retry a foreground-service start that was refused. */
         fun onAppVisible() { current?.let { s -> Handler(Looper.getMainLooper()).post { s.appVisible() } } }
+    }
+}
+
+/** The training take's "heard but dropped" line from the drop reasons [PhoneMicSource.judge] logged (pure, for the tests). */
+object MicDrops {
+    private fun phrase(reason: String) = when {
+        reason == ai.vox.companion.joystick.GateDrop.REASON -> "below the level gate"
+        reason == "touch" -> "while you touched the screen"
+        reason == "calibrating" -> "dropped while a calibration ran"
+        reason == "dry_run" -> "dropped by the dry run"
+        reason.startsWith("joystick") -> "taken by the voice cursor"
+        else -> "dropped ($reason)"
+    }
+
+    /** "Heard 3 sounds, all below the level gate"; mixed reasons are counted each ("..., 2 below the level gate, 1
+     *  while you touched the screen"); null when nothing was dropped. */
+    fun line(reasons: List<String>): String? {
+        if (reasons.isEmpty()) return null
+        val n = reasons.size
+        val heard = "Heard $n sound${if (n == 1) "" else "s"}"
+        val counts = reasons.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
+        if (counts.size == 1) return "$heard, ${if (n == 1) "" else "all "}${phrase(counts[0].key)}."
+        return "$heard, none used: " + counts.joinToString(", ") { "${it.value} ${phrase(it.key)}" } + "."
     }
 }

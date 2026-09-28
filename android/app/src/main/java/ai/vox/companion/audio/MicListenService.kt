@@ -35,6 +35,7 @@ class MicListenService : Service() {
 
     override fun onDestroy() {
         running = false
+        PhoneMicSource.current?.serviceDestroyed()
         CantiNotification.refresh()   // back to the plain notification
         super.onDestroy()
     }

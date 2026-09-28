@@ -295,7 +295,7 @@ class VoiceJoystick(
     fun close() {
         mic?.let { detach(it) }; mic = null
         reader.shutdownNow()
-        calibEnd()
+        cancelCalibration("service stopped")
     }
 
     // ---------------------------------------------------------------------------------------------- calibration
@@ -310,9 +310,22 @@ class VoiceJoystick(
         }
     }
     private var lastPushAt = 0L
+    // The idle timeout (like gesture training's): a calibration left open with no command for [CALIB_IDLE_MS] is ended
+    // here, not left to make Canti deaf (every mic sound is dropped as "calibrating" while one runs).
+    private var lastCalibCmdAt = 0L
+    private val calibIdle = Runnable {
+        if (calib != null && SystemClock.elapsedRealtime() - lastCalibCmdAt >= CALIB_IDLE_MS)
+            cancelCalibration("idle", "The calibration stopped: nothing happened for ${CALIB_IDLE_MS / 60_000} min.")
+    }
 
     /** A saved calibration for [src] (the current source: the loaded profile, no prefs read; uiStatus asks often). */
     fun calibrated(src: String = source): Boolean = if (src == source) profile != null else load(src) != null
+
+    /** A calibration run is open now (its sounds are dropped as "calibrating", so Canti is deaf until it ends). */
+    val calibrating: Boolean get() = calib != null
+
+    /** A calibration run started or ended (the service redraws the badge: the paused face while one runs). Main thread. */
+    var onCalibChanged: (() -> Unit)? = null
 
     fun load(src: String): JoyProfile? = prefs.getString("calib_$src", null)?.let {
         try { JoyProfile.fromJson(JSONObject(it)) } catch (e: Exception) { EventLog.ev("error", "where" to "joystick profile", "error" to e.toString()); null }
@@ -323,7 +336,16 @@ class VoiceJoystick(
         val r = command(method, args)
         // the reply goes to the caller; the UI's status stream gets it too (a command from the debug socket)
         if (method != "calib_get") { applyTicks(); lastPushAt = SystemClock.elapsedRealtime(); uiSink?.invoke(r ?: idleStatus()) }
+        if (method != "calib_get" && method != "calib_status") armCalibIdle()   // reads are not activity
         return r
+    }
+
+    private fun armCalibIdle() {
+        main.removeCallbacks(calibIdle)
+        if (calib != null) {
+            lastCalibCmdAt = SystemClock.elapsedRealtime()
+            main.postDelayed(calibIdle, CALIB_IDLE_MS)
+        }
     }
 
     private fun command(method: String, args: Map<String, Any?>): Map<String, Any?>? {
@@ -351,6 +373,7 @@ class VoiceJoystick(
                     applyTicks(); applyGate()
                     main.removeCallbacks(calibPush); main.postDelayed(calibPush, PUSH_MS)
                     EventLog.ev("calib", "event" to "start", "source" to src, "steps" to calib?.steps?.joinToString(" "))
+                    onCalibChanged?.invoke()
                 }
                 "calib_step", "calib_redo" -> {
                     val c = calib ?: throw IllegalStateException("no calibration running (calib_start first)")
@@ -379,21 +402,35 @@ class VoiceJoystick(
                     return idleStatus()
                 }
                 "calib_cancel" -> {
-                    if (calib != null) EventLog.ev("calib", "event" to "cancel", "step" to calib?.step)
-                    calibEnd()
+                    cancelCalibration("ui")
                     return idleStatus()
                 }
                 "calib_status" -> {}
                 else -> throw IllegalArgumentException("unknown calibration command $method")
             }
-        } catch (e: IllegalArgumentException) { calibError = e.message } catch (e: IllegalStateException) { calibError = e.message }
+        } catch (e: IllegalArgumentException) {
+            calibError = e.message
+            if (method == "calib_start") EventLog.ev("calib", "event" to "refused", "reason" to e.message, "source" to args["source"])
+        } catch (e: IllegalStateException) { calibError = e.message }
         return calibStatus()
     }
 
     private fun calibEnd() {
         calib = null
         main.removeCallbacks(calibPush)
+        main.removeCallbacks(calibIdle)
         applyTicks(); applyGate()
+        onCalibChanged?.invoke()
+    }
+
+    /** End an open calibration, logging why it ended (the idle timeout, the app going to the background, the UI closing).
+     *  [note]: an end the calibration screen did not ask for — pushed to it now as its error, so a screen still showing
+     *  the run says it stopped. */
+    fun cancelCalibration(by: String, note: String? = null) {
+        if (calib == null) return
+        EventLog.ev("calib", "event" to "cancel", "by" to by, "step" to calib?.step)
+        calibEnd()
+        if (note != null) { calibError = note; lastPushAt = SystemClock.elapsedRealtime(); uiSink?.invoke(idleStatus()) }
     }
 
     fun calibStatus(): Map<String, Any?> {
@@ -427,6 +464,8 @@ class VoiceJoystick(
         const val KEY_X = "pos_x_dp"
         const val KEY_Y = "pos_y_dp"
         const val PUSH_MS = 100L
+        /** A calibration with no command for this long is ended (mirrors gesture training's [GestureTrainer.IDLE_MS]). */
+        const val CALIB_IDLE_MS = 5 * 60_000L
         /** The UI's `calib_status` pushes (UiBridge sets it while the Flutter UI is attached; main thread). */
         @Volatile var uiSink: ((Map<String, Any?>) -> Unit)? = null
         /** The sounds that stay gestures while the joystick drives: the pops (click, pop pop), a tongue click, hiss. */
