@@ -35,13 +35,25 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
     /** [effects]: the platform pre-processing on the session, `off` / `platform` / `aec` / `aec_ns` ([MicSettings]). */
     data class Config(val rate: Int, val readMs: Int, val preset: String, val device: AudioDeviceInfo?, val effects: String = "off",
                       /** Extractor overrides (VxNative.overridesJson of the calibration profile), null = the defaults. */
-                      val extractorJson: String? = null)
+                      val extractorJson: String? = null,
+                      /** Near-field measurement: open CHANNEL_IN_STEREO (fall back to mono if the device refuses). */
+                      val stereo: Boolean = false)
+
+    /** The measurement tee: the capture thread hands each read's raw PCM here (see [tee]), no copy. */
+    interface Tee {
+        /** [buf] holds [bytes] bytes of PCM16 LE (mono or interleaved stereo); [streamMs] is the stream ms of its
+         *  first sample (the pushed count before this read); [channels] is the actual channel count (a refused
+         *  stereo fell back to mono). */
+        fun write(buf: ByteBuffer, bytes: Int, streamMs: Long, channels: Int)
+    }
 
     interface Listener {
-        /** Native messages (JSON strings) that just finished; [baseMs] maps stream ms to nanoTime ms. */
-        fun onMessages(msgs: Array<String>, baseMs: Long, nowNs: Long)
-        /** The capture started (routed device, effects) or failed / ended ([error] non-null on failure). */
-        fun onState(state: String, info: JSONObject)
+        /** Native messages (JSON strings) that just finished; [baseMs] maps stream ms to nanoTime ms; [gen] is the
+         *  capture ([generation]) that heard them. */
+        fun onMessages(msgs: Array<String>, baseMs: Long, nowNs: Long, gen: Int)
+        /** Capture [gen] started (routed device, effects) or failed / ended ([error] non-null on failure). A restart's
+         *  old "stopped" can arrive after the new "listening": compare [gen]. */
+        fun onState(state: String, info: JSONObject, gen: Int)
         /** Joystick ticks ([ticks] on): [n] rows of VxNative.TICK_COLS in [rows] (reused: copy what you keep). */
         fun onTicks(rows: DoubleArray, n: Int, baseMs: Long) {}
     }
@@ -55,7 +67,34 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
     @Volatile var routed: String? = null; private set
     @Volatile var sessionId: Int = 0; private set
 
+    // Near-field measurement (round7-plan §3c): the tee set while a measurement runs; the capture thread hands each
+    // read's raw PCM to it (write on the capture thread: a 20 ms read is ~640 B-2.5 KB, written to the page cache, a
+    // few microseconds — cheaper than a queue + a second thread for a debug-only feature).
+    // The tee is bound to one capture generation: a restart's old thread (still in its last read) never writes to it.
+    class TeeBinding(val gen: Int, val tee: Tee)
+    @Volatile var tee: TeeBinding? = null
+    /** Bumped by every [start]: identifies one capture (its stream clock, its states, its messages). */
+    @Volatile var generation = 0; private set
+    /** The current stream's first-frame clock (System.nanoTime), 0 until its first read. Only the current thread sets it. */
+    @Volatile private var frame0Ns = 0L
+    /** The channel count the current capture actually opened (1 or 2; a refused stereo falls back to 1). */
+    @Volatile var actualChannels = 1; private set
+
     val isRunning get() = session?.get() == true
+
+    /** [nanoNs] (System.nanoTime) as stream ms of capture [gen], or null when [gen] is not the current capture or its
+     *  first read has not come yet (no clock). */
+    fun nanoToStreamMs(nanoNs: Long, gen: Int): Long? {
+        val f0 = frame0Ns
+        return if (gen != generation || f0 == 0L) null else Measure.nanoToStreamMs(nanoNs, f0)
+    }
+
+    /**
+     * Whether the device reports stereo capture for [rate] (getMinBufferSize, no AudioRecord opened). The real build
+     * in [run] may still refuse and fall back to mono, reported through [actualChannels].
+     */
+    fun stereoSupported(rate: Int, preset: String): Boolean =
+        AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT) > 0
 
     /** Joystick ticks wanted (cursor mode on this source); the capture thread applies it before its next read. */
     @Volatile var ticks = false
@@ -71,7 +110,10 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
         status = null
         val alive = AtomicBoolean(true)
         session = alive
-        thread = Thread({ run(cfg, alive) }, "vox-mic").apply { start() }
+        frame0Ns = 0L
+        val gen = generation + 1
+        generation = gen
+        thread = Thread({ run(cfg, alive, gen) }, "vox-mic").apply { start() }
     }
 
     /** Asynchronous: the thread ends after its current read (at most readMs) and releases the mic. */
@@ -88,10 +130,9 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
     fun unprocessedSupported(): Boolean = audio.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true"
 
     @SuppressLint("MissingPermission")   // PhoneMicSource only starts a capture with RECORD_AUDIO granted
-    private fun run(cfg: Config, alive: AtomicBoolean) {
+    private fun run(cfg: Config, alive: AtomicBoolean, gen: Int) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
         val frames = cfg.rate * cfg.readMs / 1000
-        val bytes = frames * 2
         val src = source(cfg.preset)
         var rec: AudioRecord? = null
         var handle = 0L
@@ -101,21 +142,38 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
         try {
             info.put("env_before", env())   // before the AudioRecord exists: what a VOICE_COMMUNICATION capture changes shows in env_after
             handle = VxNative.open(cfg.rate, configJson = cfg.extractorJson)
-            val fmt = AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(cfg.rate)
-                .setChannelMask(AudioFormat.CHANNEL_IN_MONO).build()
-            val min = AudioRecord.getMinBufferSize(cfg.rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-            val r = AudioRecord.Builder().setAudioSource(src).setAudioFormat(fmt)
-                .setBufferSizeInBytes(maxOf(min * 2, bytes * 4)).build()
+            // Near-field measurement: open stereo when asked, else mono; a device that refuses stereo falls back to mono.
+            var channels = if (cfg.stereo) 2 else 1
+            var r: AudioRecord? = null
+            var min = 0
+            for (ch in intArrayOf(channels, if (channels == 2) 1 else -1)) {
+                if (ch <= 0) continue
+                val mask = if (ch == 2) AudioFormat.CHANNEL_IN_STEREO else AudioFormat.CHANNEL_IN_MONO
+                val fmt = AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(cfg.rate).setChannelMask(mask).build()
+                min = AudioRecord.getMinBufferSize(cfg.rate, mask, AudioFormat.ENCODING_PCM_16BIT)
+                val cand = AudioRecord.Builder().setAudioSource(src).setAudioFormat(fmt)
+                    .setBufferSizeInBytes(maxOf(min * 2, frames * 2 * ch * 4)).build()
+                if (cand.state == AudioRecord.STATE_INITIALIZED) { r = cand; channels = ch; break }
+                cand.release()
+            }
+            if (r == null) throw IllegalStateException("AudioRecord did not initialise")
             rec = r
-            if (r.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("AudioRecord did not initialise")
+            actualChannels = channels
+            info.put("channels", channels).put("stereo_ok", channels == 2 || !cfg.stereo)
             cfg.device?.let { r.setPreferredDevice(it) }
             sessionId = r.audioSessionId
-            info.put("effects", effects(r.audioSessionId, cfg.effects, held)).put("buffer_bytes", r.bufferSizeInFrames * 2).put("min_buffer_bytes", min)
+            info.put("effects", effects(r.audioSessionId, cfg.effects, held)).put("buffer_bytes", r.bufferSizeInFrames * 2 * channels).put("min_buffer_bytes", min)
             r.startRecording()
             if (r.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw IllegalStateException("AudioRecord did not start (mic in use?)")
+            val bytes = frames * 2 * channels
             val buf = ByteBuffer.allocateDirect(bytes).order(ByteOrder.nativeOrder())
+            val monoBuf = if (channels == 2) ByteBuffer.allocateDirect(frames * 2).order(ByteOrder.nativeOrder()) else null
+            // Stereo: short views made once (no per-read allocation; indexed absolutely, so the tee moving buf's
+            // position cannot shift them). AudioRecord.read and pushDirect use the buffers' base address.
+            val stereoSrc = if (channels == 2) buf.duplicate().order(ByteOrder.nativeOrder()).asShortBuffer() else null
+            val stereoDst = monoBuf?.asShortBuffer()
             val ts = AudioTimestamp()
-            var frame0Ns = 0L
+            var f0 = 0L   // this stream's first-frame clock; published to [frame0Ns] (the measurement clock) while current
             var tsAt = 0L
             var tsSource = "first read"
             var pushed = 0L
@@ -136,32 +194,44 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
                     if (n == 0) continue
                     throw IllegalStateException("AudioRecord.read error $n")
                 }
-                val k = n / 2
+                val k = n / (2 * channels)
                 val now = System.nanoTime()
-                if (pushed == 0L) frame0Ns = now - k * 1_000_000_000L / cfg.rate
+                if (pushed == 0L) f0 = now - k * 1_000_000_000L / cfg.rate
                 // Frame clock from the audio HAL, when it has one: exact capture times, re-read every 2 s.
                 if (now - tsAt > 2_000_000_000L && r.getTimestamp(ts, AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS) {
-                    frame0Ns = ts.nanoTime - ts.framePosition * 1_000_000_000L / cfg.rate
+                    f0 = ts.nanoTime - ts.framePosition * 1_000_000_000L / cfg.rate
                     tsAt = now; tsSource = "AudioTimestamp"
                 }
+                if (session === alive && frame0Ns != f0) frame0Ns = f0
                 val wantTicks = ticks
                 if (wantTicks != ticksOn) { ticksOn = VxNative.enableTicks(handle, wantTicks) && wantTicks; clarityApplied = Double.NaN; f0MaxApplied = Double.NaN; tickT0Ms = pushed * 1000.0 / cfg.rate }
                 if (ticksOn) tickClarityOn.let { if (it != clarityApplied) { VxNative.setTickClarityOn(handle, it); clarityApplied = it } }
                 if (ticksOn) tickF0MaxHz.let { if (it != f0MaxApplied) { VxNative.setTickF0MaxHz(handle, it); f0MaxApplied = it } }
-                val msgs = VxNative.pushDirect(handle, buf, k, false)
+                // The stream ms of this buffer's first sample (before its frames are counted): the measurement tee's clock.
+                val streamMs = pushed * 1000L / cfg.rate
+                // Stereo: the extractor is mono, so it gets channel 0 (de-interleaved, no allocation); the WAV keeps both.
+                val pushBuf = if (channels == 2) { Measure.deinterleaveCh0(stereoSrc!!, stereoDst!!, k); monoBuf } else buf
+                val msgs = VxNative.pushDirect(handle, pushBuf, k, false)
                 pushed += k
+                // The measurement tee, only for the capture it is bound to. It never throws; the catch is a last guard:
+                // a failed recording must never end the gesture capture.
+                val tb = tee
+                if (tb != null && tb.gen == gen) {
+                    try { tb.tee.write(buf, n, streamMs, channels) } catch (_: Throwable) { if (tee === tb) tee = null }
+                    buf.clear()
+                }
                 if (!reported) {
                     reported = true
                     routed = r.routedDevice?.let(::describe)
                     info.put("routed", routed ?: JSONObject.NULL).put("clock", tsSource).put("env_after", env())
-                    listener.onState("listening", info)
+                    listener.onState("listening", info, gen)
                 }
-                if (msgs != null) listener.onMessages(msgs, frame0Ns / 1_000_000L, now)
+                if (msgs != null) listener.onMessages(msgs, f0 / 1_000_000L, now, gen)
                 if (ticksOn) {
                     var m = VxNative.takeTicks(handle, tickRows)
                     while (m > 0) {
                         if (tickT0Ms != 0.0) for (i in 0 until m) tickRows[i * VxNative.TICK_COLS + VxNative.TICK_T_MS] += tickT0Ms
-                        listener.onTicks(tickRows, m, frame0Ns / 1_000_000L)
+                        listener.onTicks(tickRows, m, f0 / 1_000_000L)
                         m = if (m == 64) VxNative.takeTicks(handle, tickRows) else 0
                     }
                 }
@@ -182,16 +252,16 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
                     status = st
                 }
             }
-            listener.onState("stopped", info)
+            listener.onState("stopped", info, gen)
         } catch (e: Throwable) {
-            listener.onState("error", info.put("error", e.toString()))
+            listener.onState("error", info.put("error", e.toString()), gen)
         } finally {
             held.forEach { try { it.release() } catch (_: Exception) {} }
             try { rec?.stop() } catch (_: Exception) {}
             rec?.release()
             if (handle != 0L) VxNative.destroy(handle)
             alive.set(false)
-            if (session === alive) routed = null
+            if (session === alive) { routed = null; frame0Ns = 0L; actualChannels = 1 }
         }
     }
 

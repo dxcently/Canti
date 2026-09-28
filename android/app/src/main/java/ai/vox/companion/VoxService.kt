@@ -247,7 +247,8 @@ class VoxService : AccessibilityService() {
         // [phone-mic] BLE only when the sound source is the Pico; the mic source decides itself (SourcePolicy).
         if (settings.mic.source == ai.vox.companion.audio.MicSettings.PICO) sources += BleFeatureSource(this, settings).also { ble = it }
         sources += ai.vox.companion.audio.PhoneMicSource(this, settings.mic,
-            active = { !paused && (armed || settings.mic.whileDisarmed) }, mode = { deviceMode }).also { mic = it }
+            active = { !paused && (armed || settings.mic.whileDisarmed) }, mode = { deviceMode },
+            matcher = { matcher }, promptSink = { overlay.showPrompt(it) }).also { mic = it }
         try {
             joy = VoiceJoystick(this, overlay, settings, main, { Targets.build(TreeReader.targetLayers(this), screenW(), screenH()) }, { screenW() to screenH() })
         } catch (e: Exception) { EventLog.ev("error", "where" to "joystick", "error" to e.toString()) }
@@ -1790,6 +1791,12 @@ class VoxService : AccessibilityService() {
             // [phone-mic] the phone/USB mic source: status, live level, and feeding PCM through the JNI extractor
             "mic_status", "mic_level", "mic_feed" ->
                 reply.put("mic", (mic ?: throw IllegalArgumentException("mic source not running")).control(op, m))
+            // [measure] the near-field measurement harness (round7-plan §3c): start/stop/status/clear, the range suite's cue (§3d), flat replies.
+            "measure_start", "measure_stop", "measure_status", "measure_clear", "measure_cue" -> {
+                val r = (mic ?: throw IllegalArgumentException("mic source not running")).control(op, m)
+                if (!r.optBoolean("ok", true)) { reply.put("ok", false).put("error", r.optString("error")) }
+                else for (k in r.keys()) if (k != "ok") reply.put(k, r.get(k))
+            }
             "fp_floors" -> {
                 // {} shows the table in use; {table: {...}} stores an override (entries replace the asset's per
                 // fp_version); {reset: true} removes the override.

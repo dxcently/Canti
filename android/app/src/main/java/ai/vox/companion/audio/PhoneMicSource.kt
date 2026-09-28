@@ -12,12 +12,15 @@ import android.os.SystemClock
 import android.util.Base64
 import ai.vox.companion.EventLog
 import ai.vox.companion.FeatureSource
+import ai.vox.companion.Matcher
 import ai.vox.companion.Sink
+import ai.vox.companion.SoundFeatures
 import ai.vox.companion.joystick.CalibV2
 import ai.vox.companion.joystick.ClickPopRule
 import ai.vox.companion.joystick.LevelGate
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -37,13 +40,20 @@ import java.nio.ByteOrder
  * - Messages are built on the main thread with the service's current mode and delivered to the service's [Sink] as
  *   source "phone-mic". Timing is on the elapsedRealtime clock, like the sequencer's arrival times.
  * - Privacy: samples go from AudioRecord straight into the extractor; nothing is stored, logged or sent. Only the
- *   extractor's output (the sound lines and fp1 numbers the Pico would send) leaves the audio thread.
+ *   extractor's output (the sound lines and fp1 numbers the Pico would send) leaves the audio thread. The one
+ *   exception is the near-field measurement (`measure_start`, round7-plan §3c): while a user-started measurement runs,
+ *   the raw PCM is written to `files/measure/<sid>/audio.wav` on the device, never uploaded, and deleted by
+ *   `measure_clear`.
  */
 class PhoneMicSource(
     private val ctx: Context,
     private val settings: MicSettings,
     private val active: () -> Boolean,
     private val mode: () -> String,
+    /** The gesture-training / enrollment matcher (VoxService), for the `mic_sound.tmpl` tag during a measurement. */
+    private val matcher: () -> Matcher?,
+    /** Shows a measurement prompt (VoxService -> Overlay). */
+    private val promptSink: (String) -> Unit,
 ) : FeatureSource {
     override val name = NAME
     private val main = Handler(Looper.getMainLooper())
@@ -51,6 +61,12 @@ class PhoneMicSource(
     private var sink: Sink? = null
     private var nextId = SystemClock.elapsedRealtime()   // never repeats a BLE id the service saw last
     private var plan: SourcePolicy.Plan? = null
+
+    // Near-field measurement (round7-plan §3c, Measure.kt): one session at a time, owned here because it needs the
+    // capture (tee, stereo) and the judge path (mic_sound.tmpl). Main thread except the tee (capture thread).
+    private var measure: MeasureSession? = null
+    /** The last sid handed out (sids are wall-clock ms, strictly increasing: Measure.newSid). */
+    private var lastSid = 0L
     var state = "off"; private set
     /** The input the capture uses ("USB headset: CMEDIA Q9"), when it runs. */
     var device: String? = null; private set
@@ -70,12 +86,12 @@ class PhoneMicSource(
     private val touchWatch = TouchWatch(ctx, touchGuard)
 
     private val capture = MicCapture(audio, object : MicCapture.Listener {
-        override fun onMessages(msgs: Array<String>, baseMs: Long, nowNs: Long) {
+        override fun onMessages(msgs: Array<String>, baseMs: Long, nowNs: Long, gen: Int) {
             // audio thread -> main thread; baseMs is on the nanoTime clock: move it to elapsedRealtime there.
-            main.post { deliver(msgs, baseMs, nowNs, NAME) }
+            main.post { deliver(msgs, baseMs, nowNs, NAME, gen) }
         }
-        override fun onState(state: String, info: JSONObject) {
-            main.post { captureState(state, info) }
+        override fun onState(state: String, info: JSONObject, gen: Int) {
+            main.post { captureState(state, info, gen) }
         }
         override fun onTicks(rows: DoubleArray, n: Int, baseMs: Long) {
             tickSink?.invoke(rows, n, baseMs)
@@ -137,7 +153,7 @@ class PhoneMicSource(
     fun deliverTickPop(tStartMs: Long, tEndMs: Long, baseNanoMs: Long) {
         val n = JSONObject().put("kind", "sound").put("label", "pop").put("text", "pop (tick detector)")
             .put("t_start_ms", tStartMs).put("t_end_ms", tEndMs).put("tick", true)
-        deliver(arrayOf(n.toString()), baseNanoMs, System.nanoTime(), NAME)
+        deliver(arrayOf(n.toString()), baseNanoMs, System.nanoTime(), NAME, capture.generation)
     }
 
     private val devices = object : AudioDeviceCallback() {
@@ -157,6 +173,7 @@ class PhoneMicSource(
     }
 
     override fun stop() {
+        measure?.let { stopMeasure(it, "service", restore = false) }
         capture.stop()
         speechHold = null
         touchWatch.stop()
@@ -243,9 +260,10 @@ class PhoneMicSource(
     }
 
     private fun config(p: SourcePolicy.Plan) = MicCapture.Config(settings.rate, settings.readMs, settings.preset,
-        if (p.route == SourcePolicy.Route.USB) usbInput() else builtinInput(), settings.effects, extractorJson)
+        if (p.route == SourcePolicy.Route.USB) usbInput() else builtinInput(), settings.effects, extractorJson,
+        stereo = measure?.stereo == true)   // a stereo measurement runs on a stereo capture; otherwise always mono
 
-    private fun key(c: MicCapture.Config) = listOf(c.rate, c.readMs, c.preset, c.device?.id, c.effects, c.extractorJson)
+    private fun key(c: MicCapture.Config) = listOf(c.rate, c.readMs, c.preset, c.device?.id, c.effects, c.extractorJson, c.stereo)
 
     private fun setState(s: String, why: String) {
         if (s == state) return
@@ -253,9 +271,16 @@ class PhoneMicSource(
         EventLog.ev("mic", "state" to s, "why" to why, "source" to settings.source)
     }
 
-    private fun captureState(s: String, info: JSONObject) {
+    private fun captureState(s: String, info: JSONObject, gen: Int) {
         lastCaptureInfo = info
-        EventLog.ev("mic_capture", "state" to s, "info" to info)
+        EventLog.ev("mic_capture", "state" to s, "info" to info, "gen" to gen)
+        // A measurement ends when the capture it records from stops, fails or is replaced (reason "capture"). States of
+        // an older capture (a stereo restart's own "stopped", which can arrive after the new "listening") are ignored:
+        // the generation tells them apart.
+        // On "error" the retry below refreshes the capture itself (no mono restart from here first).
+        measure?.let { m ->
+            if (Measure.captureEndsSession(s, gen, m.captureGen)) stopMeasure(m, "capture", restore = s != "error")
+        }
         if (s == "error") {
             captureError = info.optString("error").take(160)
             // A mic held by another app, or a device that vanished mid-read: try again in 5 s.
@@ -275,7 +300,7 @@ class PhoneMicSource(
     // --- messages ------------------------------------------------------------------------------------------------
 
     /** Main thread: native messages -> protocol messages -> the service. */
-    private fun deliver(msgs: Array<String>, baseNanoMs: Long, nowNs: Long, source: String) {
+    private fun deliver(msgs: Array<String>, baseNanoMs: Long, nowNs: Long, source: String, gen: Int = -1) {
         if (sink == null) return
         // stream ms -> elapsedRealtime ms (the sequencer's clock)
         val clockOffset = SystemClock.elapsedRealtimeNanos() / 1_000_000 - System.nanoTime() / 1_000_000
@@ -288,13 +313,14 @@ class PhoneMicSource(
             // A touch-down may still arrive for this sound (the finger's lift, the event queue): judge it once
             // [TouchGuard.preMs] after its end has passed. Later sounds end later, so the order is kept.
             val wait = if (touchWatch.running) touchGuard.settleMs(base + n.getLong("t_end_ms"), SystemClock.elapsedRealtime()) else 0
-            if (wait > 0) main.postDelayed({ judge(n, out, base, baseNanoMs, nowNs, source) }, wait)
-            else judge(n, out, base, baseNanoMs, nowNs, source)
+            if (wait > 0) main.postDelayed({ judge(n, out, base, baseNanoMs, nowNs, source, gen) }, wait)
+            else judge(n, out, base, baseNanoMs, nowNs, source, gen)
         }
     }
 
-    /** One sound: the touch guard, the mic_sound log line (with the extractor's gate numbers), then the service. */
-    private fun judge(n: JSONObject, out: JSONObject, base: Long, baseNanoMs: Long, nowNs: Long, source: String) {
+    /** One sound: the touch guard, the mic_sound log line (with the extractor's gate numbers), then the service.
+     *  [gen]: the capture that heard it (-1: not the live capture, i.e. mic_feed). */
+    private fun judge(n: JSONObject, out: JSONObject, base: Long, baseNanoMs: Long, nowNs: Long, source: String, gen: Int) {
         val s = sink ?: return
         val t0 = base + n.getLong("t_start_ms"); val t1 = base + n.getLong("t_end_ms")
         val touch = if (touchWatch.running) touchGuard.overlapping(t0, t1) else null
@@ -338,6 +364,15 @@ class PhoneMicSource(
         // [train] the explicit gated flag: personalization (VoxService.personalize) never relabels a gated sound
         if (gated != null) out.put("gated", JSONArray().put(if (gated == hiss) "media_hiss" else "media"))
         if (gated != null && gated == hiss) hissGated++
+        // Near-field measurement: tag every sound with the session and (when enrolled) the matcher's verdict, so the
+        // PC side can tell the user's own sounds from media. Computed for gated and dropped sounds too; only for the
+        // capture the session records (a restart's old stream is on another clock), never for mic_feed.
+        val sess = measure?.takeIf { it.captureGen == gen }
+        val measureFields = ArrayList<Pair<String, Any?>>()
+        if (sess != null) {
+            measureFields += "sid" to sess.sid
+            measureFields += "tmpl" to tmplFor(n)   // null (nothing enrolled / no match) is logged as "tmpl": null
+        }
         EventLog.ev("mic_sound", "label" to n.optString("label"), "sound" to n.optLong("sound"), "source" to source,
             "t_start_ms" to n.optLong("t_start_ms"), "t_end_ms" to n.optLong("t_end_ms"),
             "detect_ms" to Math.round(detect * 10) / 10.0, "latency_ms" to Math.round(lat * 10) / 10.0,
@@ -345,9 +380,29 @@ class PhoneMicSource(
             "dropped" to (touch?.let { "touch" } ?: level?.reason ?: joy ?: if (dry) "dry_run" else null), "touch_ms" to touch?.let { it.atMs - t0 },
             "relabel" to rl?.let { "${it.from}->${it.to}" },
             "tick" to if (n.optBoolean("tick")) true else null,
-            "media" to playing, "media_speaker" to onSpeaker, "gated" to gated)   // media playing at judge time (speaker: its route)
+            "media" to playing, "media_speaker" to onSpeaker, "gated" to gated,   // media playing at judge time (speaker: its route)
+            *measureFields.toTypedArray())
         if (touch == null && level == null && joy == null && !dry) s.deliver(out, source)
     }
+
+    /**
+     * The matcher's verdict for [n]'s fingerprint, or null when nothing is enrolled, the fp is incompatible (skipped) or
+     * there is no nearest class. A non-match (`kind` "none") keeps its nearest class, distance and threshold: the
+     * near-field analysis uses the distance itself, not only the accept/reject.
+     */
+    private fun tmplFor(n: JSONObject): JSONObject? {
+        val mt = matcher() ?: return null
+        val feats = n.optJSONObject("features") ?: return null
+        val f = try { SoundFeatures.parse(feats, "features") } catch (e: Exception) { return null }
+        val r = mt.match(f)
+        if (r.result == "skipped" || r.distance == null) return null
+        return JSONObject().put("nearest", r.nearest ?: JSONObject.NULL)
+            .put("distance", r.distance?.let(::r4) ?: JSONObject.NULL)
+            .put("threshold", r.threshold?.let(::r4) ?: JSONObject.NULL)
+            .put("kind", r.cls?.kind ?: r.result)
+    }
+
+    private fun r4(d: Double) = Math.round(d * 10000) / 10000.0
 
     // --- status and debug ops ------------------------------------------------------------------------------------
 
@@ -388,12 +443,145 @@ class PhoneMicSource(
             .put("silent_input", st?.opt("silent_input"))
     }
 
-    /** Debug ops `mic_status`, `mic_level`, `mic_feed`; see PROTOCOL.md "Phone microphone". */
+    /** Debug ops `mic_status`, `mic_level`, `mic_feed`, and the near-field measurement; see PROTOCOL.md. */
     fun control(op: String, m: JSONObject): JSONObject = when (op) {
         "mic_status" -> status()
         "mic_level" -> level()
         "mic_feed" -> feed(m)
+        "measure_start" -> measureStart(m)
+        "measure_stop" -> measureStop()
+        "measure_status" -> measureStatus()
+        "measure_clear" -> measureClear()
+        "measure_cue" -> measureCue(m)
         else -> throw IllegalArgumentException("unknown mic op '$op'")
+    }
+
+    // --- near-field measurement (round7-plan §3c, PROTOCOL.md) --------------------------------------------------
+
+    private fun measureStart(m: JSONObject): JSONObject {
+        Measure.startError(settings.source, capture.isRunning, measure != null)?.let { err ->
+            return JSONObject().put("ok", false).put("error", err)
+        }
+        val phase = m.getString("phase")
+        val everyMs = m.optInt("every_ms", Measure.DEFAULT_EVERY_MS).coerceIn(2000, 30000)
+        val gestures = if (m.has("gestures")) {
+            val a = m.getJSONArray("gestures")
+            List(a.length()) { a.getString(it).trim().lowercase() }
+                .also { require(it.isNotEmpty() && it.all { g -> g.isNotBlank() }) { "gestures must be a non-empty list" } }
+        } else Measure.DEFAULT_GESTURES
+        val prompt = m.optBoolean("prompt", true)
+        val record = m.optBoolean("record", true)
+        val stereo = m.optBoolean("stereo", false)
+        val maxS = m.optInt("max_s", Measure.DEFAULT_MAX_S).coerceIn(30, 1200)
+
+        // Stereo: open CHANNEL_IN_STEREO for the session (getMinBufferSize says whether the device can; the real build
+        // in MicCapture.run may still refuse and fall back, reported through the tee's actual channel count).
+        val stereoOk = stereo && capture.stereoSupported(settings.rate, settings.preset)
+        // A sid unique across service restarts, never an existing folder: a WAV is never overwritten.
+        val sid = Measure.newSid(System.currentTimeMillis(), lastSid, File(ctx.filesDir, "measure"))
+        lastSid = sid
+        val session = MeasureSession(sid, phase, everyMs, gestures, prompt, record, stereoOk, maxS, settings.rate,
+            ctx.filesDir,
+            // Both on the capture thread: only post. measure_start (and the first prompt) wait for the first sample, so
+            // wav_t0_ms and every prompt's t_ms are on the clock of the capture that records (after a stereo restart).
+            onFirstSample = { s -> main.post { firstSample(s) } },
+            onWriteError = { s -> main.post { if (measure === s) stopMeasure(s, "capture") } })
+        measure = session
+        // config() now asks for stereo: refresh restarts the capture (new generation, new stream clock). The old
+        // capture's late "stopped" carries the old generation and is ignored (captureState).
+        if (stereoOk && capture.config?.stereo != true) refresh("measure stereo")
+        if (!capture.isRunning) {   // the restart did not happen (should not): undo, nothing recorded
+            measure = null; session.stop(); session.finish(); session.file.parentFile?.deleteRecursively()
+            return JSONObject().put("ok", false).put("error", "the mic capture did not restart")
+        }
+        session.captureGen = capture.generation
+        capture.tee = MicCapture.TeeBinding(session.captureGen, session.tee)
+        main.postDelayed({ if (measure === session) stopMeasure(session, "max_s") }, maxS * 1000L)
+
+        return JSONObject().put("ok", true).put("sid", session.sid).put("file", session.relPath)
+            .put("rate", session.rate).put("channels", session.channels)
+    }
+
+    /** Main thread: the session's first sample arrived: log measure_start, then start the prompts. */
+    private fun firstSample(s: MeasureSession) {
+        if (measure !== s) return
+        emitMeasureStart(s)
+        if (s.prompt) schedulePrompt(s, 0)
+    }
+
+    private fun emitMeasureStart(s: MeasureSession) {
+        if (s.startLogged) return
+        s.startLogged = true
+        EventLog.ev("measure_start", "sid" to s.sid, "phase" to s.phase, "rate" to s.rate,
+            "channels" to s.channels, "file" to s.relPath, "wav_t0_ms" to s.wavT0Ms,
+            "every_ms" to s.everyMs, "gestures" to JSONArray(s.gestures),
+            "stereo_ok" to (s.channels == 2 || !s.stereo))
+    }
+
+    private fun schedulePrompt(s: MeasureSession, n: Int) {
+        if (measure !== s || !s.running) return
+        val gesture = Measure.promptGesture(s.gestures, n)
+        val total = Measure.promptCount(s.maxS, s.everyMs)
+        showMeasurePrompt(s, gesture, "${gesture.uppercase()}  ${n + 1}/$total") ?: return
+        main.postDelayed({ schedulePrompt(s, n + 1) }, s.everyMs.toLong())
+    }
+
+    /**
+     * Shows [text] on the prompt overlay and logs `measure_prompt` on the recording capture's stream clock: the one
+     * path of the scheduled prompts and `measure_cue`. `n` is the session's prompt count, so the two never log the same
+     * `n`. Returns (n, t_ms), or null when the capture changed under the session (its "stopped" ends it next): no
+     * prompt on a foreign clock.
+     */
+    private fun showMeasurePrompt(s: MeasureSession, gesture: String, text: String): Pair<Int, Long>? {
+        try { promptSink(text) }
+        catch (e: Exception) { EventLog.ev("error", "where" to "measure prompt", "error" to e.toString()) }
+        val tMs = capture.nanoToStreamMs(System.nanoTime(), s.captureGen) ?: return null
+        val n = s.nextPrompt()
+        EventLog.ev("measure_prompt", "sid" to s.sid, "n" to n, "gesture" to gesture, "text" to text, "t_ms" to tMs)
+        return n to tMs
+    }
+
+    /** `measure_cue {text, id}`: one PC-driven prompt now (the range suite, round7-plan §3d); also with `prompt:false`. */
+    private fun measureCue(m: JSONObject): JSONObject {
+        val s = measure
+        Measure.cueError(s?.running == true, s?.startLogged == true, m.optString("text"), m.optString("id"))?.let { err ->
+            return JSONObject().put("ok", false).put("error", err)
+        }
+        val (n, tMs) = showMeasurePrompt(s!!, m.getString("id"), m.getString("text"))
+            ?: return JSONObject().put("ok", false).put("error", "the mic capture changed under the measurement")
+        return JSONObject().put("ok", true).put("n", n).put("t_ms", tMs)
+    }
+
+    private fun measureStop(): JSONObject {
+        val s = measure ?: return JSONObject().put("ok", false).put("error", "no measurement running")
+        stopMeasure(s, "op")
+        return JSONObject().put("ok", true).put("sid", s.sid).put("samples", s.samples.get()).put("seconds", s.seconds)
+    }
+
+    private fun measureStatus(): JSONObject = measure?.status()
+        ?: JSONObject().put("running", false)
+
+    /** Deletes files/measure/ (only that). Refused while a session writes into it. */
+    private fun measureClear(): JSONObject {
+        if (measure != null) return JSONObject().put("ok", false).put("error", "a measurement is running (measure_stop first)")
+        val dir = File(ctx.filesDir, "measure")
+        val deleted = if (dir.isDirectory) dir.walkBottomUp().count { it.isFile && it.delete() } else 0
+        dir.deleteRecursively()
+        return JSONObject().put("ok", true).put("deleted", deleted)
+    }
+
+    /** Ends [s]: the tee off, the WAV header patched, measure_stop logged. [restore]: back to the mono capture (not on
+     *  service stop, where the capture stops next anyway). */
+    private fun stopMeasure(s: MeasureSession, reason: String, restore: Boolean = true) {
+        if (measure !== s) return
+        measure = null
+        capture.tee = null
+        s.stop()
+        s.finish()   // patch the WAV header (real sizes/channels); no-op when not recording
+        emitMeasureStart(s)   // no sample ever came: still a start line for the stop (wav_t0_ms null)
+        EventLog.ev("measure_stop", "sid" to s.sid, "reason" to reason, "samples" to s.samples.get(), "error" to s.writeError)
+        // Drop back to the normal (mono) capture now that the measurement is over (config() no longer asks for stereo).
+        if (restore && capture.config?.stereo == true) refresh("measure stop")
     }
 
     /**

@@ -1,0 +1,7 @@
+{"ev":"measure_start","sid":"synthetic","phase":"3-media-30","rate":16000,"channels":2,"file":"files/measure/synthetic/audio.wav","wav_t0_ms":10000,"every_ms":5000,"gestures":["rise"],"stereo_ok":true}
+{"ev":"measure_prompt","sid":"synthetic","n":1,"gesture":"rise","t_ms":13000}
+{"ev":"measure_prompt","sid":"synthetic","n":2,"gesture":"rise","t_ms":18000}
+{"ev":"mic_sound","sid":"synthetic","t_start_ms":13200,"t_end_ms":13600,"gate":{"level_db":-12,"snr_db":20,"lf_ratio":0.8},"tmpl":{"nearest":"rise","distance":2,"threshold":4,"kind":"gesture"},"dropped":null,"gated":"media"}
+{"ev":"mic_sound","sid":"synthetic","t_start_ms":13300,"t_end_ms":13700,"gate":{"level_db":-12},"tmpl":null,"dropped":null}
+{"ev":"mic_sound","sid":"synthetic","t_start_ms":16000,"t_end_ms":16400,"gate":{"level_db":-15},"tmpl":null,"dropped":"below level gate"}
+{"ev":"measure_stop","sid":"synthetic","reason":"op","samples":160000}

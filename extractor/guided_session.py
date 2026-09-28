@@ -46,6 +46,7 @@ from pathlib import Path
 import numpy as np
 
 import record as R
+from range_layout import getkey
 from vox_extract import Config
 from vox_extract.policy import not_deliberate
 
@@ -147,32 +148,6 @@ def header(t: dict, idx_in_block: int, n_block: int, done_all: int, n_all: int, 
     print(sty(f" {t['block'].upper()}{cond}  {idx_in_block + 1}/{n_block}", "1;96") +
           f"   [{'#' * fill}{'.' * (bar_w - fill)}]   block {bi + 1} of {nb}, total {done_all}/{n_all}\n\n")
 
-
-def getkey(auto: bool, default: str = "\n") -> str:
-    """One key press: Enter / r / s / q. Falls back to a line read when stdin is not a terminal."""
-    if auto:
-        return default
-    if sys.stdin.isatty():
-        import termios
-        import tty
-        fd = sys.stdin.fileno()
-        old = termios.tcgetattr(fd)
-        try:
-            tty.setcbreak(fd)
-            termios.tcflush(fd, termios.TCIFLUSH)   # keys pressed during a take do not start the next one
-            while True:
-                ch = sys.stdin.read(1)
-                if ch in ("\n", "\r"):
-                    return "\n"
-                if ch.lower() in ("r", "s", "q"):
-                    return ch.lower()
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    line = sys.stdin.readline()
-    if not line:
-        return "q"
-    line = line.strip().lower()
-    return line[:1] if line[:1] in ("r", "s", "q") else "\n"
 
 # ------------------------------------------------------------------------------------ scoring helpers
 

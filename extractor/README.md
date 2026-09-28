@@ -389,3 +389,11 @@ The on-board input `alsa_input.pci-0000_c5_00.6.analog-stereo` still delivers ex
 - the tolerances. Event labels and texts must match exactly and times within one frame (10 ms). Per-feature tolerances for frames are listed in the manifest.
 
 `tests/test_vectors.py` fails if the vectors go stale. After changing the code or config, re-export them.
+
+## Recorded range suite
+
+`range_session.py` records the desktop half of the shared range suite; the phone
+half is `../android/suite/range_phone.py`. Both use `prompts/range_v1.json` and
+write the layout validated by `range_layout.validate_session`. See [RANGE.md](RANGE.md)
+for the exact grid, private layout, resume controls, synthetic self-test and
+phone Hz finalization step. No real recording is required to run the tests.
