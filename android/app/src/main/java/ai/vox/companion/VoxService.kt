@@ -173,6 +173,7 @@ class VoxService : AccessibilityService() {
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         mediaGate = MediaGate({ settings.mediaLock }, { settings.mediaUnlockMs }, { settings.gapMs }, { settings.mediaUnlockMode })
         audio.registerAudioPlaybackCallback(playbackWatch, main)
+        audio.registerAudioDeviceCallback(routeWatch, main)
         overlay = Overlay(this, ::screenW, ::screenH)
         confirmer = Confirmer(main, packageName, { MainLoad.time("tree:fingerprint") { TreeReader.fingerprint(TreeReader.appRoot(this)) } }, { settings.confirmTimeoutMs }, ::grabGrid)
         MainLoad.mainThread = Thread.currentThread()
@@ -271,6 +272,7 @@ class VoxService : AccessibilityService() {
         holdScroll.stop("service stopped")
         train?.cancel("service stopped"); train = null   // [train]
         try { audio.unregisterAudioPlaybackCallback(playbackWatch) } catch (_: Exception) {}
+        try { audio.unregisterAudioDeviceCallback(routeWatch) } catch (_: Exception) {}
         main.removeCallbacks(mediaWindowEnd); main.removeCallbacks(mediaRecheck)
         listenWindow.cancel("service stopped"); dictation.stop("service stopped"); asr.cancel(); fileAsr.cancel("service stopped")
         ai.vox.companion.audio.SoundSource.removeListener(sourceListener)
@@ -1005,7 +1007,7 @@ class VoxService : AccessibilityService() {
     private fun mediaUnlockResolved(p: Sequencer.Pending): Boolean {
         if (!settings.mic.usesMic) return false
         val now = SystemClock.elapsedRealtime()
-        return when (mediaGate.resolved(p.sequence, now, audio.isMusicActive)) {
+        return when (mediaGate.resolved(p.sequence, now, speakerMedia())) {
             MediaGate.Resolution.NONE -> false
             MediaGate.Resolution.CLOSED -> {
                 main.removeCallbacks(mediaWindowEnd)
@@ -1376,14 +1378,18 @@ class VoxService : AccessibilityService() {
     /** The phone / USB mic source (and its debug feed); never the Pico or the debug socket. */
     private fun isMicSource(source: String) = MediaGate.appliesTo(source)
 
+    /** Media plays on a speaker the phone mic hears (not headphones / earbuds / a hearing aid): the lock's test
+     *  ([ai.vox.companion.audio.SpeakerRoute]). */
+    private fun speakerMedia() = ai.vox.companion.audio.SpeakerRoute.playingOnSpeaker(audio)
+
     /** Media is playing, the gate is on and no unlock window is open. */
-    private fun mediaLocked(now: Long) = mediaGate.active(audio.isMusicActive) && !mediaGate.isOpen(now)
+    private fun mediaLocked(now: Long) = mediaGate.active(speakerMedia()) && !mediaGate.isOpen(now)
 
     /** True if the gate took this message (dropped it, or it was half or all of the unlock). */
     private fun mediaGateDrops(m: FeatureMessage, source: String): Boolean {
         if (!isMicSource(source) || m.sequence.isEmpty()) return false
         val now = SystemClock.elapsedRealtime()
-        val playing = audio.isMusicActive
+        val playing = speakerMedia()
         var took = false
         for ((i, kind) in m.sequence.withIndex()) {
             val st = m.timing?.getOrNull(i)
@@ -1413,23 +1419,29 @@ class VoxService : AccessibilityService() {
         main.postDelayed(mediaWindowEnd, mediaGate.leftMs(SystemClock.elapsedRealtime()).coerceAtLeast(1))
     }
 
-    /** Playback started or stopped somewhere: media stopping lifts the gate (and ends a window) at once. */
+    /** Playback started, stopped or changed route somewhere: media leaving the speaker lifts the gate (and ends a
+     *  window) at once, and a route back to the speaker re-locks. */
     private fun mediaCheck() {
         if (!::mediaGate.isInitialized) return
-        if (mediaGate.mediaChanged(SystemClock.elapsedRealtime(), audio.isMusicActive)) {
+        if (mediaGate.mediaChanged(SystemClock.elapsedRealtime(), speakerMedia())) {
             main.removeCallbacks(mediaWindowEnd)
-            EventLog.ev("media_unlock", "event" to "lifted", "why" to "media stopped")
+            val why = when { !settings.mediaLock -> "setting off"; !audio.isMusicActive -> "media stopped"; else -> "media left the speaker" }
+            EventLog.ev("media_unlock", "event" to "lifted", "why" to why)
             updateBadge("")
         }
     }
 
     // isMusicActive can trail the playback callback by a moment: check at once and again shortly after.
     private val mediaRecheck = Runnable { mediaCheck() }
+    private fun mediaRouteChanged() { mediaCheck(); main.removeCallbacks(mediaRecheck); main.postDelayed(mediaRecheck, 750) }
     private val playbackWatch = object : AudioManager.AudioPlaybackCallback() {
-        override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
-            mediaCheck()
-            main.removeCallbacks(mediaRecheck); main.postDelayed(mediaRecheck, 750)
-        }
+        override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) = mediaRouteChanged()
+    }
+    /** Output devices added / removed (earbuds plugged in, or a wired headset pulled): the route to the mic's ear
+     *  changed, so re-judge the lock. */
+    private val routeWatch = object : android.media.AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>) = mediaRouteChanged()
+        override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>) = mediaRouteChanged()
     }
 
     /** The head's tap menu: mode and pause through the same paths as the UI; the source through audio.SoundSource. */
@@ -1735,6 +1747,8 @@ class VoxService : AccessibilityService() {
                 .put("waiting", sequencer.isWaiting).put("settings", settings.describe()).put("vocab", Vocab.SOURCE_DIGEST)
                 .put("decisions", decisionCount).put("device", ble?.link?.status() ?: JSONObject.NULL)   // the Pico's own armed/mode (null: no BLE link)
                 .put("media_lock", JSONObject().put("on", settings.mediaLock).put("mode", settings.mediaUnlockMode).put("media_playing", audio.isMusicActive)
+                    .put("media_speaker", speakerMedia())
+                    .put("route", ai.vox.companion.audio.SpeakerRoute.routeName(ai.vox.companion.audio.SpeakerRoute.mediaRoute(audio)))
                     .put("locked", settings.mic.usesMic && mediaLocked(SystemClock.elapsedRealtime()))
                     .put("unlock_left_ms", mediaGate.leftMs(SystemClock.elapsedRealtime())))
             "config" -> { settings.apply(m); mediaCheck(); rebuildDecider(); rebuildMatcher(); soundSourceChanged(); rebuildAsr(); if (m.has("asr_allow_online") || m.has("asr_language")) checkAsr("config"); reply.put("settings", settings.describe()) }   // [phone-mic] soundSourceChanged

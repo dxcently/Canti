@@ -329,7 +329,7 @@ class PhoneMicSource(
         val joy = if (tick || level != null) null else soundFilter?.invoke(label, n.optLong("t_start_ms"), g)
         val dry = settings.dryRun
         val playing = audio.isMusicActive
-        val onSpeaker = playing && mediaOnSpeaker()
+        val onSpeaker = playing && SpeakerRoute.speakerMedia(SpeakerRoute.mediaRoute(audio))
         fun num(k: String) = g?.optDouble(k)?.takeUnless { it.isNaN() }
         val hiss = PhoneGate.hissReason(label, num("centroid_hz"), onSpeaker, settings.hissMediaMaxCentroidHz, settings.source)
         val gated = (if (PhoneGate.active(settings.mediaGate, playing, onSpeaker)) PhoneGate.reason(label, num("snr_db"), num("clarity_med")) else null)
@@ -349,16 +349,10 @@ class PhoneMicSource(
         if (touch == null && level == null && joy == null && !dry) s.deliver(out, source)
     }
 
-    /** Media plays on the phone's own speaker (so the mic hears it). Before Android 13 the route is not known: assume so. */
-    private fun mediaOnSpeaker(): Boolean {
-        if (android.os.Build.VERSION.SDK_INT < 33) return true
-        return try {
-            val attrs = android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).build()
-            audio.getAudioDevicesForAttributes(attrs).any { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-        } catch (_: Exception) { true }
-    }
-
     // --- status and debug ops ------------------------------------------------------------------------------------
+
+    /** Media plays on a speaker the phone mic hears ([SpeakerRoute]); the `media_speaker` status / log field. */
+    private fun playingOnSpeaker() = SpeakerRoute.playingOnSpeaker(audio)
 
     fun status(): JSONObject {
         val lat = latencies.sorted()
@@ -376,6 +370,7 @@ class PhoneMicSource(
                 .put("user_touches", touchGuard.userTouches).put("injected_touches", touchGuard.injectedTouches)
                 .put("sounds_dropped", touchGuard.dropped))
             .put("media_gate", JSONObject().put("mode", settings.mediaGate).put("media_playing", audio.isMusicActive)
+                .put("media_speaker", playingOnSpeaker())
                 .put("gated", mediaGated).put("hiss_gated", hissGated).put("hiss_media_max_centroid_hz", settings.hissMediaMaxCentroidHz))
             .put("level_gate", JSONObject().put("on", settings.levelGate).put("offset_db", settings.levelGateOffsetDb)
                 .put("gate", levelGate?.toJson()).put("dropped", levelGated).put("relabel_rule", clickPopRule != null)

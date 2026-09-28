@@ -1,8 +1,10 @@
 package ai.vox.companion
 
 /**
- * The phone-mic media lock (plain JVM, MediaGateTest). User decision 2026-09-27: while media is playing, the phone mic
- * (and a USB mic) ignores every sound except a deliberate unlock. Pico sounds are never passed here.
+ * The phone-mic media lock (plain JVM, MediaGateTest). User decision 2026-09-27: while media plays on the phone's own
+ * speaker (the one route the phone mic hears; earbuds / Bluetooth / USB headphones and a hearing aid do not lock —
+ * VoxService passes [ai.vox.companion.audio.SpeakerRoute]'s test as [playing]), the phone mic (and a USB mic) ignores
+ * every sound except a deliberate unlock. Pico sounds are never passed here.
  *
  * Why: Z Flip round 4 (suite/out/zflip/echo_cancel_r4*.jsonl, a YouTube Short on the speaker, nobody speaking, 60 s per
  * mic preset / echo-cancel setting) heard 36-100 sounds a minute and 30-47 a minute would have acted, on every setting.
@@ -25,7 +27,8 @@ package ai.vox.companion
  *     `pop pop` is taken by the gate ([Resolution.EXTENDED]), it does not also listen.
  *   No mode extends on other gestures: the media alone makes 26-44 would-act sounds a minute (round 4), so a window that
  *   every action restarted rarely closed while the video played (8-19 media actions per unlock in a replay of the logs).
- * - Media stops: the lock lifts at once ([onSound] passes, [mediaChanged] clears the window and a half unlock).
+ * - Media stops (or leaves the speaker): the lock lifts at once ([onSound] passes, [mediaChanged] clears the window
+ *   and a half unlock).
  *
  * Times: [onSound]'s sound stamps are the sequencer's device clock (elapsedRealtime for the phone mic); [nowMs] is
  * elapsedRealtime.
@@ -44,13 +47,14 @@ class MediaGate(
     /** elapsedRealtime the window closes at; 0 = no window. */
     var openUntilMs = 0L; private set
 
-    /** The lock applies (media playing and the `media_gate` setting on); the window may still be open. */
+    /** The lock applies (media on the phone's own speaker and the `media_gate` setting on); the window may still be open. */
     fun active(playing: Boolean) = playing && enabled()
 
     /** An unlock window is open now (only meaningful while [active]). */
     fun isOpen(nowMs: Long) = openUntilMs > nowMs
 
-    /** One phone / USB mic sound: [label] as delivered, [startMs] / [endMs] its stamps, [playing] media now. */
+    /** One phone / USB mic sound: [label] as delivered, [startMs] / [endMs] its stamps, [playing] media on the phone's
+     *  own speaker now. */
     fun onSound(label: String, startMs: Long, endMs: Long, nowMs: Long, playing: Boolean): Verdict {
         if (!active(playing)) { clear(); return Verdict.PASS }
         if (isOpen(nowMs)) return Verdict.PASS
