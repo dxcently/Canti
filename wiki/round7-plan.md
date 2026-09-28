@@ -34,9 +34,15 @@ A pop is too hard to make consistently. Pop carries more than it looks on the ph
 - **Catch:** a lone click is what keyboards and cutlery make, so the level gate and the media gate have to hold.
 - A lone click waits one gap to see whether a second click follows.
 - Calibration's "pops" step becomes a clicks step; the level gate is derived from it.
-- **Open:**
-  - Is pop removed on the Pico too, or only on the phone and USB mics?
-  - Is the mapping above right?
+- **Decided (user, 2026-09-28):**
+  - Pop is not a separate sound any more: **a pop counts as a click, on every source** (Pico included). Training and
+    calibration drop the pops step (it becomes clicks).
+  - One mouth click must not be heard twice: overlapping click/pop detections merge into one sound.
+  - **Cursor mode: a click taps instantly.** No click combos in cursor mode, so there's no gap to wait out. Measured before the
+    change: every cursor tap waited 650–750 ms for a possible second pop; the user's deliberate doubles were 140–220 ms apart.
+  - Voice commands in cursor mode get their own trigger, not a click combo. **Open:** which sound (free sounds in cursor mode
+    to be surveyed).
+  - Gesture mode keeps the mapping above (click click = home, click click click = listen).
 
 ## 3. The media lock: why gestures fail on videos, Reels and feeds
 
