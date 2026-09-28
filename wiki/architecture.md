@@ -1,4 +1,4 @@
-# Architecture (as built: `main` at 94a34e6, checked 2026-09-28)
+| short labels done at merge ([D186](decisions.md#d186)); per-app rules dropped| fixed in review: A2DP devices are classed by Bluetooth class; speakers and unknown lock, headphones and headsets don't ([D185](decisions.md#d185)) |# Architecture (as built: `main` at 94a34e6, checked 2026-09-28)
 
 Canti (the project is called VOX) turns non-speech mouth sounds into phone actions: hums that rise or fall, whistles,
 pops, clicks and hisses. The main path is:
@@ -8,8 +8,8 @@ pops, clicks and hisses. The main path is:
 3. It sends that line to an Android app over Bluetooth LE.
 4. The app decides what the sound means and performs the swipe, tap or navigation.
 
-This page describes the system as it is in the code on `main` now. Work on the three round 7 branches is not merged;
-it is summarised [below](#round-7-branches-not-merged). For why it is built this way, see
+This page describes the system as it is in the code on `main` now. The three round 7 branches were merged on 09-28;
+they are summarised [below](#round-7-branches-merged-09-28). For why it is built this way, see
 [decisions.md](decisions.md). The original research-era plan (DTW, HID, Jev in the cloud) is on [index.md](index.md);
 parts of it were changed.
 
@@ -317,27 +317,19 @@ unverified). The phone mic is the source for now. Everything above was measured 
 vectors, canned test sounds). The wiring is in `firmware/HARDWARE.md`. A LEGO-style
 build book (v3, 28 steps from a bare Pico) is in [design-process.md](design-process.md#lego-build-book).
 
-## Round 7 branches (not merged)
+## Round 7 branches (merged 09-28)
 
 Built on 09-28 by DeepSeek workers in git worktrees and reviewed by Opus ([process.md](process.md#eidolon-workers-in-worktrees)).
-None is committed; the user decides ([D188](decisions.md#d188)).
+The user approved commit and merge ([D188](decisions.md#d188)); all three were merged into `main` locally (not pushed), with
+short labels added to the bindings window ([D186](decisions.md#d186)). JVM 516, Flutter 99 + 10 after the merge.
 
 | Branch (worktree) | What it changes | Tests after review | Open |
 |---|---|---|---|
 | `r7-suite` (`~/worktrees/vox-r7-suite`) | Fixture pager pages by fling velocity like a real ViewPager; stale suite tests updated to current behaviour; `asr_engine=off` in the suite reset | suite 33/34 pass, 1 skip | the socket crash (not reproduced) |
-| `r7-medialock` (`~/worktrees/vox-r7-medialock`) | New `audio/SpeakerRoute.kt`: the media lock and PhoneGate's media rules apply only when media plays on a speaker the mic can hear; wired, USB, BLE-headset and A2DP outputs count as headphones; route changes re-check at once; `ping.media_lock` gains `media_speaker` and `route` | JVM 502 | a Bluetooth A2DP speaker gets no lock ([D185](decisions.md#d185)) |
-| `r7-bindings` (`~/worktrees/vox-r7-bindings`) | New `Bindings.kt`: the status screen's bindings window is fed from `Vocab.kt` plus the user's rules; the Gesture/Cursor toggle shows for phone and USB mics; parity tests against `RuleDecider` and a Kotlin-generated Flutter fixture | JVM 510, Flutter 99 + 10 | label length ([D186](decisions.md#d186)); per-app rules show Canti's own ([D187](decisions.md#d187)) |
+| `r7-medialock` (`~/worktrees/vox-r7-medialock`) | New `audio/SpeakerRoute.kt`: the media lock and PhoneGate's media rules apply only when media plays on a speaker the mic can hear; wired, USB and BLE-headset outputs and Bluetooth headphones/headsets count as headphones; route changes re-check at once; `ping.media_lock` gains `media_speaker` and `route` | JVM 504 | fixed in review: A2DP devices are classed by Bluetooth class; speakers and unknown lock, headphones and headsets do not ([D185](decisions.md#d185)) |
+| `r7-bindings` (`~/worktrees/vox-r7-bindings`) | New `Bindings.kt`: the status screen's bindings window is fed from `Vocab.kt` plus the user's rules; the Gesture/Cursor toggle shows for phone and USB mics; parity tests against `RuleDecider` and a Kotlin-generated Flutter fixture | JVM 510, Flutter 99 + 10 | short labels added at merge ([D186](decisions.md#d186)); per-app rules dropped ([D187](decisions.md#d187)) |
 
 ## Known gaps between docs and code
 
 - ~~The phone still runs an older APK~~ (fixed: round 6 was installed on 09-27, [D166](decisions.md#d166)).
-- `android/PROTOCOL.md` (around line 763) says paged feeds get the 72 % → 12 % / 100 ms fling; the code uses the
-  15 % / 50 ms feed fling, and `feed_fling_ms` / `feed_fling_pct` are missing from the `config` settings list.
-- The status screen's bindings window is static text on `main` and omits `click hiss` (fixed on `r7-bindings`).
-- The Flutter UI keeps its own fallback copy of the default bindings; only `r7-bindings` adds a test that it matches the
-  Kotlin defaults.
 - `DEFAULTS_TEXT` in `Vocab.kt` still says `click pop=listen` (kept on purpose, see above).
-- The `r7-medialock` REPORT.md claims PhoneGate still catches a Bluetooth speaker; the reviewer found that false.
-- The `r7-suite` REPORT.md still describes the `>=` threshold fix, which the reviewer replaced.
-- `android/README.md` (line 41) and `android/app/README.md` (line 93) say 441 JVM tests; `main` has 498. The top-level
-  `README.md` rewrite (09-28, uncommitted) gives no count.

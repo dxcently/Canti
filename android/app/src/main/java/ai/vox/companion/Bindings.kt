@@ -50,7 +50,7 @@ object Bindings {
         profile.appBindings(pkg).lastOrNull { it.phrase == seq }?.let { return binding(it, "app") }
         profile.globalBindings().lastOrNull { it.phrase == seq }?.let { return binding(it, "global") }
         // A phone/USB mic's lone pop has no default action (MicPopGate.unbound): say so, don't echo "tap".
-        if (sound == "pop" && micSource) return entry("tap only if bound", "default")
+        if (sound == "pop" && micSource) return entry("tap if bound", "default")
         Vocab.DEFAULT_BINDINGS[seq]?.let { return entry(actionText(it, cursor = false), "default") }
         Vocab.APP_ONLY_BINDINGS[seq]?.let { return entry(actionText(it, cursor = false), "app-only") }
         return null
@@ -62,10 +62,10 @@ object Bindings {
         profile.cursorBindings().lastOrNull { it.phrase == listOf(sound) }?.let { return binding(it, "cursor") }
         // The built-in single-sound cursor (RuleDecider.cursor). "click" alone is unbound.
         return when (sound) {
-            "rise" -> entry("move cursor up", "default")
-            "fall" -> entry("move cursor down", "default")
-            "arch" -> entry("move cursor right", "default")
-            "dip" -> entry("move cursor left", "default")
+            "rise" -> entry("cursor up", "default")
+            "fall" -> entry("cursor down", "default")
+            "arch" -> entry("cursor right", "default")
+            "dip" -> entry("cursor left", "default")
             "flat" -> entry("stop", "default")
             "pop" -> entry("click", "default")
             "hiss" -> entry("back", "default")
@@ -103,11 +103,11 @@ object Bindings {
     }
 
     /** A phone/USB mic's hum in cursor mode: it steers the voice joystick, it is not a gesture. */
-    const val JOYSTICK = "steers the joystick"
+    const val JOYSTICK = "steers cursor"
     const val JOYSTICK_NOTE = "voice joystick: a hum's pitch moves the cursor up / down, its vowel sideways"
 
     /** `pop pop` in cursor mode: the listening window for a spoken target name (the intent cursor). */
-    const val CURSOR_LISTEN_LABEL = "listen for a target name"
+    const val CURSOR_LISTEN_LABEL = "listen for a name"
 
     /** A profile binding as `{label, source}`: its fixed action's text, or "ignored" / the rule's own sentence. */
     private fun binding(b: Binding, source: String): Map<String, Any?>? = when {
@@ -116,8 +116,26 @@ object Bindings {
         else -> entry(b.rule ?: "custom rule", source)
     }
 
-    private fun actionText(action: String, cursor: Boolean): String =
-        (if (cursor) Vocab.CURSOR_ACTIONS[action] else (Vocab.ACTIONS[action] ?: Vocab.APP_ONLY_ACTIONS[action])) ?: action
+    /** The window's short label for an action (D186): SHORT / CURSOR_SHORT, else the option text, else the key. */
+    internal fun actionText(action: String, cursor: Boolean): String =
+        (if (cursor) CURSOR_SHORT[action] ?: Vocab.CURSOR_ACTIONS[action]
+         else SHORT[action] ?: Vocab.ACTIONS[action] ?: Vocab.APP_ONLY_ACTIONS[action]) ?: action
+
+    /**
+     * Short labels for the window (user 2026-09-28: "short labels are fine"). Display only: the models still see
+     * [Vocab.ACTIONS] / [Vocab.CURSOR_ACTIONS] option text.
+     */
+    val SHORT: Map<String, String> = mapOf(
+        "tap" to "tap", "double_tap" to "double-tap", "long_press" to "hold", "back" to "back", "home" to "home",
+        "forward" to "forward", "recents" to "recents", "notifications" to "notifications",
+        "scroll_up" to "scroll up", "scroll_down" to "scroll down", "next_item" to "next", "previous_item" to "previous",
+        "play_pause" to "play / pause", "volume_up" to "volume up", "volume_down" to "volume down",
+        "open_camera" to "camera", "take_photo" to "photo", "like" to "like", "listen_for_phrase" to "listen",
+    )
+    val CURSOR_SHORT: Map<String, String> = mapOf(
+        "stop" to "stop", "click" to "click", "drag_toggle" to "drag", "back" to "back",
+        "grid_pick_1" to "grid: top-left", "grid_pick_5" to "grid: centre", "grid_pick_9" to "grid: bottom-right",
+    )
 
     /** A combo's label: its fixed action's text, or "custom rule" for a plain-language rule (the model decides). */
     private fun comboLabel(a: String?): String =

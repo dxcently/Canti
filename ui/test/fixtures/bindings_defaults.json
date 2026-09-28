@@ -10,7 +10,7 @@
         "source": "default"
       },
       "fall": {
-        "label": "move cursor down",
+        "label": "cursor down",
         "source": "default"
       },
       "flat": {
@@ -18,15 +18,15 @@
         "source": "default"
       },
       "dip": {
-        "label": "move cursor left",
+        "label": "cursor left",
         "source": "default"
       },
       "arch": {
-        "label": "move cursor right",
+        "label": "cursor right",
         "source": "default"
       },
       "rise": {
-        "label": "move cursor up",
+        "label": "cursor up",
         "source": "default"
       }
     },
@@ -35,18 +35,18 @@
         "pop",
         "pop"
       ],
-      "label": "listen for a target name",
+      "label": "listen for a name",
       "source": "default"
     }]
   },
   "gesture": {
     "sounds": {
       "pop": {
-        "label": "tap the screen",
+        "label": "tap",
         "source": "default"
       },
       "hiss": {
-        "label": "go back",
+        "label": "back",
         "source": "default"
       },
       "fall": {
@@ -54,7 +54,7 @@
         "source": "default"
       },
       "flat": {
-        "label": "long-press / hold",
+        "label": "hold",
         "source": "default"
       },
       "dip": {
@@ -76,7 +76,7 @@
           "pop",
           "pop"
         ],
-        "label": "listen for a spoken phrase",
+        "label": "listen",
         "source": "default"
       },
       {
@@ -84,7 +84,7 @@
           "click",
           "click"
         ],
-        "label": "go to the home screen",
+        "label": "home",
         "source": "default"
       },
       {
@@ -92,7 +92,7 @@
           "hiss",
           "click"
         ],
-        "label": "go back",
+        "label": "back",
         "source": "default"
       },
       {
@@ -100,7 +100,7 @@
           "click",
           "hiss"
         ],
-        "label": "go forward",
+        "label": "forward",
         "source": "app-only"
       }
     ]

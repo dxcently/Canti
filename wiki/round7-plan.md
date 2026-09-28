@@ -40,8 +40,8 @@ A pop is too hard to make consistently. Pop carries more than it looks on the ph
 
 ## 3. The media lock: why gestures fail on videos, Reels and feeds
 
-> **Status (2026-09-28).** a is built on the `r7-medialock` branch (not merged). Open: Bluetooth A2DP speakers
-> ([D185](decisions.md#d185)). See [architecture.md](architecture.md#round-7-branches-not-merged).
+> **Status (2026-09-28).** a is merged into `main` (09-28, `r7-medialock`); A2DP speakers lock by Bluetooth class
+> ([D185](decisions.md#d185)). See [architecture.md](architecture.md#round-7-branches-merged-09-28).
 - `MediaGate.kt` drops every phone-mic sound while media plays. Only `pop pop` unlocks, and only for **one** gesture.
 - The lock came from round 4: a Short playing on the speaker produced 30–47 would-act sounds a minute, and the platform echo
   canceller did not fix it.
@@ -165,7 +165,7 @@ Features, per event:
 ## 9. Dummy UI
 
 > **Status (2026-09-28).** The live bindings window and the mode toggle for phone and USB mics are built on the
-> `r7-bindings` branch (not merged). Open: short labels ([D186](decisions.md#d186)) and per-app rules
+> `r7-bindings` branch, merged 09-28 with short labels ([D186](decisions.md#d186)); per-app rules dropped
 > ([D187](decisions.md#d187)).
 - The **bindings window is static text**: it ignores the user's rules and omits `click hiss`. It becomes live.
 - The mode toggle is hidden for the phone mic.
@@ -188,7 +188,7 @@ Features, per event:
 
 ## 11. Round 6 suite failures (suspects, from the survey)
 
-> **Status (2026-09-28).** Resolved on the `r7-suite` branch (not merged): the "stale tests" suspects were right; the
+> **Status (2026-09-28).** Resolved on the `r7-suite` branch (merged 09-28): the "stale tests" suspects were right; the
 > swipe suspect was the fixture pager, not the app. The feed fling pages real pagers with a wide margin, so it is not
 > the likely cause of the phone's feed failures. The socket crash was not reproduced.
 - Probably stale tests:

@@ -38,7 +38,7 @@ Each folder has its own README with a file table and commands.
 
 ```sh
 cd android
-suite/run.sh build        # flutter pub get in ../ui, then gradle assembleDebug + 441 JVM unit tests (first run fetches deps into .state)
+suite/run.sh build        # flutter pub get in ../ui, then gradle assembleDebug + the JVM unit tests (516 on 2026-09-28) (first run fetches deps into .state)
 suite/run.sh boot         # create AVD "vox35" if needed; boot headless (-no-window -no-audio, KVM); VOX_WIPE=1 = factory-fresh
 suite/run.sh setup        # install VOX + fixture + 5 hash-pinned F-Droid APKs, seed 5 photos, enable the a11y service
 suite/run.sh test         # 34 emulator tests; -k NAME to filter; results in suite/out/results-*.json

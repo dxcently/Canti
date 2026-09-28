@@ -28,10 +28,10 @@ class BindingsTest {
         assertEquals("swipe down", label(s, "fall"))
         assertEquals("swipe right", label(s, "arch"))
         assertEquals("swipe left", label(s, "dip"))
-        assertEquals("long-press / hold", label(s, "flat"))
-        assertEquals("tap the screen", label(s, "pop"))
+        assertEquals("hold", label(s, "flat"))
+        assertEquals("tap", label(s, "pop"))
         assertNull(label(s, "click"))                 // a lone click is unbound
-        assertEquals("go back", label(s, "hiss"))
+        assertEquals("back", label(s, "hiss"))
         assertEquals("default", source(s, "rise"))
     }
 
@@ -40,19 +40,19 @@ class BindingsTest {
         assertEquals(
             listOf(listOf("pop", "pop"), listOf("click", "click"), listOf("hiss", "click"), listOf("click", "hiss")),
             c.map { it["seq"] })
-        assertEquals("listen for a spoken phrase", c[0]["label"])
-        assertEquals("go to the home screen", c[1]["label"])
-        assertEquals("go back", c[2]["label"])
-        assertEquals("go forward", c[3]["label"])     // the app-only binding the old static window omitted
+        assertEquals("listen", c[0]["label"])
+        assertEquals("home", c[1]["label"])
+        assertEquals("back", c[2]["label"])
+        assertEquals("forward", c[3]["label"])     // the app-only binding the old static window omitted
         assertEquals("app-only", c[3]["source"])
     }
 
     @Test fun cursorDefaults() {
         val s = sounds(view(), "cursor")
-        assertEquals("move cursor up", label(s, "rise"))
-        assertEquals("move cursor down", label(s, "fall"))
-        assertEquals("move cursor right", label(s, "arch"))
-        assertEquals("move cursor left", label(s, "dip"))
+        assertEquals("cursor up", label(s, "rise"))
+        assertEquals("cursor down", label(s, "fall"))
+        assertEquals("cursor right", label(s, "arch"))
+        assertEquals("cursor left", label(s, "dip"))
         assertEquals("stop", label(s, "flat"))
         assertEquals("click", label(s, "pop"))
         assertNull(label(s, "click"))                 // a lone click is unbound in cursor mode
@@ -60,7 +60,7 @@ class BindingsTest {
         // pop pop names a target in cursor mode (the app owns it: VoxService.resolveInput)
         val c = combos(view(), "cursor")
         assertEquals(listOf(Profile.CURSOR_LISTEN), c.map { it["seq"] })
-        assertEquals("listen for a target name", c[0]["label"])
+        assertEquals("listen for a name", c[0]["label"])
         assertNull((view()["cursor"] as Map<String, Any?>)["note"])
     }
 
@@ -75,22 +75,22 @@ class BindingsTest {
 
     @Test fun globalRuleOverridesDefault() {
         val p = Profile.parse(JSONObject("""{"global":[{"phrase":["hiss"],"kind":"fixed","action":"notifications"}]}"""))
-        assertEquals("open the notification shade", label(sounds(view(p), "gesture"), "hiss"))
+        assertEquals("notifications", label(sounds(view(p), "gesture"), "hiss"))
     }
 
     @Test fun cursorRuleOverridesBuiltIn() {
         val p = Profile.parse(JSONObject("""{"cursor":[{"phrase":["hiss"],"kind":"fixed","action":"drag_toggle"},
             {"phrase":["click","click"],"kind":"fixed","action":"drag_toggle"}]}"""))
         val s = sounds(view(p), "cursor")
-        assertEquals("start or end a drag at the cursor", label(s, "hiss"))
+        assertEquals("drag", label(s, "hiss"))
         assertEquals("cursor", source(s, "hiss"))
         // a user cursor rule binds a combo that otherwise would not act
         val c = combos(view(p), "cursor")
         assertEquals(listOf(listOf("pop", "pop"), listOf("click", "click")), c.map { it["seq"] })
-        assertEquals("start or end a drag at the cursor", c[1]["label"])   // a cursor action's text, not its key
+        assertEquals("drag", c[1]["label"])   // a cursor action's text, not its key
         // a cursor rule on pop pop replaces the app's target listening
         val q = Profile.parse(JSONObject("""{"cursor":[{"phrase":["pop","pop"],"kind":"fixed","action":"drag_toggle"}]}"""))
-        assertEquals(listOf(mapOf("seq" to listOf("pop", "pop"), "label" to "start or end a drag at the cursor", "source" to "cursor")),
+        assertEquals(listOf(mapOf("seq" to listOf("pop", "pop"), "label" to "drag", "source" to "cursor")),
             combos(view(q), "cursor"))
     }
 
@@ -103,11 +103,11 @@ class BindingsTest {
 
     @Test fun micPopHasNoDefault() {
         // The phone/USB mic's lone pop taps only where bound (MicPopGate.unbound).
-        assertEquals("tap only if bound", label(sounds(view(micSource = true), "gesture"), "pop"))
+        assertEquals("tap if bound", label(sounds(view(micSource = true), "gesture"), "pop"))
         val p = Profile.parse(JSONObject("""{"global":[{"phrase":["pop"],"kind":"fixed","action":"tap"}]}"""))
-        assertEquals("tap the screen", label(sounds(view(p, micSource = true), "gesture"), "pop"))
+        assertEquals("tap", label(sounds(view(p, micSource = true), "gesture"), "pop"))
         // the Pico keeps pop = tap
-        assertEquals("tap the screen", label(sounds(view(micSource = false), "gesture"), "pop"))
+        assertEquals("tap", label(sounds(view(micSource = false), "gesture"), "pop"))
     }
 
     @Test fun cursorNoteNamesTheJoystickOnAMic() {
@@ -122,7 +122,7 @@ class BindingsTest {
         assertEquals("click", label(s, "pop"))
         assertEquals("back", label(s, "hiss"))
         assertNull(label(s, "click"))
-        assertEquals("click at the cursor", label(sounds(view(p), "cursor"), "rise"))   // the Pico: the rule acts
+        assertEquals("click", label(sounds(view(p), "cursor"), "rise"))   // the Pico: the rule acts
     }
 
     // --- parity with the rule decider (what acts), so this display-only mirror cannot drift silently -------------
@@ -142,9 +142,9 @@ class BindingsTest {
     /** The texts [Bindings] may show for a decided action key (the built-in cursor uses short words, no speed). */
     private fun shown(action: String, mode: String): Set<String?> = when {
         action == "none" -> setOf(null)
-        mode == "cursor" -> setOf(Vocab.CURSOR_ACTIONS[action], Vocab.CURSOR_ACTIONS[action]?.removeSuffix(" slow"),
-            mapOf("stop" to "stop", "click" to "click", "back" to "back")[action])
-        else -> setOf(Vocab.ACTIONS[action] ?: Vocab.APP_ONLY_ACTIONS[action])
+        mode == "cursor" -> setOf(Bindings.actionText(action, cursor = true),
+            Vocab.CURSOR_ACTIONS[action]?.removeSuffix(" slow")?.removePrefix("move "))
+        else -> setOf(Bindings.actionText(action, cursor = false))
     }
 
     private val ruleProfile = Profile.parse(JSONObject("""{"global":[{"phrase":["hiss"],"kind":"fixed","action":"notifications"},
@@ -174,7 +174,7 @@ class BindingsTest {
                     }
                     val act = decide(seq, mode, p, pkg)
                     val want = if (act == "none") null
-                        else if (mode == "cursor") Vocab.CURSOR_ACTIONS[act] else Vocab.ACTIONS[act] ?: Vocab.APP_ONLY_ACTIONS[act]
+                        else Bindings.actionText(act, cursor = mode == "cursor")
                     assertEquals("$mode $seq in $pkg", want, shownCombos[seq])
                 }
             }

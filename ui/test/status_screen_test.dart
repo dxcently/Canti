@@ -276,7 +276,7 @@ void main() {
       await tester.tap(next);
       await tester.pumpAndSettle();
     }
-    expect(find.text('go forward'), findsOneWidget);
+    expect(find.text('forward'), findsOneWidget);
     expect(find.text('CLICK HISS'), findsOneWidget);
     expect(find.text('HISS CLICK'), findsOneWidget);
   });
@@ -286,7 +286,7 @@ void main() {
       'gesture': {
         'sounds': {'rise': {'label': 'swipe up', 'source': 'default'}, 'click': null},
         'combos': [
-          {'seq': ['click', 'hiss'], 'label': 'go forward', 'source': 'app-only'},
+          {'seq': ['click', 'hiss'], 'label': 'forward', 'source': 'app-only'},
         ],
         'note': null,
       },
@@ -299,11 +299,11 @@ void main() {
     expect(b.gesture.sounds['rise']!.label, 'swipe up');
     expect(b.gesture.sounds['click'], isNull);
     expect(b.gesture.combos.single.sequence, ['click', 'hiss']);
-    expect(b.gesture.combos.single.label, 'go forward');
+    expect(b.gesture.combos.single.label, 'forward');
     expect(b.cursor.note, 'voice joystick: hums move the cursor, a pop clicks, hiss goes back');
     expect(VoxBindings.defaults.gesture.combos.map((c) => c.sequence.join(' ')),
         ['pop pop', 'click click', 'hiss click', 'click hiss']);
-    expect(VoxBindings.defaults.gesture.combos.last.label, 'go forward');
+    expect(VoxBindings.defaults.gesture.combos.last.label, 'forward');
     expect(VoxBindings.defaults.cursor.note, isNull);
     expect(VoxBindings.defaults.cursor.combos.single.sequence, ['pop', 'pop']); // names a target in cursor mode
     expect(VoxBindings.fromMapOrNull(null), isNull);

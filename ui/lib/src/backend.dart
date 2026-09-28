@@ -270,7 +270,7 @@ class VoxEvent {
 class VoxBinding {
   const VoxBinding(this.label, this.source, [this.sequence = const []]);
 
-  /// The action's option text (`swipe up`, `go back`, `move cursor up`, ...), or `custom rule` / `ignored`.
+  /// The action's option text (`swipe up`, `back`, `cursor up`, ...: the short label, D186), or `custom rule` / `ignored`.
   final String label;
 
   /// Where the binding came from; null when unknown.
@@ -344,31 +344,31 @@ class VoxBindings {
         'fall': VoxBinding('swipe down', 'default'),
         'arch': VoxBinding('swipe right', 'default'),
         'dip': VoxBinding('swipe left', 'default'),
-        'flat': VoxBinding('long-press / hold', 'default'),
-        'pop': VoxBinding('tap the screen', 'default'),
+        'flat': VoxBinding('hold', 'default'),
+        'pop': VoxBinding('tap', 'default'),
         'click': null,
-        'hiss': VoxBinding('go back', 'default'),
+        'hiss': VoxBinding('back', 'default'),
       },
       combos: [
-        VoxBinding('listen for a spoken phrase', 'default', ['pop', 'pop']),
-        VoxBinding('go to the home screen', 'default', ['click', 'click']),
-        VoxBinding('go back', 'default', ['hiss', 'click']),
-        VoxBinding('go forward', 'app-only', ['click', 'hiss']),
+        VoxBinding('listen', 'default', ['pop', 'pop']),
+        VoxBinding('home', 'default', ['click', 'click']),
+        VoxBinding('back', 'default', ['hiss', 'click']),
+        VoxBinding('forward', 'app-only', ['click', 'hiss']),
       ],
     ),
     cursor: VoxModeBindings(
       sounds: {
-        'rise': VoxBinding('move cursor up', 'default'),
-        'fall': VoxBinding('move cursor down', 'default'),
-        'arch': VoxBinding('move cursor right', 'default'),
-        'dip': VoxBinding('move cursor left', 'default'),
+        'rise': VoxBinding('cursor up', 'default'),
+        'fall': VoxBinding('cursor down', 'default'),
+        'arch': VoxBinding('cursor right', 'default'),
+        'dip': VoxBinding('cursor left', 'default'),
         'flat': VoxBinding('stop', 'default'),
         'pop': VoxBinding('click', 'default'),
         'click': null,
         'hiss': VoxBinding('back', 'default'),
       },
       combos: [
-        VoxBinding('listen for a target name', 'default', ['pop', 'pop']),
+        VoxBinding('listen for a name', 'default', ['pop', 'pop']),
       ],
     ),
   );

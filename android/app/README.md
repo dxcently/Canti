@@ -90,7 +90,7 @@ Run these from `android/`.
 ```sh
 ./dev bash -c 'cd ../ui && flutter pub get'       # once, and after ui/pubspec.yaml changes: generates ui/.android/include_flutter.groovy
 ./dev gradle assembleDebug                         # app/build/outputs/apk/debug/app-debug.apk
-./dev gradle :app:testDebugUnitTest                # JVM tests (441: AppChoiceTest 8, AudioFileAsrTest 14, BadgeTest 7, BleTest 28, CantiBadgeTest 15, ConfirmerTest 7, CoreTest 28, DeviceLinkTest 20, FeedDetectTest 8, FeedKindCacheTest 28, ForegroundAppTest 4, GrabGateTest 2, LauncherIconTest 7, ListenWindowTest 9, LoadStatsTest 3, MediaGateTest 16, MicPopGateTest 8, NavigationTest 23, OllamaTest 10, OptionFormatTest 2, OutwardTest 7, PairingTest 1, PersonalTest 13, PhoneMicTest 12, PhraseGrammarTest 50, RootCheckTest 6, ScrollStepTest 24, SwipeTest 7, SystemDialogTest 6, TargetFormatTest 8, TargetGapsTest 7, TargetOcclusionTest 12, TargetQueryTest 4, TargetTest 7, TimerTargetTest 6, VoiceTypingTest 17, VolumeTest 7)
+./dev gradle :app:testDebugUnitTest                # JVM tests (516 on 2026-09-28; per class in app/build/test-results/testDebugUnitTest)
 ./dev gradle :app:testDebugUnitTest --tests 'ai.vox.companion.PersonalTest'
 ./dev python3 tools/gen_vocab.py --check           # fail if Vocab.kt / TargetVocab.kt are stale
 suite/run.sh test                                  # the emulator tests (see ../suite/README.md)
