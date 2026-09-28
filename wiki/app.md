@@ -51,7 +51,8 @@
 
 > **Update 2026-09-27 (librarian):**
 > - This section's plan to run jevlike on the phone is out of date. Verdict is the chosen phone model
->   ([D041](decisions.md#d041)), and none is on the phone yet.
+>   ([D041](decisions.md#d041)), and none is on the phone yet. (2026-09-28: jevlike, now level with Verdict, is
+>   proposed again for the phone as the Live-mode decider, via an ONNX int8 export; not decided, [D190](decisions.md#d190).)
 > - Hard cases go to DeepSeek on Ollama cloud (`OllamaDecider`).
 > - The device has one button, not a switch jack ([D048](decisions.md#d048)).
 > - See [architecture.md](architecture.md) for the app as built.

@@ -14,7 +14,7 @@ flowchart LR
   C -- yes --> D[Build / animate<br/>in scratchpad]
   D --> E[Verify: pixel diff,<br/>JVM + flutter tests]
   E --> F[Apply to repo<br/>agent, or apply.sh run by user]
-  F --> G[Coordinator builds APK,<br/>asks before install]
+  F --> G[Coordinator builds APK,<br/>emulator suite + launch check,<br/>asks before install]
 ```
 
 1. **Mockups first.** Mockups are static images at the size they'll appear on the Z Flip, often several variants side
@@ -31,7 +31,8 @@ flowchart LR
    - regenerates the sheet;
    - verifies that the 63 old frames are pixel-identical and that exactly 2 new frames were added;
    - backs up each code file before its targeted edit.
-5. **Build and install.** Only the coordinator builds the combined APK, and it asks before installing on the phone.
+5. **Build and install.** Only the coordinator builds the combined APK. Since 09-27 it runs the emulator suite and a
+   launch check first ([D166](decisions.md#d166)), then asks before installing on the phone.
 
 ## App icon
 
@@ -51,6 +52,14 @@ flowchart LR
   when the connection state changes.
 - **Stipple version** (a42082a, `brand/tools/stipple.py`): every edge, line and highlight is on a 4-unit grid, shading
   is ordered-dither dots, and the eyes are pixel scanlines. The launcher and in-app icon use it.
+- **v5 and v5b (09-27, a9363e6).** After round 5 the user saw the old icon on the phone and asked for the gold trim
+  ("the yellow line") to run to the border ([D156](decisions.md#d156), [D157](decisions.md#d157)). v5 did that and
+  took the hood to full bleed. The user then asked for the hood's shaded top to be pixelated ([D162](decisions.md#d162)):
+  **v5b** uses whole-dot steps on the dome and a Bayer-dithered crown. Approved and applied at 11:18
+  ([D164](decisions.md#d164)). In the launcher's adaptive layers the hood, crown dither, trim and body now continue across
+  the full 108 dp layer, so no box edge shows under any mask or parallax (`brand/README.md`). The coordinator then
+  restarted the phone's launcher so the new icon showed ([D159](decisions.md#d159)), and "the APK has the new icon" became
+  a build check ([D160](decisions.md#d160)).
 
 ## Wordmark
 
@@ -101,18 +110,44 @@ off, error, shrug, or tap-to-wake.
 | Ignored sound | A distinct shrug face ([D097](decisions.md#d097)) |
 | Tap-to-wake | Mockups A/B/C; **C, the face says TAP** ([D122](decisions.md#d122)), applied with `apply.sh` |
 
+**Debug op.** `badge_hide {hide, ms}` (09-27) hides the badge for `ms` and then restores it; the harvest uses it so the
+badge doesn't cover buttons in screenshots ([D165](decisions.md#d165)).
+
 **Sheet.** `ui/assets/badge/canti_badge.{png,json}`: 65 frames of 34×47 px, 272×423 in total, the same file for the
 Android app and Flutter. The Kotlin side is `CantiBadgeView.kt` and `Badge.kt`.
+
+## Joystick indicators (09-27)
+
+<a id="joystick-indicators"></a>The voice joystick needed to show pitch and steering. The user asked (08:00) whether a
+sprite on the badge's face ("the TV") or a separate popup would be better ([D152](decisions.md#d152)).
+
+- **Mockups** (a46729b, static, at 1:1 and ×4, on light and dark backgrounds; drawn with the badge rig's own face
+  convention):
+  - cursor A, an arrow whose length shows speed; cursor B, a ring with 1–3 chevrons ahead of it;
+  - face A, a bar growing up or down from a lit middle line (4 steps each way, `[----]` in the dead zone, an arrowhead
+    past the range, a side pointer for ee / oo, dashed when not voiced); face B, a dot on a crosshair (2 steps).
+  - The agent recommended A + A.
+- **Chosen:** cursor B (chevrons) and face A (bar), no popup. Recorded in the brand memory; the user's own words are not
+  in the extracted log (unverified).
+- **Built** first into the desktop prototype (a60c8f5, 08:31), then on Android in `joystick/JoyIndicators.kt`
+  (a64985c).
+- **Flag from the mockups:** the cursor-pose badge crop is 30×46 art px (about 46×70 dp), not the 34×47 in the sheet
+  caption.
+- The voice-cursor setup screens and sliders were built with the existing UI kit, with no mockup round, by the user's
+  choice ([D153](decisions.md#d153)).
 
 ## LEGO build book
 
 The user asked on 09-27 at 04:48 for a step-by-step soldering and wiring guide "like a lego book instruction". The
 choices were Part C (the necklace) only, as a web page ([D133](decisions.md#d133)).
 
-- **Author:** fork a4236175, "Build book: draw all steps".
-- **Contents:** 28 steps. Steps 1–10 build it on a breadboard; steps 11–28 build the necklace.
+- **Author:** fork a4236175, "Build book: draw all steps" (05:32 → 05:48 on 09-27), after the user approved the sample
+  page's style ([D142](decisions.md#d142)).
+- **Version 3 contents:** 28 steps starting from a bare Pico, because the user hadn't built the board yet
+  ([D143](decisions.md#d143)). Steps 1–10 build and test it on a breadboard (headers, button, LED, mic, with console
+  checks); steps 11–28 build the necklace. Nobody has reviewed the rendered layout since it was republished.
 - **Where:** an HTML artifact (source `scratchpad/book/canti-build-book.html`), published at the artifact URL. It is
   **not in the repo**.
-- **Hardware status:** nothing is wired yet, and the INMP441 hasn't been bought.
+- **Hardware status:** nothing is wired yet (09-27 05:41: board not built, INMP441 not bought; 09-28: "still no mic").
 - **Source material:** `firmware/HARDWARE.md` (wiring), `hardware/case/README.md` (printing and assembly) and
   [hardware.md](hardware.md).

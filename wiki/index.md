@@ -95,7 +95,7 @@ Android: foreground app + phrase parser + profiles ─fixed─► dispatchGestur
 | iPhone | HID into AssistiveTouch / Switch Control, permanently | [Phone control](phone-control.md) |
 | Jev role | Design A default; Design B and Jev cursor mode benchmarked against it | [Decision models](decision-models.md) |
 | Jev input | Categorical labels computed on the device, with foreground app and rules ([Jev jaggedness](https://docs.typesafe.ai/model-jaggedness/jev-1.13.md)) | [Decision models](decision-models.md) |
-| Own model | Fine-tuned VOX student trained on the workstation from code-labelled synthetic data. **Updated 2026-09-27:** Kev 0.8B was dropped. Verdict-118M (target picker) is the chosen phone model and is being retrained on real screens; it is not on the phone yet. jevlike is served on the PC behind `/v1/systemone`, and hard cases go to a cloud model (DeepSeek via Ollama). See [Training](training.md) and [decisions D041/D061](decisions.md#d041) | [Decision models](decision-models.md), [Roadmap](roadmap.md) |
+| Own model | Fine-tuned VOX student trained on the workstation from code-labelled synthetic data. **Updated 2026-09-27:** Kev 0.8B was dropped. Verdict-118M (target picker) is the chosen phone model and is being retrained on real screens; it is not on the phone yet. jevlike is served on the PC behind `/v1/systemone` (retrained 2026-09-28 to parity with Verdict on real screens, [Training](training.md#jevlike-jl7jl9)), and hard cases go to a cloud model (DeepSeek via Ollama). See [Training](training.md) and [decisions D041/D061](decisions.md#d041) | [Decision models](decision-models.md), [Roadmap](roadmap.md) |
 
 ## Conclusion
 
@@ -108,4 +108,5 @@ The research changes the question from "can Jev drive a hum cursor?" to "where d
 - Measure **false triggers per minute** on negative audio. No published baseline exists.
 - Measure **Jev p95 from the phone on LTE**. Only desktop and cloud figures exist.
 
-- [Session log 2026-09-27](session-2026-09-27.md): handoff; decisions and agents after D141, still to be folded in by the librarian
+- [Session log 2026-09-27](session-2026-09-27.md): handoff written before the PC was moved (local times, UTC−4); folded into [Decisions](decisions.md) and the [Agent log](agent-log.md) on 2026-09-28
+- [Round 7 plan](round7-plan.md): agreed 2026-09-28; pop → clicks, the media-lock fix and its measurement, Live mode, feedback bubble, jevlike retrain

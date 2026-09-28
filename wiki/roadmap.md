@@ -43,7 +43,10 @@ Effort figures are judgment, not measurements.
 
 > **Update 2026-09-27 (librarian):**
 > - **Step 3.** Kev was dropped ([D061](decisions.md#d061)). Verdict is the chosen phone model ([D041](decisions.md#d041)).
->   jevlike leads only on synthetic data; on real screens it scored 0.447 against Verdict's 0.646.
+>   jevlike leads only on synthetic data; on real screens it scored 0.447 against Verdict's 0.646 (09-26).
+>   **Update 2026-09-28:** retrained on real screens (jl7–jl9), jevlike's J5c recipe is level with Verdict v1d
+>   (test_old 0.833 vs 0.838) and on latency ([training.md](training.md#jevlike-jl7jl9)); its planned phone role is
+>   Live mode ([round7-plan.md](round7-plan.md#6-live-mode-a-new-mode)).
 > - **Step 4.** It now follows the cross-fit protocol and a locked test ([training.md](training.md)).
 > - **Step 5.** It has not started: the app has no ONNX runtime yet.
 

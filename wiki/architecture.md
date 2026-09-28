@@ -1,4 +1,4 @@
-# Architecture (as built, 2026-09-27)
+# Architecture (as built: `main` at 94a34e6, checked 2026-09-28)
 
 Canti (the project is called VOX) turns non-speech mouth sounds into phone actions: hums that rise or fall, whistles,
 pops, clicks and hisses. The main path is:
@@ -8,7 +8,8 @@ pops, clicks and hisses. The main path is:
 3. It sends that line to an Android app over Bluetooth LE.
 4. The app decides what the sound means and performs the swipe, tap or navigation.
 
-This page describes the system as it is in the code now. For why it is built this way, see
+This page describes the system as it is in the code on `main` now. Work on the three round 7 branches is not merged;
+it is summarised [below](#round-7-branches-not-merged). For why it is built this way, see
 [decisions.md](decisions.md). The original research-era plan (DTW, HID, Jev in the cloud) is on [index.md](index.md);
 parts of it were changed.
 
@@ -25,7 +26,10 @@ flowchart LR
     STATE --> BLE
   end
   subgraph Phone["Android app ai.vox.companion"]
-    SRC[FeatureSource<br/>BLE / phone mic / debug] --> SEQ[Sequencer]
+    SRC[FeatureSource<br/>BLE / phone mic / debug] --> GATE[Phone-mic guards<br/>PhoneGate, level gate,<br/>MediaGate, MicPopGate]
+    GATE --> SEQ[Sequencer]
+    SRC -->|cursor mode, phone mic| JOY[VoiceJoystick]
+    JOY --> A11Y
     SEQ --> DEC[Decider chain]
     DEC --> EXE[Executor]
     EXE --> A11Y[AccessibilityService<br/>gestures + actions]
@@ -131,7 +135,7 @@ lines are the exact phrasings from `finetune/vox/schema.py`, generated into `Voc
 ## Android app (`android/app`, package `ai.vox.companion`)
 
 This is an AccessibilityService with a foreground listening service. The source table is in `android/app/README.md`.
-The app has 386 JVM tests (the latest run, by the grammar fork).
+The app has 498 JVM tests on `main` (`@Test` count in `android/app/src/test`; all passed at the end of 09-27).
 
 ### Pipeline
 
@@ -144,6 +148,12 @@ The app has 386 JVM tests (the latest run, by the grammar fork).
 | Screen | `TreeReader`, `ScreenSummarizer`, `StateBuilder`, `Targets`, `OptionFormat`, `RootCheck` (refuses a stale tree), `ForegroundApp` | Describe the screen, and list tappable targets for intent cursor mode |
 | Actions | `Executor`, `Navigation` (`SwipeGeometry`), `Swipes`, `ScrollStep`, `AutoScroll`, `Volume`, `TimerTarget`, `AppChoice` | Perform the gestures and actions |
 | Guards | `Confirmer`, `Outward` (confirm pop for likes, follows and shares, `outward_confirm_ms` 3000), `MicPopGate` (phone and USB mic pops do nothing), `SystemDialog` | Safety |
+| Phone-mic guards | `audio/PhoneGate` (SNR and clarity rules, the 14 dB pop/click rule, and the media-hiss rule: while media plays on the speaker, a hiss with centroid over `hiss_media_max_centroid_hz` 6500 becomes `unknown`; a missing centroid passes), the level gate (`joystick/CalibV2.kt` `LevelGate`: a phone/USB pop, click or hiss must reach a per-mic SNR and level derived from calibration, shifted by `level_gate_offset_db` −10..10), `MediaGate` (below), `audio/TouchGuard` | Keep room noise and media from becoming gestures. The Pico is never gated by these. |
+| Media lock | `MediaGate.kt`, settings `media_lock` (default true), `media_unlock_mode` (`one` default, `fixed`, `popext`), `media_unlock_ms` 5000 | While media plays (`isMusicActive`, any output route), every phone/USB-mic sound is dropped. `pop pop` unlocks: in `one` mode exactly the next gesture passes, then it re-locks ([D149](decisions.md#d149), [D151](decisions.md#d151)). Event names `media_gate` and `media_unlock`. |
+| Feed detection | `FeedKindCache.kt` | Caches whether the front window is a paged feed, a list or neither, read on a background thread; trusted 6 s (feed), 20 s (list), 1.5 s (other). Removed a 250–300 ms wait before each feed fling (round 4). Emits `fling_wait` when it has to wait. |
+| Voice joystick | `VoiceJoystick.kt`, `joystick/JoystickCore.kt`, `JoyCalibration.kt`, `CalibV2.kt`, `JoyIndicators.kt` | Cursor mode on the phone mic: pitch above/below the user's home note steers vertically, the vowel (ee / oo / ah) sideways; the cursor never resets and snaps to a nearby element when the hum stops. `cursor_speed` and `cursor_pitch_sens` 0.5–2.0 (default 0.9). Chevron cursor and bar face ([D147](decisions.md#d147), [D152](decisions.md#d152), [D153](decisions.md#d153)). |
+| Calibration | `JoyCalibration` (steps `hum, glide, vowels, pops, clicks, whistle, hiss, room`; the v2 steps are `clicks, whistle, hiss, room`), contract `calib_start {source, steps?}`, `calib_step / redo / retry / skip / save / cancel / get`, `calib_status {state, steps, remaining}` | Per mic. Tunes the cursor and the level gate; it sets no gesture thresholds ([A27](decisions.md#a27)). |
+| Gesture training | `GestureTraining.kt` (`TrainPlan`, `TrainJudge`, `GestureTrainer`), Flutter channel `ai.vox/train`, `train_*` ops | Resumable per-mic enrolment: 52 takes (contours hum/whistle × low/high × slow/quick; flat × short/long; pop, click, hiss soft/loud). With `enroll_gesture_relabel` (default true), a match to the user's own takes relabels the extractor's label (`Personal.kt`) ([D158](decisions.md#d158)). |
 | Phrases | `ListenWindow` (`listen_window_ms` 6000), `AndroidPhraseRecognizer`, `PhraseGrammar`, `TargetQuery` (filler normaliser), `VoiceTyping`, `AudioFileAsr` | Speech after `pop pop` |
 | UI glue | `Overlay`, `Badge`, `CantiBadgeView`, `UiBridge`, `MainActivity`, `LegacySettingsActivity`, `Settings` (KeystoreSecrets, AES-GCM), `EventLog`, `LauncherIcon`, `Pairing`, `UserMode`, `audio/CantiNotification` | The badge, notification, settings and log |
 | Generated | `Vocab.kt`, `TargetVocab.kt` | From `finetune/vox/schema.py` via `tools/gen_vocab.py` |
@@ -169,6 +179,10 @@ trained on, so it was left alone on purpose.
 **Swipe geometry.**
 - `Navigation.kt` `SwipeGeometry`: a vertical swipe runs from 72% to 12% of the screen in 100 ms; horizontal runs from
   85% to 15%, also in 100 ms. `PROTOCOL.md` and `app/README.md` match this (fixed 2026-09-27).
+- **Paged feeds** (Reels, Shorts, TikTok) get a short fling instead: 15 % of the height in 50 ms (`FEED_FLING_PCT`,
+  `FEED_FLING_MS` in `ScrollStep.kt`; settings `feed_fling_pct` 8–60 and `feed_fling_ms` 30–150), about 7.9k px/s on the
+  Z Flip. The older 60 % / 100 ms fling made Instagram skip about 3 reels. `PROTOCOL.md` still describes only the
+  72 % → 12 % fling for feeds ([known gaps](#known-gaps-between-docs-and-code)).
 - Ordinary lists get a no-momentum step (`ScrollStep.kt`): a 300 ms stroke held for 150 ms, with step sizes small 0.25,
   medium 0.5 and large 0.75.
 
@@ -225,18 +239,23 @@ Only hard cases are sent ([D072](decisions.md#d072)). Cloud answers are unscored
 - **Module.** `vox_ui` is an add-to-app Flutter module ([D040](decisions.md#d040)).
 - **Backends.** Screens talk to a `VoxBackend` interface. `ChannelBackend` connects to the Android app; `FakeBackend`
   drives the desktop preview.
-- **Files.** `lib/src/status_screen.dart`, `pair_screen.dart`, `canti_head.dart`, `app.dart`.
+- **Files.** `lib/src/status_screen.dart`, `pair_screen.dart`, `canti_head.dart`, `app.dart`, plus (09-27)
+  `calibration.dart` and `calibration_screen.dart` (the per-mic voice setup, with retry and skip), `voice_cursor.dart`
+  (the two sensitivity sliders and level-gate settings), and `train.dart`, `train_fake.dart`, `train_screen.dart`
+  (gesture training, one card per gesture).
+- **Bindings window.** On `main` the status screen's bindings pager is static text (`status_screen.dart`); it omits
+  `click hiss` and ignores the user's rules. The `r7-bindings` branch makes it live.
 - **Theme** (`lib/src/theme`): the 1-bit pixel kit, the `dither_field.frag` shader (FLCL-style dither), `clearing.dart`
   (a clear area so text stays readable) and `sprite.dart`.
 - **Desktop.** `ui/desktop` runs the same screens on Linux.
-- **Tests.** `flutter test`: 42/42 in `ui/`.
+- **Tests.** `flutter test`: 94 in `ui/` and 10 in `ui/desktop` (end of 09-27).
 
 ## Models and how they are served
 
 | Model | What it is | Where it runs now |
 |---|---|---|
 | Rule decider | Bindings in `Vocab.kt` plus profiles | On the phone (always) |
-| jevlike | Local "Jev-like" decision model (e5 encoder, `finetune/students/jevlike`) | `finetune/servers/systemone.py` on the PC, port 8765 (`/v1/systemone`); also serves `decider-4b` and `jevk5` |
+| jevlike | Local "Jev-like" decision model (e5 encoder, `finetune/students/jevlike`) | `finetune/servers/systemone.py` on the PC, port 8765 (`/v1/systemone`); also serves `decider-4b` and `jevk5`. Not used on the phone; the phone's decider is `rules`. The 09-28 J5c recipe matches Verdict v1d on real screens ([training.md](training.md#jevlike-jl7jl9)); an ONNX export is proposed ([D190](decisions.md#d190)). |
 | Verdict | Bi-encoder target picker, multilingual-e5-small (118M), fine-tuned from the upstream Verdict weights (`finetune/students/verdict`, upstream in `third_party/verdict`) | **Not served anywhere yet.** The best run is `verdict-bi-real-v1d`; int8 ONNX exists (118 MB; a pruned version is 45 MB). The app has no ONNX runtime. `systemone.py` reports `option_format` via `VOX_VERDICT_RUN` in `/health`. |
 | Cloud | DeepSeek V4.1 Flash on Ollama cloud | Called straight from the phone for hard cases |
 | Teachers | JevK5, Decider 4B | PC only, for labelling ([training.md](training.md)) |
@@ -253,10 +272,19 @@ Kev 0.8B was dropped ([D061](decisions.md#d061)).
 
 The suite is described in `android/suite/README.md`.
 
+**Suite status.** On round 6 (`main`) the suite gave 12 PASS and 11 FAIL, then the service socket closed (log local
+only: `android/suite/out/round6-emu-suite.log`). On the `r7-suite` branch it gives 33 of 34 pass and 1 skip: the
+failures were stale tests and a fixture pager that did not page like a real one. The socket crash was not reproduced
+and its cause is unknown.
+
 **Z Flip tests** (the user's own phone, a Samsung Z Flip):
 - The rules are in [process.md](process.md#phone-driving-rules).
 - Rounds 1–4 of the social-app gesture test ran on 09-27. The write-up is private:
   `android/suite/out/zflip/social_gesture_test.md`.
+- Round 5 was installed at 09:34 on 09-27 and round 6 at 13:25 (reinstalled after the launch-crash fix at about 13:55).
+  Since 09-28 10:55 the phone's `sound_source` is `phone` and `level_gate_offset_db` is 0.
+- Known problem (09-28): gestures fail on videos, Reels and feeds, most likely because of the media lock. A 2-minute
+  Reels diagnostic is waiting for the user's OK ([D189](decisions.md#d189)).
 
 ### Latency
 
@@ -282,12 +310,34 @@ The case is `hardware/case/vox_case.scad`, with STLs in `hardware/case/out/`. It
 
 The parts are base, lid, plunger, mic_clip, fit_test and mic_test.
 
-**Build status (09-27):** the pendant isn't built yet. No mic, button or LED is wired, and the INMP441 hasn't been
-bought, so `status` showing "mic: none" is expected. Everything above was measured on the bare Pico (console, test
+**Build status (09-28):** the pendant isn't built yet. On 09-27 at 05:41 the user said the board wasn't built and the
+INMP441 wasn't bought. After the 13:31–13:50 flash the Pico's mic read all zeros; the handoff page blamed wiring on the
+lid header, but on 09-28 the user said "still no mic", so zeros are expected (whether an INMP441 is wired at all is
+unverified). The phone mic is the source for now. Everything above was measured on the bare Pico (console, test
 vectors, canned test sounds). The wiring is in `firmware/HARDWARE.md`. A LEGO-style
-build book is in progress ([design-process.md](design-process.md#lego-build-book)).
+build book (v3, 28 steps from a bare Pico) is in [design-process.md](design-process.md#lego-build-book).
+
+## Round 7 branches (not merged)
+
+Built on 09-28 by DeepSeek workers in git worktrees and reviewed by Opus ([process.md](process.md#eidolon-workers-in-worktrees)).
+None is committed; the user decides ([D188](decisions.md#d188)).
+
+| Branch (worktree) | What it changes | Tests after review | Open |
+|---|---|---|---|
+| `r7-suite` (`~/worktrees/vox-r7-suite`) | Fixture pager pages by fling velocity like a real ViewPager; stale suite tests updated to current behaviour; `asr_engine=off` in the suite reset | suite 33/34 pass, 1 skip | the socket crash (not reproduced) |
+| `r7-medialock` (`~/worktrees/vox-r7-medialock`) | New `audio/SpeakerRoute.kt`: the media lock and PhoneGate's media rules apply only when media plays on a speaker the mic can hear; wired, USB, BLE-headset and A2DP outputs count as headphones; route changes re-check at once; `ping.media_lock` gains `media_speaker` and `route` | JVM 502 | a Bluetooth A2DP speaker gets no lock ([D185](decisions.md#d185)) |
+| `r7-bindings` (`~/worktrees/vox-r7-bindings`) | New `Bindings.kt`: the status screen's bindings window is fed from `Vocab.kt` plus the user's rules; the Gesture/Cursor toggle shows for phone and USB mics; parity tests against `RuleDecider` and a Kotlin-generated Flutter fixture | JVM 510, Flutter 99 + 10 | label length ([D186](decisions.md#d186)); per-app rules show Canti's own ([D187](decisions.md#d187)) |
 
 ## Known gaps between docs and code
 
-- The phone still runs an older APK. Everything the grammar fork built (pop pop, the mic pop gate, typing, RVX) is not
-  on it yet ([D140](decisions.md#d140)).
+- ~~The phone still runs an older APK~~ (fixed: round 6 was installed on 09-27, [D166](decisions.md#d166)).
+- `android/PROTOCOL.md` (around line 763) says paged feeds get the 72 % → 12 % / 100 ms fling; the code uses the
+  15 % / 50 ms feed fling, and `feed_fling_ms` / `feed_fling_pct` are missing from the `config` settings list.
+- The status screen's bindings window is static text on `main` and omits `click hiss` (fixed on `r7-bindings`).
+- The Flutter UI keeps its own fallback copy of the default bindings; only `r7-bindings` adds a test that it matches the
+  Kotlin defaults.
+- `DEFAULTS_TEXT` in `Vocab.kt` still says `click pop=listen` (kept on purpose, see above).
+- The `r7-medialock` REPORT.md claims PhoneGate still catches a Bluetooth speaker; the reviewer found that false.
+- The `r7-suite` REPORT.md still describes the `>=` threshold fix, which the reviewer replaced.
+- `android/README.md` (line 41) and `android/app/README.md` (line 93) say 441 JVM tests; `main` has 498. The top-level
+  `README.md` rewrite (09-28, uncommitted) gives no count.
