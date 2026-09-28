@@ -34,6 +34,7 @@ class VoxStatus {
     this.asrEngine,
     this.asrStatus,
     this.calibrated,
+    this.bindings,
   });
 
   /// The accessibility service is running (the other fields are only meaningful then).
@@ -124,6 +125,10 @@ class VoxStatus {
   /// The voice cursor has a saved calibration for the current sound source (null from a service without one).
   final bool? calibrated;
 
+  /// The bindings window's picture (null from a service without one, or when the service is off): the effective
+  /// sound -> action per mode, resolved on the Kotlin side (`Bindings.kt`), for the current app.
+  final VoxBindings? bindings;
+
   /// Speech needs the user (not `ready`, not `off`).
   bool get asrProblem => asrStatus != null && asrStatus != 'ready' && asrStatus != 'off';
 
@@ -158,6 +163,7 @@ class VoxStatus {
         asrEngine: m['asr_engine'] as String?,
         asrStatus: m['asr_status'] as String?,
         calibrated: m['calibrated'] as bool?,
+        bindings: VoxBindings.fromMapOrNull(m['bindings']),
       );
 
   VoxStatus copyWith({
@@ -209,6 +215,7 @@ class VoxStatus {
         asrEngine: asrEngine,
         asrStatus: asrStatus,
         calibrated: calibrated,
+        bindings: bindings,
       );
 
   @override
@@ -256,6 +263,115 @@ class VoxEvent {
 
   /// `key=value` pairs, nulls left out, for one line of the event list.
   String get summary => fields.entries.where((e) => e.value != null).map((e) => '${e.key}=${e.value}').join('  ');
+}
+
+/// One resolved binding for the status screen's bindings window: what a sound (or a two-sound combo) does, and where
+/// that came from (`default`, `app-only`, `global`, `app` or `cursor`; a user rule is one of the last three).
+class VoxBinding {
+  const VoxBinding(this.label, this.source, [this.sequence = const []]);
+
+  /// The action's option text (`swipe up`, `go back`, `move cursor up`, ...), or `custom rule` / `ignored`.
+  final String label;
+
+  /// Where the binding came from; null when unknown.
+  final String? source;
+
+  /// The sound sequence; empty for a single sound (those are keyed by sound in [VoxModeBindings.sounds]).
+  final List<String> sequence;
+
+  factory VoxBinding.fromMap(Map<Object?, Object?> m, {List<String> sequence = const []}) => VoxBinding(
+        (m['label'] as String?) ?? '?',
+        m['source'] as String?,
+        sequence,
+      );
+}
+
+/// One mode's bindings: the single sounds (`sound name -> binding`, null = unbound) and the multi-sound combos.
+class VoxModeBindings {
+  const VoxModeBindings({required this.sounds, required this.combos, this.note});
+
+  /// Sound name (`rise`, `fall`, ... `hiss`) -> its binding, or null when the sound does nothing in this mode.
+  final Map<String, VoxBinding?> sounds;
+
+  /// The two-sound combos bound in this mode, in order.
+  final List<VoxBinding> combos;
+
+  /// A one-line truth about this mode (the cursor's voice joystick, or that combos do not act), or null.
+  final String? note;
+
+  factory VoxModeBindings.fromMap(Map<Object?, Object?> m) => VoxModeBindings(
+        sounds: {
+          for (final e in (m['sounds'] as Map<Object?, Object?>? ?? const {}).entries)
+            '${e.key}': e.value is Map ? VoxBinding.fromMap((e.value! as Map).cast<Object?, Object?>()) : null,
+        },
+        combos: [
+          for (final c in (m['combos'] as List<Object?>? ?? const []))
+            VoxBinding.fromMap(
+              (c! as Map).cast<Object?, Object?>(),
+              sequence: [
+                for (final s in ((c as Map)['seq'] as List<Object?>? ?? const [])) '$s',
+              ],
+            ),
+        ],
+        note: m['note'] as String?,
+      );
+}
+
+/// The bindings window's picture, per mode (android `Bindings.kt`, the status map's `bindings` key).
+class VoxBindings {
+  const VoxBindings({required this.gesture, required this.cursor});
+
+  final VoxModeBindings gesture;
+  final VoxModeBindings cursor;
+
+  /// The single sounds shown as glyphs, in order (contours then discrete).
+  static const sounds = ['rise', 'fall', 'arch', 'dip', 'flat', 'pop', 'click', 'hiss'];
+
+  factory VoxBindings.fromMap(Map<Object?, Object?> m) => VoxBindings(
+        gesture: VoxModeBindings.fromMap((m['gesture'] as Map<Object?, Object?>? ?? const {}).cast<Object?, Object?>()),
+        cursor: VoxModeBindings.fromMap((m['cursor'] as Map<Object?, Object?>? ?? const {}).cast<Object?, Object?>()),
+      );
+
+  /// Null when the status map has no `bindings` key (an older service, or the service off).
+  static VoxBindings? fromMapOrNull(Object? m) => m is Map ? VoxBindings.fromMap(m.cast<Object?, Object?>()) : null;
+
+  /// The fallback picture when the service sends none: the Vocab defaults with no user rules, on the Pico (the same
+  /// thing `Bindings.view(Profile.empty(), "", micSource = false)` computes on the Kotlin side).
+  static const defaults = VoxBindings(
+    gesture: VoxModeBindings(
+      sounds: {
+        'rise': VoxBinding('swipe up', 'default'),
+        'fall': VoxBinding('swipe down', 'default'),
+        'arch': VoxBinding('swipe right', 'default'),
+        'dip': VoxBinding('swipe left', 'default'),
+        'flat': VoxBinding('long-press / hold', 'default'),
+        'pop': VoxBinding('tap the screen', 'default'),
+        'click': null,
+        'hiss': VoxBinding('go back', 'default'),
+      },
+      combos: [
+        VoxBinding('listen for a spoken phrase', 'default', ['pop', 'pop']),
+        VoxBinding('go to the home screen', 'default', ['click', 'click']),
+        VoxBinding('go back', 'default', ['hiss', 'click']),
+        VoxBinding('go forward', 'app-only', ['click', 'hiss']),
+      ],
+    ),
+    cursor: VoxModeBindings(
+      sounds: {
+        'rise': VoxBinding('move cursor up', 'default'),
+        'fall': VoxBinding('move cursor down', 'default'),
+        'arch': VoxBinding('move cursor right', 'default'),
+        'dip': VoxBinding('move cursor left', 'default'),
+        'flat': VoxBinding('stop', 'default'),
+        'pop': VoxBinding('click', 'default'),
+        'click': null,
+        'hiss': VoxBinding('back', 'default'),
+      },
+      combos: [
+        VoxBinding('listen for a target name', 'default', ['pop', 'pop']),
+      ],
+    ),
+  );
 }
 
 /// Everything the screens need from the phone side. [ChannelBackend] talks to the Kotlin service over platform

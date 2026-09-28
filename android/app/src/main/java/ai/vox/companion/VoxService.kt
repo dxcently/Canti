@@ -628,6 +628,8 @@ class VoxService : AccessibilityService() {
         "media_locked" to (settings.mic.usesMic && mediaLocked(SystemClock.elapsedRealtime())),
         // the voice joystick: a saved calibration for the current sound source (the Pico: always false for now)
         "calibrated" to (joy?.calibrated() ?: false),
+        // the bindings window: the effective sound -> action per mode (Bindings), for the current app
+        "bindings" to Bindings.view(profile, currentApp(), settings.mic.usesMic),
     ) + (ble?.setup() ?: emptyMap())
 
 

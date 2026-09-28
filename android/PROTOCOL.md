@@ -697,7 +697,15 @@ connects it to the running accessibility service through two platform channels. 
     `ble_blocked` (refused with "don't ask again"), and with the Pico as the source `ble_adapter` (`on`|`off`|`none`),
     `ble_target` (the address being connected), `ble_target_name` (its advertised name, e.g. `VOX-2807`) and
     `ble_scan` (`scanning`, `none found` when the last search ended empty, or null). `calibrated` (bool): a voice-joystick
-    calibration is saved for the current sound source (always false for the Pico);
+    calibration is saved for the current sound source (always false for the Pico); `bindings`: the bindings window's
+    picture (`ui/lib/src/status_screen.dart` "Bindings") — `{gesture: {sounds, combos, note}, cursor: {sounds, combos,
+    note}}`, one `{label, source}` per single sound (null = unbound, `source` one of `default`, `app-only`, `global`,
+    `app`, `cursor`) and one `{seq, label, source}` per multi-sound combo, resolved like the rule decider
+    (`app > global > defaults > app-only` in gesture mode; cursor rules > the built-in single-sound cursor and the app's
+    `pop pop` target listening) and noting
+    the mic-source exceptions (a phone/USB lone pop taps only where bound; in cursor mode the voice joystick takes
+    the hums). `Bindings.kt`
+    builds it.
   - `setPaused {paused: bool}` does what the `pause` op does, logs `pause{by: app}`, and returns the status map;
   - `deviceCommand {armed?, mode?, sleep?}` does what the `device` op does, but answers only when the device has
     confirmed or the command failed: `{ok, cmd, result, error, ms, applied, armed, mode, sleeping}`;
@@ -738,8 +746,10 @@ Bluetooth on, and explains the device's pairing window (hold its button 5 s).
 
 The status screen's main button follows the device when one is connected (`device_ready`): **Pause Canti** sends
 `{"armed": false}`, **Resume Canti** lifts an app-side pause and sends `{"armed": true}`. Without a connected device
-it is the app-side pause (`setPaused`). The mode toggle and **Sleep device** appear only while the device is
-connected.
+it is the app-side pause (`setPaused`). The **Gesture / Cursor** mode toggle appears whenever the service runs and a
+mode can be set: with a connected device it commands the device (like `deviceCommand {mode}`), and with a phone or USB
+mic source it applies here (`setDeviceMode`; the phone owns the mode). **Sleep device** appears only while the device
+is connected.
 
 The Dart side is `ui/lib/src/channel_backend.dart` (`ChannelBackend`). `FakeBackend` is the in-memory stand-in
 used by the widget tests and the Linux desktop runner.
