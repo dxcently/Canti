@@ -94,6 +94,34 @@ Features, per event:
   - the headset's own noise suppression may remove hums and clicks.
 - Measure both before committing to it.
 
+## 3d. Recorded range suite (user, 2026-09-28)
+Tests on the user's real recorded audio, like a calibration suite.
+- **Mics:** both the Z Flip phone mic and the desktop USB mic. The desktop is kept for future desktop integration.
+- **One spec** (`extractor/prompts/range_v1.json`) drives both recorders:
+  - `extractor/range_session.py` records on the desktop;
+  - `android/suite/range_phone.py` records on the phone, through the measurement harness plus a `measure_cue` op.
+- **Range grid** (decided: centre, plus one factor at a time, plus corners):
+  - A range step comes first: the bottom, home and top of the user's hum, and a whistle home. The user's voice is
+    naturally low, so pitch levels are relative to the measured bottom. The step flags a bottom under the extractor's
+    75 Hz `f0_min_hz`.
+  - Contours and flat: 14 conditions (pitch, speed, loudness, distance hand/table/across, whistle, 4 corners).
+  - Discrete sounds: 6 conditions each. Combos: 5 conditions each (gap timing included). 2 repeats per condition.
+  - About 20 minutes per device.
+- **Backgrounds** (decided: digital mix plus a real check):
+  - 60 s backgrounds recorded on each mic: speaker media at 30/60/90 %, TV or music, a fan, talk, typing.
+  - Mixed digitally with every take at SNR +20…−5 dB, with MUSAN and ESC-50 as extra backgrounds.
+  - A small real acoustic session (gestures while media or talk plays) checks that the mixes are representative.
+- **Checks** (`extractor/range_suite.py`):
+  - extractor labels (Python, and C++ where built): recall per condition;
+  - the level gate and near-field features: keep-rate against would-act per minute;
+  - mix recall against SNR;
+  - real against mix;
+  - full app replay on the emulator through `mic_feed`;
+  - ease of use: a 1–5 rating, time and redos per block;
+  - cursor accuracy (to build: on-screen target trials in cursor mode).
+- **Privacy:** recordings stay in `extractor/recordings/` and `zflip/range/`, both gitignored. Workers build and test on
+  synthetic audio only; only Opus analyses the real recordings.
+
 ## 4. Noise
 - Now:
   - the level gate;
@@ -171,6 +199,36 @@ Features, per event:
 - The mode toggle is hidden for the phone mic.
 - `scrollStep` has no control.
 - The decider, mic effects, feed fling and ASR settings have no screen.
+
+## 9b. Calibration and training redesign (agreed with the user 2026-09-28)
+User complaints:
+- the instructions are confusing;
+- errors assume what you did wrong;
+- the buttons are odd;
+- there is no way to redo one step;
+- the text is hard to read.
+
+Static mockups: `scratchpad/calibui/` (session scratchpad, not in git).
+
+**Decided (user):**
+- **Font A, all pixel:** Press Start 2P for titles, labels and buttons; Departure Mono for sentences and numbers. Body
+  text at least 16 dp; text contrast at least 7:1.
+- **Tests hub:** every calibration step and gesture shows done / redo / to-do and a one-word result. A tapped step runs
+  **alone**, and **each calibration step saves on its own** (today it saves once, at the end).
+- **The take screen:** the gesture name and the one thing that varies are highlighted chips, plus one instruction line.
+  - The plot shows the target band on the user's LOW / HOME / HIGH marks and the live trace. The band needs the hum
+    and glide steps.
+  - One status line. The live NOW / TIME / UP SO FAR readout is **dropped**.
+- **A pass moves on to the next take by itself**; the user can go back to redo it. There is no "stored, next take"
+  stop.
+- **A miss shows heard against wanted:** measured values only, two small plots, and one next step computed from the
+  biggest gap.
+  - "Keep anyway" is a small link.
+  - Buttons: Skip / Steps, with Try again as the main button.
+- **The same button layout on every screen:** two small buttons above, one main button below.
+- **The Canti-off banner:** the reason in plain words, with one Turn on button. Accessibility can only open its settings
+  page; pause and mode flip directly.
+- **Two-sound training takes:** click click, click hiss and hiss click (pop pop while it exists), with the beat strip.
 
 ## 10. Feedback: no talking
 - **No TTS and no audio voice** (user). Replies are text only: a silent pixel **speech bubble** from the badge.
