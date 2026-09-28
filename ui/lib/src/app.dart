@@ -76,23 +76,40 @@ class VoxUiApp extends StatelessWidget {
   }
 }
 
-/// The page colour and the dot field, under the navigator. Built once per theme change, never by screen state.
-class _Backdrop extends StatelessWidget {
+/// The page colour and the dot field, under the navigator. Built once per theme change, never by screen state: the
+/// screens tell the field what Canti is doing through the [BackdropMood] it hands down ([BackdropScope]).
+class _Backdrop extends StatefulWidget {
   const _Backdrop({required this.child, this.animate});
 
   final Widget child;
   final bool? animate;
 
   @override
+  State<_Backdrop> createState() => _BackdropState();
+}
+
+class _BackdropState extends State<_Backdrop> {
+  final _mood = BackdropMood();
+
+  @override
+  void dispose() {
+    _mood.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => ColoredBox(
         color: Theme.of(context).colorScheme.surface,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // clear under the status and navigation bars (edge-to-edge on Android), fading in below them
-            DitherBackground(animate: animate, insets: MediaQuery.viewPaddingOf(context)),
-            child,
-          ],
+        child: BackdropScope(
+          mood: _mood,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // clear under the status and navigation bars (edge-to-edge on Android), fading in below them
+              DitherBackground(animate: widget.animate, insets: MediaQuery.viewPaddingOf(context), mood: _mood),
+              widget.child,
+            ],
+          ),
         ),
       );
 }

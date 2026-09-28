@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import 'backend.dart';
+import 'theme/dither_background.dart';
 import 'theme/sprite.dart';
 
 /// The animated Canti in the status screen's header: the floating badge's character, docked here while the app is
-/// in front (the service hides the floating one then; the two never show at once).
+/// in front (the service hides the floating one then; the two never show at once). Its held state also sets the
+/// background's EQ bars ([BackdropMood.held]).
 ///
 /// Held state: the service's own badge state (`VoxStatus.badge`, and `badge{event: state}` events as it changes),
 /// else worked out from the status (older service, desktop): off without the service or with the device away,
@@ -78,6 +80,7 @@ class _CantiHeadState extends State<CantiHead> {
   final _shots = OneShots();
   final _clock = Stopwatch()..start();
   StreamSubscription<VoxEvent>? _sub;
+  BackdropMood? _mood;
 
   @override
   void initState() {
@@ -87,13 +90,25 @@ class _CantiHeadState extends State<CantiHead> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _mood = BackdropMood.maybeOf(context)?..held = _sprite.held;
+  }
+
+  /// The held state, on the head and in the background's EQ bars.
+  void _hold(String s) {
+    _sprite.held = s;
+    _mood?.held = s;
+  }
+
+  @override
   void didUpdateWidget(CantiHead old) {
     super.didUpdateWidget(old);
     if (old.events != widget.events) {
       _sub?.cancel();
       _listen();
     }
-    if (!identical(old.status, widget.status)) _sprite.held = CantiHead.heldFor(widget.status);
+    if (!identical(old.status, widget.status)) _hold(CantiHead.heldFor(widget.status));
   }
 
   void _listen() => _sub = widget.events.listen(_onEvent, onError: (Object _) {});
@@ -105,7 +120,7 @@ class _CantiHeadState extends State<CantiHead> {
         final shot = _shots.next(action, e.fields['ok'] != false, _clock.elapsedMilliseconds);
         if (shot != null) _sprite.playOnce(shot);
       case 'badge' when e.fields['event'] == 'state' && e.fields['state'] is String:
-        if (widget.status?.service ?? false) _sprite.held = e.fields['state']! as String;
+        if (widget.status?.service ?? false) _hold(e.fields['state']! as String);
     }
   }
 

@@ -159,8 +159,8 @@ RPG UI kit, reduced to what the app needs:
 
 `DitherBackground` draws a one-colour, 1-bit ordered-dither dot field behind every screen, after the FLCL-style
 isometric pixel art: a dot field along the top that thins out downward (a 50% checker, then scattered dots, the edge
-drifting slowly), and a few isometric pillars rising from the bottom (solid tops, 50% left face, 25% right face,
-dissolving bottoms, each bobbing by whole cells). It is one fragment shader (`shaders/dither_field.frag`, 4x4 Bayer
+drifting slowly), and a row of EQ bars along the bottom (3 cells wide, a solid cap over a body that fades upward) that
+shows what Canti is doing. It is one fragment shader (`shaders/dither_field.frag`, 4x4 Bayer
 computed from the cell index, no textures) on one full-screen rect:
 
 - in its own layer (`RepaintBoundary`), so nothing above repaints it and it repaints nothing above;
@@ -171,12 +171,31 @@ computed from the cell index, no textures) on one full-screen rect:
 - paused when the app isn't visible (`AppLifecycleListener`), off when the platform asks for reduced motion, and off
   under `flutter test`. If the shader can't load, nothing is drawn.
 
+**EQ bars.** A `BackdropMood` (in `dither_background.dart`, handed down by `BackdropScope` above the navigator)
+picks the motif, the shader's `uMode`:
+
+- **ticks** (idle, cursor, error): a calm row of short ticks, 1 or 2 cells high;
+- **bars** (hearing, pending, hold-scroll; or a screen recording a take): level bars up to 12 cells, a peak dot
+  over every other one, all within the band (`eqBandCells`, 14 cells), moving with `uTime`. Their height is the
+  live mic level (`uLevel`, -60..-15 dBFS -> 0..1) when one reaches the UI: the calibration screen's
+  `calib_status.live.level_db` while a step waits or records, the training screen's `train_status` take level from
+  a phone or USB mic. Otherwise (a sound in normal use, a take on the Canti device) a made-up level;
+- **flat** (off, paused, tap-to-wake): no bars at all and the top field thinned to a quarter, and the timer stops:
+  the screen goes quiet, so a disabled Canti shows at a glance.
+
+`CantiHead` (the status screen's header) writes its held state into the mood (status and `badge{event: state}`
+events); the calibration and training screens set `listen(on, levelDb:)` while they record and clear it when they
+close. Only the background listens: no widget rebuilds.
+
+The status screen fills the page with windows, so it keeps a strip of `eqBandCells` cells clear above the navigation
+bar (its scroll view ends there): the band always shows on the home page, on the phone and the desktop.
+
 **Clearings.** Text and art straight on the field get a clearing, not a plate: the dots thin out to clear paper in the
 field's own terms, whole cells of its grid ordered by its Bayer matrix.
 
 - Under the system bars: the app is edge-to-edge on Android, so the field would run under the status bar and hide
   the clock and icons. `DitherBackground(insets:)` gets the view padding; the shader keeps the cells under the top and
-  bottom bars clear, starts the top field below the status bar, stands the pillars on the navigation bar, and fades
+  bottom bars clear, starts the top field below the status bar, stands the EQ bars on the navigation bar, and fades
   in from both edges over 3 cells (the allowed density rising to the field's 50% tone). On the desktop the insets are
   0, so the field fades in from the window's edges.
 - Around ink: a `DitherClearing` paints the cells it clears in the paper colour before its child (over the field's

@@ -6,6 +6,7 @@ import 'backend.dart';
 import 'calibration.dart';
 import 'calibration_screen.dart' show CalibPanel;
 import 'theme/canti_theme.dart';
+import 'theme/dither_background.dart';
 import 'theme/glyphs.dart';
 import 'theme/kit.dart';
 import 'theme/pixel.dart';
@@ -46,15 +47,33 @@ class TrainScreen extends StatefulWidget {
 
 class _TrainScreenState extends State<TrainScreen> {
   late final TrainFlow _flow = widget.flow ?? TrainFlow(backend: widget.train);
+  BackdropMood? _mood;
 
   @override
   void initState() {
     super.initState();
+    _flow.addListener(_toMood);
     _flow.attach();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _mood = BackdropMood.maybeOf(context);
+  }
+
+  /// The background's EQ bars follow the mic while a take records (the level only from a live source: phone or USB
+  /// mic; from the Canti device they move by themselves).
+  void _toMood() {
+    final take = _flow.session;
+    final on = take?.state == 'recording';
+    _mood?.listen(on, levelDb: _flow.status?.liveTrace == true ? take?.live.levelDb : null);
+  }
+
+  @override
   void dispose() {
+    _flow.removeListener(_toMood);
+    _mood?.listen(false);
     _flow.close(); // an open round ends; its stored takes stay
     if (widget.flow == null) _flow.dispose();
     super.dispose();

@@ -64,7 +64,8 @@ grid as the stipple art. The code is `../ui/lib/src/theme` (`../ui/README.md` "L
 - **State by inversion and pattern.** Pressed and selected invert (paper on ink); disabled is a dotted frame; focus
   and hover are corner brackets around the target; empty areas are a diagonal hatch.
 - **Dither for mood.** Behind the windows is a one-colour dot field after FLCL's isometric pixel art: a 50% checker
-  along the top that thins out downward, and a few isometric pillars rising from the bottom. Where text or the logo
+  along the top that thins out downward, and a row of EQ bars along the bottom: calm ticks when idle, dithered
+  level bars while Canti hears, and nothing (the top field thinned out) when it is off or paused. Where text or the logo
   sits on it, the field opens a *clearing*, never a plate: within a few pixels of the ink (its own shape, dilated)
   the dots stop, and over the next few they come back in the same ordered dither, whole dots on the field's grid.
   The field also clears under the phone's status and navigation bars and fades in below them.
