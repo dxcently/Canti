@@ -1,6 +1,9 @@
 package ai.vox.companion
 
 import ai.vox.companion.MediaGate.Verdict
+import ai.vox.companion.audio.SpeakerRoute
+import android.bluetooth.BluetoothClass
+import android.media.AudioDeviceInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -238,5 +241,87 @@ class MediaGateTest {
         assertEquals(BadgeState.PENDING, BadgeStates.held(i.copy(mediaUnlocked = true)))
         assertEquals(BadgeState.PENDING, BadgeStates.held(i.copy(mode = "cursor", mediaUnlocked = true)))
         assertEquals("the phrase window wins", BadgeState.HEARING, BadgeStates.held(i.copy(listening = true, mediaUnlocked = true)))
+    }
+
+    // --- the speaker test (SpeakerRoute.kt): the lock only applies when media plays on a speaker the mic hears -------
+
+    @Test fun speakerRouteIsAudibleOnlyOnASpeaker() {
+        // the phone's own speaker and a Bluetooth (LE) speaker play into the room: the mic hears them
+        assertTrue(SpeakerRoute.speakerMedia(setOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)))
+        assertTrue(SpeakerRoute.speakerMedia(setOf(AudioDeviceInfo.TYPE_BLE_SPEAKER)))
+        // headphones / earbuds / a hearing aid: the phone mic hears nothing, so no lock
+        // (A2DP is resolved by its device class, not its type alone — see a2dpDeviceClassDecidesSpeakerVsHeadphones)
+        for (t in listOf(AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_HEARING_AID))
+            assertFalse("type $t", SpeakerRoute.speakerMedia(setOf(t)))
+        // a speaker among other outputs still counts (media is partly on the speaker)
+        assertTrue(SpeakerRoute.speakerMedia(setOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BLE_HEADSET)))
+        // an unknown route (pre-Android-13, or an error) is assumed audible: fail safe, the mic may hear it
+        assertTrue(SpeakerRoute.speakerMedia(emptySet()))
+    }
+
+    @Test fun earbudsInMidPlaybackLiftTheLockAndOutReLock() {
+        val speaker = setOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+        val earbuds = setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+        fun on(route: Set<Int>) = SpeakerRoute.speakerMedia(route)
+        assertEquals(Verdict.UNLOCK, unlock(10_000))
+        // earbuds connect while the window is open: the lock and the window lift at once
+        assertTrue(gate.mediaChanged(10_500, on(earbuds)))
+        assertEquals(Verdict.PASS, sound("hiss", 11_000, playing = on(earbuds)))
+        // a half unlock on the speaker does not survive a switch to earbuds
+        assertEquals(Verdict.FIRST_POP, sound("pop", 12_000, playing = on(speaker)))
+        assertFalse("no window was open", gate.mediaChanged(12_100, on(earbuds)))
+        assertEquals(Verdict.FIRST_POP, sound("pop", 12_300, playing = on(speaker)))
+        // back on the speaker: locked again, no window carried over
+        assertEquals(Verdict.DROP, sound("hiss", 13_000, playing = on(speaker)))
+    }
+
+    @Test fun otherRoutesDoNotLock() {
+        // HDMI / a USB DAC / casting: not a known speaker, so no lock (only an empty, unknown route is assumed audible)
+        for (t in listOf(AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX)) {
+            assertFalse("type $t", SpeakerRoute.speakerMedia(setOf(t)))
+            assertEquals("other", SpeakerRoute.routeName(setOf(t)))
+        }
+    }
+
+    @Test fun speakerRouteName() {
+        assertEquals("speaker", SpeakerRoute.routeName(setOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)))
+        assertEquals("speaker", SpeakerRoute.routeName(setOf(AudioDeviceInfo.TYPE_BLE_SPEAKER)))
+        assertEquals("headphones", SpeakerRoute.routeName(setOf(AudioDeviceInfo.TYPE_USB_HEADSET)))
+        assertEquals("unknown", SpeakerRoute.routeName(emptySet()))
+        // A2DP is named by its device class; an unknown class is fail-safe "bt-speaker"
+        assertEquals("bt-speaker", SpeakerRoute.routeName(setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)))
+        assertEquals("bt-speaker", SpeakerRoute.routeName(setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP),
+            setOf(BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER)))
+        assertEquals("bt-headphones", SpeakerRoute.routeName(setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP),
+            setOf(BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES)))
+        assertEquals("bt-headphones", SpeakerRoute.routeName(setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP),
+            setOf(BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET)))
+    }
+
+    @Test fun a2dpDeviceClassDecidesSpeakerVsHeadphones() {
+        // room speakers: the mic hears them -> lock
+        for (c in listOf(BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER, BluetoothClass.Device.AUDIO_VIDEO_HIFI_AUDIO,
+            BluetoothClass.Device.AUDIO_VIDEO_PORTABLE_AUDIO, BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO,
+            BluetoothClass.Device.AUDIO_VIDEO_VIDEO_DISPLAY_AND_LOUDSPEAKER, BluetoothClass.Device.AUDIO_VIDEO_SET_TOP_BOX))
+            assertTrue("class $c", SpeakerRoute.a2dpSpeaker(c))
+        // in/on the ear: the mic hears nothing -> no lock
+        for (c in listOf(BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES, BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET,
+            BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE))
+            assertFalse("class $c", SpeakerRoute.a2dpSpeaker(c))
+        // unknown / uncategorised / no permission -> fail safe (speaker, lock)
+        assertTrue(SpeakerRoute.a2dpSpeaker(null))
+        assertTrue(SpeakerRoute.a2dpSpeaker(BluetoothClass.Device.AUDIO_VIDEO_UNCATEGORIZED))
+        assertTrue(SpeakerRoute.a2dpSpeaker(BluetoothClass.Device.AUDIO_VIDEO_MICROPHONE))
+    }
+
+    @Test fun a2dpSpeakerLocksAndHeadphonesDoNot() {
+        val a2dp = setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+        // a Bluetooth speaker over A2DP locks (the mic hears it); an unknown class locks (fail safe)
+        assertTrue(SpeakerRoute.speakerMedia(a2dp, setOf(BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER)))
+        assertTrue(SpeakerRoute.speakerMedia(a2dp, setOf(null)))
+        // earbuds / headphones over A2DP do not lock
+        assertFalse(SpeakerRoute.speakerMedia(a2dp, setOf(BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET)))
+        assertFalse(SpeakerRoute.speakerMedia(a2dp, setOf(BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES)))
     }
 }
