@@ -40,8 +40,9 @@ A pop is too hard to make consistently. Pop carries more than it looks on the ph
   - One mouth click must not be heard twice: overlapping click/pop detections merge into one sound.
   - **Cursor mode: a click taps instantly.** No click combos in cursor mode, so there's no gap to wait out. Measured before the
     change: every cursor tap waited 650–750 ms for a possible second pop; the user's deliberate doubles were 140–220 ms apart.
-  - Voice commands in cursor mode get their own trigger, not a click combo. **Open:** which sound (free sounds in cursor mode
-    to be surveyed).
+  - Voice commands in cursor mode get their own trigger, not a click combo: a **long hiss** (over ~0.7 s) opens listening, and a
+    short hiss is still Back. On the phone mic, cursor mode lets only click and hiss through as gestures (hums and whistles
+    steer), so there was no free sound; the hiss's length is known when it ends, so nothing waits.
   - Gesture mode keeps the mapping above (click click = home, click click click = listen).
 
 ## 3. The media lock: why gestures fail on videos, Reels and feeds
