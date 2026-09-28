@@ -8,7 +8,9 @@ import android.os.Bundle
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.accessibility.AccessibilityNodeInfo
@@ -21,6 +23,7 @@ import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
 import kotlin.math.abs
+import kotlin.math.sign
 
 /*
  * VOX fixture app: deterministic screens for the emulator suite. Every observable state is a TextView with a resource
@@ -117,19 +120,42 @@ class FeedView(ctx: Context) : FrameLayout(ctx) {
 
     override fun onInterceptTouchEvent(ev: MotionEvent) = true
 
+    /*
+     * Snaps like a real pager (androidx ViewPager.determineTargetPage; ViewPager2's PagerSnapHelper is looser still: any
+     * fling over RecyclerView's minimum fling velocity pages): a fling pages when it travels over FLING_DP and lifts
+     * faster than MIN_VELOCITY_DP in its direction of travel; a slow drag pages only past half a page, else it snaps
+     * back. So a no-momentum drag (ScrollStep's step) short of half a page does not page, as on a real feed.
+     */
+    private val density = ctx.resources.displayMetrics.density
+    private val maxVelocity = ViewConfiguration.get(ctx).scaledMaximumFlingVelocity.toFloat()
+    private var tracker: VelocityTracker? = null
+
+    private fun pages(d: Float, v: Float, size: Int): Boolean =
+        (abs(d) > FLING_DP * density && abs(v) > MIN_VELOCITY_DP * density && sign(v) == sign(d)) || abs(d) > size / 2f
+
     override fun onTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) { tracker?.recycle(); tracker = VelocityTracker.obtain() }
+        tracker?.addMovement(ev)
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> { downX = ev.x; downY = ev.y; swiped = false }
             MotionEvent.ACTION_MOVE -> if (abs(ev.x - downX) > 40 || abs(ev.y - downY) > 40) swiped = true
+            MotionEvent.ACTION_CANCEL -> { tracker?.recycle(); tracker = null }
             MotionEvent.ACTION_UP -> {
                 val dx = ev.x - downX; val dy = ev.y - downY
-                if (abs(dy) > height * 0.15f && abs(dy) > abs(dx)) {
+                val t = tracker; tracker = null
+                t?.computeCurrentVelocity(1000, maxVelocity)
+                val vx = t?.xVelocity ?: 0f; val vy = t?.yVelocity ?: 0f
+                t?.recycle()
+                android.util.Log.i("VoxFixture", "feed swipe dx=${dx.toInt()} dy=${dy.toInt()} vx=${vx.toInt()} vy=${vy.toInt()} px/s")
+                if (abs(dy) > abs(dx) && pages(dy, vy, height)) {
                     go(if (dy < 0) 1 else -1)          // finger moved up = next item
                     cancelDetector(ev); return true
                 }
-                if (abs(dx) > width * 0.15f && abs(dx) > abs(dy)) {
+                if (abs(dx) > abs(dy) && pages(dx, vx, width)) {
                     page += if (dx < 0) 1 else -1       // finger moved left = next page
-                    render(); cancelDetector(ev); return true
+                    // A pager emits VIEW_SCROLLED on a page change; the Confirmer needs a strong event for a swipe.
+                    render(); sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_SCROLLED)
+                    cancelDetector(ev); return true
                 }
             }
         }
@@ -143,6 +169,11 @@ class FeedView(ctx: Context) : FrameLayout(ctx) {
     }
 
     override fun getAccessibilityClassName(): CharSequence = "ai.vox.fixture.FeedView"
+
+    private companion object {
+        const val FLING_DP = 25f            // ViewPager MIN_DISTANCE_FOR_FLING
+        const val MIN_VELOCITY_DP = 400f    // ViewPager MIN_FLING_VELOCITY (dp/s)
+    }
 
     override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
         super.onInitializeAccessibilityNodeInfo(info)
