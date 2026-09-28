@@ -235,6 +235,38 @@ feature message only gains optional `timing` fields.
 | `train_status` / `train_start` / `train_record` / `train_retry` / `train_skip` / `train_keep` / `train_next` / `train_cancel` / `train_delete` | as the UI methods (`gesture`, `cell`, `source`, `record`) | Gesture training, exactly as the `ai.vox/train` channel (*Gesture training*). Reply `train`: the train_status map; a refused command also sets `ok: false, error`. |
 | `mic_level` | | `mic`: `state`, `routed`, `level{rms_dbfs, peak_dbfs, ms, band_hz, bands_dbfs}` of the last second, `floor_db`, `gate_open`, `silent_input`. For checking a mic (e.g. a USB mic) without making sounds count. |
 | `mic_feed` | `pcm_b64` (PCM16 LE mono), `rate` (16000\|48000), `chunk_ms` (20), `repeat` (1-1000), `raw` (bool), `deliver` (bool) | Runs the PCM through a fresh JNI extractor, the live path's code (direct buffer, `chunk_ms` pushes), independent of the mic. `mic`: `events` (with `raw`: the full event JSON as in `extractor/vectors`), `stats` (as above, over all repeats), `wall_ms`, `audio_ms`, `native`. `deliver` also hands the sounds to the service as source `phone-mic-feed`. `tools/mic_parity.py` uses it for device parity and speed. |
+| `measure_start` | `phase` (string, e.g. `1-media-30`), `every_ms` (2000-30000, default 5000), `gestures` (list of strings, default `["rise","fall","click","click click","hiss"]`), `prompt` (bool, default true), `record` (bool, default true), `stereo` (bool, default false), `max_s` (30-1200, default 300) | Starts the near-field measurement (below). Refused (`ok:false, error`) unless the sound source is `phone`/`usb` and the capture is listening, or if one session already runs. Reply: `sid` (the wall-clock ms at the start, unique across service restarts; an existing `measure/<sid>/` is never reused), `file` (`measure/<sid>/audio.wav`), `rate`, `channels` (1 or 2; the requested count, the `measure_start` event has the actual one). |
+| `measure_stop` | | Ends the running session (as if `max_s` or a capture stop). Reply: `sid`, `samples` (frames), `seconds`. |
+| `measure_status` | | `running`, `sid`, `phase`, `seconds`, `prompts`, `file` (or `running:false`). |
+| `measure_clear` | | Deletes `files/measure/` entirely (nothing else). Refused while a session runs. Reply: `deleted` (the file count). |
+| `measure_cue` | `text` (string, 1-120 chars), `id` (string) | The range suite's PC-driven prompt (round7-plan §3d): shows `text` now on the measurement prompt overlay and logs `measure_prompt` with `gesture` = `id` and `text`, exactly like a scheduled prompt (also with `prompt:false`). Refused (`ok:false, error`) when no session runs, before the session's first sample (retry), or on a blank/too long `text` or blank `id`. Reply: `n` (the session's prompt sequence number, shared with the scheduled prompts), `t_ms` (stream ms when shown, on the recording capture's clock, as the event). |
+
+## Near-field measurement (round7-plan §3c)
+
+A debug harness that records the phone/USB mic while the gestures keep working, so the media gate's near-field rule can
+be measured. One session at a time; it stops by itself at `max_s`, on capture stop/restart (or a failed WAV write), and on service stop. A stereo session restarts the capture into stereo and back; that restart does not end it (capture generations tell the old capture's late states apart).
+
+- **Clock** ("stream ms"): ms since the first sample of the current capture stream, i.e. `pushed * 1000 / rate`. All the
+  times below are in stream ms. A measurement that restarts the capture (for stereo) restarts the clock, so `wav_t0_ms`
+  is taken after the restart.
+- **File**: `files/measure/<sid>/audio.wav`, PCM16 LE, mono or interleaved stereo, at the capture rate, written only while
+  the session runs, never uploaded, deleted by `measure_clear`. `record:false` opens no file.
+- **Stereo**: `stereo:true` opens `CHANNEL_IN_STEREO` for the session; the extractor still gets channel 0 (de-interleaved)
+  so gestures work, and the WAV keeps both channels. A device that refuses stereo falls back to mono (`stereo_ok:false`).
+- **Prompt**: with `prompt:true`, a large on-screen gesture name + counter near the top, visible ~1.5 s, no sound or
+  vibration, every `every_ms`, round-robin over `gestures`, starting at the session's first sample (so every `t_ms` is on
+  the recording capture's clock, also after a stereo restart).
+
+**Events** (EventLog):
+- `measure_start{sid, phase, rate, channels, file, wav_t0_ms, every_ms, gestures, stereo_ok}` — `wav_t0_ms` = stream ms of
+  the WAV's first sample (null when not recording); `stereo_ok:false` = stereo was asked for but the device refused.
+- `measure_prompt{sid, n, gesture, text, t_ms}` — `t_ms` = stream ms when the prompt became visible; `text` = what it showed.
+  `n` counts every prompt of the session, scheduled or `measure_cue` (whose `gesture` is the cue's `id`).
+- `measure_stop{sid, reason, samples}` — `reason` is `op` \| `max_s` \| `capture` \| `service`; `error` names a failed WAV write (reason `capture`), else null. `measure_start` is logged at the session's first sample (or at its stop if none came), so it always precedes the prompts and the stop.
+- `mic_sound` gains `sid` and `tmpl` while a session runs: `tmpl` is `{nearest, distance, threshold, kind}` from the
+  gesture-training/enrollment matcher (`kind` "none" for a non-match, which keeps its nearest class and distance), or
+  `null` when nothing is enrolled or the fingerprint is incompatible. Computed for
+  every `mic_sound` of the recording capture, including level-gated, media-gated and dropped ones (not `mic_feed`).
 
 ## Phone microphone (sound source `phone` / `usb`)
 

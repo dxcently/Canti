@@ -17,6 +17,7 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import ai.vox.companion.audio.Measure
 import ai.vox.companion.joystick.JoyIndicators
 import kotlin.math.hypot
 
@@ -44,6 +45,9 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     private var actions: BadgeActions? = null
     private var menu: View? = null
     private var menuClosedAt = 0L
+    /** The measurement prompt (Overlay.showPrompt): one large TextView near the top, auto-hidden. */
+    private var promptView: View? = null
+    private var promptHide: Runnable? = null
     private val prefs = svc.getSharedPreferences("canti_badge", Context.MODE_PRIVATE)
     private val density = svc.resources.displayMetrics.density
     private val pixelFont: Typeface = try { Typeface.createFromAsset(svc.assets, "flutter_assets/assets/fonts/PressStart2P-Regular.ttf") }
@@ -564,8 +568,44 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         hideTargets()
         hideCursor()
         hideMenu()
+        hidePrompt()
         badge?.let { b -> hop?.let { b.view.removeCallbacks(it) }; try { wm.removeView(b.view) } catch (_: Exception) {} }
         badge = null; badgeParams = null; hop = null; tucked = false
+    }
+
+    /**
+     * The near-field measurement's prompt: large text (the gesture name + a counter) near the top, never covering the
+     * centre, no sound or vibration. Not touchable, so dispatched gestures pass through; auto-hides after [ms].
+     */
+    fun showPrompt(text: String, ms: Long = Measure.PROMPT_VISIBLE_MS) {
+        hidePrompt()
+        val v = TextView(svc).apply {
+            this.text = text
+            typeface = Typeface.DEFAULT_BOLD
+            textSize = 22f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0xCC000000.toInt())
+            gravity = Gravity.CENTER
+            setPadding((10 * density).toInt(), (4 * density).toInt(), (10 * density).toInt(), (4 * density).toInt())
+        }
+        val p = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; y = (screenH() * 0.08).toInt() }   // below the status bar / camera cutout
+        wm.addView(v, p); OwnWindows.note(v)
+        promptView = v
+        val hide = Runnable { hidePrompt() }
+        promptHide = hide
+        v.postDelayed(hide, ms)
+    }
+
+    fun hidePrompt() {
+        promptHide?.let { promptView?.removeCallbacks(it) }
+        promptView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        promptView = null; promptHide = null
     }
 
     /** Start moving: direction like "up", "down_left"; fast=true for loud hums. */
