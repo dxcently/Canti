@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'backend.dart';
 import 'calibration.dart';
 import 'theme/canti_theme.dart';
+import 'theme/dither_background.dart';
 import 'theme/glyphs.dart';
 import 'theme/kit.dart';
 import 'theme/pixel.dart';
@@ -78,15 +79,32 @@ class CalibrationScreen extends StatefulWidget {
 
 class _CalibrationScreenState extends State<CalibrationScreen> {
   late final CalibFlow _flow = widget.flow ?? CalibFlow(backend: widget.backend, source: widget.source, steps: widget.steps);
+  BackdropMood? _mood;
 
   @override
   void initState() {
     super.initState();
+    _flow.addListener(_toMood);
     _flow.attach();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _mood = BackdropMood.maybeOf(context);
+  }
+
+  /// The background's EQ bars follow the mic while a step listens (waiting for a steady note, or recording).
+  void _toMood() {
+    final s = _flow.status;
+    final on = s != null && s.active && (s.state == 'waiting' || s.state == 'recording');
+    _mood?.listen(on, levelDb: s?.live.levelDb);
+  }
+
+  @override
   void dispose() {
+    _flow.removeListener(_toMood);
+    _mood?.listen(false);
     _flow.cancel(); // nothing is sent if it was saved, cancelled, or never started
     if (widget.flow == null) _flow.dispose();
     super.dispose();
