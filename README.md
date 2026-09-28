@@ -1,47 +1,169 @@
-# VOX
+<p align="center">
+  <img src="brand/canti-icon-stipple.svg" width="128" alt="Canti app icon: a pixel-art robot head with a teal helmet, gold trim and two lit eyes">
+</p>
 
-A hands-free phone controller driven by non-speech vocal sounds: hums that rise, fall, arch or dip, lip pops, tongue clicks, hisses and whistles, plus your own custom sounds.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/canti-wordmark-stipple-light.svg">
+    <img src="brand/canti-wordmark-stipple.svg" width="360" alt="Canti">
+  </picture>
+</p>
 
-```
-mic ─► Pico 2 W ─(BLE)─► Android app ─► decision model ─► AccessibilityService
-       sound → text line      sequencing, screen       Jev /v1/systemone       swipe, tap, back…
-       + fingerprint          context, personalization or the local VOX student
-```
+<p align="center"><b>Hum at your phone. It listens.</b><br>
+A hands-free Android controller driven by non-speech vocal sounds: hums that rise and fall, tongue clicks, hisses, whistles.</p>
 
-1. **Hear.** A Pico 2 W with an I2S mic turns each sound into one categorical text line, e.g. `hum that rises from low to high; pitch change large; duration short; …`, plus a small fingerprint.
-2. **Understand.** The Android companion app groups sounds into sequences using the device timestamps. It matches the fingerprint against your enrolled examples, adds the screen context from the accessibility tree, and asks a decision model which action applies.
-3. **Decide.** The model is a Jev-style typed-choice model: TypeSafe's Jev API, or our fine-tuned VOX student served locally with the same `/v1/systemone` wire format.
-4. **Act.** The app performs the action through Android's AccessibilityService and confirms that it worked.
+<p align="center">
+  <img alt="Android 11–15" src="https://img.shields.io/badge/Android-API_30–35-3DDC84?logo=android&logoColor=white">
+  <img alt="Kotlin 2.2" src="https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white">
+  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-UI-02569B?logo=flutter&logoColor=white">
+  <img alt="Dart 3.13" src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white">
+  <img alt="C++17" src="https://img.shields.io/badge/C++-17-00599C?logo=cplusplus&logoColor=white">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white">
+  <br>
+  <img alt="PyTorch on ROCm" src="https://img.shields.io/badge/PyTorch-ROCm-EE4C2C?logo=pytorch&logoColor=white">
+  <img alt="Raspberry Pi Pico 2 W" src="https://img.shields.io/badge/Pico_2_W-RP2350-A22846?logo=raspberrypi&logoColor=white">
+  <img alt="Arduino core" src="https://img.shields.io/badge/arduino--pico-firmware-00878F?logo=arduino&logoColor=white">
+  <img alt="Bluetooth LE" src="https://img.shields.io/badge/BLE-GATT-0082FC?logo=bluetooth&logoColor=white">
+  <img alt="Nix" src="https://img.shields.io/badge/Nix-flakes-5277C3?logo=nixos&logoColor=white">
+  <img alt="OpenSCAD" src="https://img.shields.io/badge/OpenSCAD-case-F9D72C?logo=openscad&logoColor=black">
+  <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-lightgrey">
+</p>
 
-## Folders
+---
 
-| Folder | What it is | Start here |
+## What it is
+
+Canti turns sounds into phone actions. You hum a rising note and it swipes up. Two tongue clicks take you home. A hiss goes back. No words needed, no hands needed. (・ω・)
+
+- **Canti** is the app (and the name on the icon).
+- **VOX** is the project and the repo underneath it.
+
+The sound comes from one of two places:
+
+| Source | What hears you | Status |
 |---|---|---|
-| [`android/`](android/README.md) | The Android companion app (Kotlin, no AndroidX), the emulator test suite on open-source stand-in apps, and the nix flake for the SDK/emulator | `android/README.md`, `android/PROTOCOL.md` (the message format between device and phone) |
-| [`ui/`](ui/README.md) | Flutter screens (status screen so far), built into `android/app` from source; `ui/desktop` runs them as a Linux window on a fake backend | `ui/README.md` |
-| [`extractor/`](extractor/README.md) | Reference sound extractor in Python: audio → feature lines. It is the spec and test oracle for the Pico firmware. Also holds the recording tool, synthetic audio, real-audio evaluation and C test vectors | `extractor/README.md`, `record.py` |
-| [`finetune/`](finetune/README.md) | Everything model-side: the synthetic data generator, the students (jevlike, Kev, Verdict), local teacher models, training sweeps, and the local `/v1/systemone` server | `finetune/README.md` |
-| [`wiki/`](wiki/index.md) | Design docs and decisions: hardware, signal processing, gestures, personalization, decision models, phone control, latency, roadmap | `wiki/index.md` |
-| [`reports/`](reports/README.md) | Finished research reports | |
-| [`research_notes/`](research_notes/README.md) | Raw research notes behind the reports | |
-| `datasets/` | Public audio datasets for the real-audio evaluation. Untracked (~45 GB); see [`datasets/README.md`](datasets/README.md) | |
-| [`firmware/`](firmware/README.md) | The Pico 2 W firmware (Arduino toolchain, arduino-pico core). Bring-up sketches so far; it will port `extractor/vox_extract` and check itself against `extractor/vectors/` | `firmware/README.md` |
-| [`hardware/`](hardware/case/README.md) | The 3D-printed necklace case (parametric OpenSCAD), and a 1:1 layout template for the protoboard | `hardware/case/README.md` |
-| [`brand/`](brand/README.md) | Canti logo (wordmark and app icon, SVG), colour palette and UI shape rules | `brand/README.md` |
+| **Phone mic** | the phone itself, through the same extractor compiled to native code | works today |
+| **Pico** | a necklace: a Raspberry Pi Pico 2 W and an INMP441 mic, sending one text line per sound over Bluetooth LE | firmware works; the current build's mic wiring is being fixed |
 
-## What is not in git
+## How it works
 
-The repo holds code and docs only. These stay on disk, untracked (see `.gitignore`):
-- datasets;
-- model checkpoints;
-- generated training data (regenerate it with `python -m vox.generate`, see `finetune/data/README.md`);
-- predictions and logs;
+```
+ sound
+   │
+   ▼
+┌──────────────┐   one text line per sound:
+│  extractor   │   "hum that rises from low to high; pitch change large; duration short; …"
+│ (Pico or     │   + a small fingerprint
+│  phone, C++) │
+└──────┬───────┘
+       ▼
+┌──────────────┐   level gate (fans, keyboards), media lock, touch guard
+│    guards    │   → drop what isn't you
+└──────┬───────┘
+       ▼
+┌──────────────┐   your calibration + trained gestures
+│ personalize  │   → relabel a sound the extractor got wrong for your voice
+└──────┬───────┘
+       ▼
+┌──────────────┐   groups sounds by device time (short gaps join)
+│  sequencer   │   → "click click" is one gesture, not two
+└──────┬───────┘
+       ▼
+┌──────────────┐   rules first (fast, exact)
+│   decider    │   ├─ model: a local student over /v1/systemone
+│              │   └─ cloud: hard cases only (off by default)
+└──────┬───────┘
+       ▼
+┌──────────────┐   AccessibilityService: swipe, tap, back, home…
+│   executor   │   then checks the screen actually changed
+└──────────────┘
+```
+
+Every stage is its own file in `android/app/src/main/java/ai/vox/companion/`. Its message format is in [`android/PROTOCOL.md`](android/PROTOCOL.md).
+
+## The gestures
+
+| You make | Canti does |
+|---|---|
+| hum rising / falling | swipe up / down |
+| hum arching / dipping | swipe right / left |
+| rise or fall, then hold the note | keep scrolling while you hold |
+| hiss (or hiss click) | back |
+| click click | home |
+| click hiss | forward |
+| flat hum | long press |
+| pop | tap (Pico; on the phone mic a lone pop does nothing unless you bind it) |
+| pop pop | listen for a spoken phrase |
+
+A few extras sit on top:
+- **Voice cursor:** your pitch steers a pointer across the screen.
+- **Spoken phrases:** "open camera" or "tap send", for example. They start after the listen gesture.
+- **Your own sounds:** enroll a custom sound and bind it to any action.
+
+## The models
+
+Rules decide every gesture above. Models only come in where rules can't: phrases that don't match exactly, and picking the right thing to tap on a screen.
+
+| Model | Job | Where it runs |
+|---|---|---|
+| **Verdict** (multilingual-e5-small bi-encoder, 118M) | picks the on-screen target for a phrase, or says "not here" | nowhere yet: training on real screens; the planned phone model (int8 ONNX, 118 MB) |
+| **jevlike** (e5 encoder) | sound line + screen → action, in Jev's typed-choice format | the PC, through `finetune/servers/systemone.py` |
+| **Cloud** (DeepSeek on Ollama) | hard cases only | ollama.com, only when escalate mode is on |
+
+All three use one wire format: a text `state`, named options, and typed answers with probabilities.
+
+## Repo map
+
+```
+VOX/
+├── android/      the Canti app (Kotlin) + emulator test suite + nix flake
+├── ui/           Flutter screens, built into the app; ui/desktop previews them on Linux
+├── extractor/    reference sound extractor (Python): the spec and test oracle
+├── firmware/     Pico 2 W firmware + the C++ extractor port (checked bit-exact against Python)
+├── finetune/     data generators, students (jevlike, Verdict), training sweeps, local server
+├── hardware/     3D-printed necklace case (OpenSCAD) + protoboard template
+├── brand/        icon, wordmark, palette, pixel-art tools
+├── wiki/         architecture, decisions, process, training: the why behind everything
+├── reports/      finished research reports
+└── research_notes/
+```
+
+Each folder has its own README. For the reasoning behind any choice, start at [`wiki/index.md`](wiki/index.md).
+
+## Build
+
+Every workspace brings its own environment, so there's nothing to install globally.
+
+| Part | Command (from that folder) |
+|---|---|
+| App + unit tests | `android/suite/run.sh build` |
+| Emulator suite | `android/suite/run.sh boot && android/suite/run.sh setup && android/suite/run.sh test` |
+| Flutter UI tests | `cd ui && flutter test` (inside the Android dev shell) |
+| Extractor tests | `extractor/run python -m pytest tests -q` |
+| Firmware | `firmware/tools/build.sh` (add `--upload` to flash over the Pico's own serial port) |
+| Firmware parity | `firmware/tools/check_extract.sh` (the C++ extractor vs Python, event for event) |
+
+Notes:
+- The dev box is NixOS on an AMD Strix Halo (gfx1151) with ROCm.
+- Training uses `finetune/env.sh` and the ROCm torch in `finetune/.venv`. Don't replace that torch.
+
+## Not in git
+
+Code and docs only. These stay on disk:
+- public audio datasets (~45 GB, fetch steps in [`datasets/README.md`](datasets/README.md));
+- model checkpoints, generated training data, predictions and logs;
 - emulator state and APKs;
-- upstream clones in `finetune/third_party/`;
-- **your voice recordings** (`extractor/recordings/`, private).
+- **your voice recordings, phone screens and event logs.** These are private and never leave the machine.
 
-## Environments
+## Status
 
-- This is a NixOS machine. Each workspace brings its own environment: `finetune/env.sh` plus `.venv` (ROCm torch), `extractor/run`, and `android/nix/` (flake).
-- Commands in each README assume you run them from that workspace's folder.
-- The GPU is an AMD Strix Halo (gfx1151) running ROCm.
+It works end to end on a Galaxy Z Flip with the phone mic. Right now:
+- The Pico's mic needs its wiring checked.
+- The newest build fails some emulator tests, and those are being fixed.
+- Verdict isn't on the phone yet.
+
+The live list is in [`wiki/roadmap.md`](wiki/roadmap.md). ( ˘▽˘)っ
+
+## Licence
+
+[MIT](LICENSE) © 2026 dxcently. The Canti icon is an original robot head inspired by Canti; it's not a likeness.
