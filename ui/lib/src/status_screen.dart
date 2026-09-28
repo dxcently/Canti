@@ -210,6 +210,8 @@ class _StatusScreenState extends State<StatusScreen> {
     final p = Px.of(context);
     final canPause = s != null && s.service && !_busy;
     final paused = s != null && !_on(s);
+    // A phone or USB mic source owns the mode (the service applies it here), like a connected device does.
+    final micSource = s != null && (s.soundSource == 'phone' || s.soundSource == 'usb');
     final gap = SizedBox(height: p(5), width: p(5));
 
     final error = _error == null
@@ -273,20 +275,20 @@ class _StatusScreenState extends State<StatusScreen> {
             label: Text(paused ? 'Resume Canti' : 'Pause Canti'),
             onPressed: canPause ? _togglePause : null,
           ),
-          if (s != null && s.service && s.deviceReady) ...[
+          if (s != null && s.service && s.deviceReady)
             OutlinedButton.icon(
               key: const Key('sleep'),
               icon: const PixelGlyph(Icons7.moon),
               label: const Text('Sleep device'),
               onPressed: _busy ? null : () => _busyWhile('sleep', () => _device(sleep: true)),
             ),
+          if (s != null && s.service && (s.deviceReady || micSource))
             PixelToggle<String>(
               key: const Key('mode'),
               options: const [('gesture', 'Gesture', Icons7.hand), ('cursor', 'Cursor', Icons7.cursor)],
               selected: s.deviceMode ?? s.mode,
               onChanged: _busy ? null : (v) => _busyWhile('mode', () => _device(mode: v)),
             ),
-          ],
           if (widget.backend.hasLegacySettings)
             OutlinedButton.icon(
               key: const Key('legacy'),
@@ -340,7 +342,7 @@ class _StatusScreenState extends State<StatusScreen> {
     ];
     final right = <Widget>[
       _HeardWindow(log: _log),
-      const _BindingsWindow(),
+      _BindingsWindow(bindings: s?.bindings ?? VoxBindings.defaults),
     ];
     final log = _LogWindow(log: _log);
 
@@ -366,7 +368,15 @@ class _StatusScreenState extends State<StatusScreen> {
                       flex: 2,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [..._spaced(right, gap), gap, Expanded(child: log)],
+                        children: [
+                          Flexible(
+                            child: SingleChildScrollView(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(right, gap)),
+                            ),
+                          ),
+                          gap,
+                          Expanded(child: log),
+                        ],
                       ),
                     ),
                   ],
@@ -671,42 +681,34 @@ class _HeardWindow extends StatelessWidget {
   }
 }
 
-/// The default bindings (android/app Vocab.kt; the service has no bindings API yet): a glyph grid per mode with
-/// the bracket cursor and a name bar, and the two-sound combos, paged.
+/// The bindings window: per mode, what each sound does, from the service's resolved bindings ([VoxBindings];
+/// android `Bindings.kt`): a glyph grid with the bracket cursor and a name bar per mode, and the two-sound combos,
+/// paged. It shows the user's own rules on top of the Vocab defaults, and tags a rule's source.
 class _BindingsWindow extends StatefulWidget {
-  const _BindingsWindow();
+  const _BindingsWindow({required this.bindings});
+
+  /// The resolved bindings (the status's `bindings`, or [VoxBindings.defaults] when the service sent none).
+  final VoxBindings bindings;
 
   @override
   State<_BindingsWindow> createState() => _BindingsWindowState();
 }
 
+/// The tag for a binding that came from a user rule (null for the built-in defaults and app-only bindings).
+String? _ruleTag(String? source) => switch (source) {
+      'global' => 'global rule',
+      'app' => 'app rule',
+      'cursor' => 'cursor rule',
+      _ => null,
+    };
+
+/// A binding's name-bar text: its label, with the source of a user rule after it.
+String _bindingLabel(VoxBinding b) {
+  final tag = _ruleTag(b.source);
+  return tag == null ? b.label : '${b.label} · $tag';
+}
+
 class _BindingsWindowState extends State<_BindingsWindow> {
-  static const _gesture = [
-    GridItem('rise', GestureGlyphs.rise, 'swipe up'),
-    GridItem('fall', GestureGlyphs.fall, 'swipe down'),
-    GridItem('arch', GestureGlyphs.arch, 'swipe right'),
-    GridItem('dip', GestureGlyphs.dip, 'swipe left'),
-    GridItem('flat', GestureGlyphs.flat, 'long press'),
-    // phone or USB mic: a pop does nothing unless a rule binds it (MicPopGate.kt, user decision 2026-09-27)
-    GridItem('pop', GestureGlyphs.pop, 'tap (Pico mic)'),
-    GridItem('click', GestureGlyphs.click, 'combos only'),
-    GridItem('hiss', GestureGlyphs.hiss, 'back'),
-  ];
-  static const _cursor = [
-    GridItem('rise', GestureGlyphs.rise, 'cursor up'),
-    GridItem('fall', GestureGlyphs.fall, 'cursor down'),
-    GridItem('arch', GestureGlyphs.arch, 'cursor right'),
-    GridItem('dip', GestureGlyphs.dip, 'cursor left'),
-    GridItem('flat', GestureGlyphs.flat, 'stop'),
-    GridItem('pop', GestureGlyphs.pop, 'click'),
-    GridItem('click', GestureGlyphs.click, 'combos only'),
-    GridItem('hiss', GestureGlyphs.hiss, 'back'),
-  ];
-  static const _combos = [
-    ('pop pop', 'listen for a phrase'),
-    ('click click', 'home'),
-    ('hiss click', 'back'),
-  ];
   static const _pages = ['gesture mode', 'cursor mode', 'two-sound combos'];
 
   int _page = 0;
@@ -718,7 +720,15 @@ class _BindingsWindowState extends State<_BindingsWindow> {
     final t = CantiTheme.of(context);
     final Widget body;
     if (_page < 2) {
-      final items = _page == 0 ? _gesture : _cursor;
+      final mode = _page == 0 ? widget.bindings.gesture : widget.bindings.cursor;
+      final items = [
+        for (final sound in VoxBindings.sounds)
+          GridItem(
+            sound,
+            GestureGlyphs.bySound[sound]!,
+            mode.sounds[sound] == null ? '-' : _bindingLabel(mode.sounds[sound]!),
+          ),
+      ];
       final sel = items[_sel[_page]];
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -728,15 +738,26 @@ class _BindingsWindowState extends State<_BindingsWindow> {
           ),
           SizedBox(height: p(2)),
           NameBar(label: sel.name, value: sel.value),
+          if (mode.note != null) ...[
+            SizedBox(height: p(3)),
+            _Note(signal: Signal.idle, text: mode.note!, textKey: const Key('bindings_note')),
+          ],
         ],
       );
     } else {
+      // The two-sound combos: gesture mode's defaults and rules, then cursor mode's (pop pop names a target there, and
+      // any cursor rules; each tagged, since the same sounds can mean something else in gesture mode).
+      final combos = [
+        for (final c in widget.bindings.gesture.combos) c,
+        for (final c in widget.bindings.cursor.combos)
+          c.source == 'cursor' ? c : VoxBinding('${c.label} · cursor', c.source, c.sequence),
+      ];
       body = InvertedPanel(
         child: Column(
           children: [
-            for (final (i, (seq, action)) in _combos.indexed) ...[
+            for (final (i, c) in combos.indexed) ...[
               if (i > 0) SizedBox(height: p(1)),
-              StatRow(icon: Icons7.sound, label: seq, value: action),
+              StatRow(icon: Icons7.sound, label: c.sequence.join(' '), value: _bindingLabel(c)),
             ],
           ],
         ),
@@ -747,7 +768,7 @@ class _BindingsWindowState extends State<_BindingsWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PixelSnap(child: Text('${_pages[_page]} · defaults', style: p.body(t.ink))),
+          PixelSnap(child: Text(_pages[_page], style: p.body(t.ink))),
           SizedBox(height: p(3)),
           body,
           Center(child: PixelPager(index: _page, count: _pages.length, onChanged: (i) => setState(() => _page = i))),

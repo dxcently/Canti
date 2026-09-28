@@ -1,0 +1,108 @@
+{
+  "cursor": {
+    "sounds": {
+      "pop": {
+        "label": "click",
+        "source": "default"
+      },
+      "hiss": {
+        "label": "back",
+        "source": "default"
+      },
+      "fall": {
+        "label": "move cursor down",
+        "source": "default"
+      },
+      "flat": {
+        "label": "stop",
+        "source": "default"
+      },
+      "dip": {
+        "label": "move cursor left",
+        "source": "default"
+      },
+      "arch": {
+        "label": "move cursor right",
+        "source": "default"
+      },
+      "rise": {
+        "label": "move cursor up",
+        "source": "default"
+      }
+    },
+    "combos": [{
+      "seq": [
+        "pop",
+        "pop"
+      ],
+      "label": "listen for a target name",
+      "source": "default"
+    }]
+  },
+  "gesture": {
+    "sounds": {
+      "pop": {
+        "label": "tap the screen",
+        "source": "default"
+      },
+      "hiss": {
+        "label": "go back",
+        "source": "default"
+      },
+      "fall": {
+        "label": "swipe down",
+        "source": "default"
+      },
+      "flat": {
+        "label": "long-press / hold",
+        "source": "default"
+      },
+      "dip": {
+        "label": "swipe left",
+        "source": "default"
+      },
+      "arch": {
+        "label": "swipe right",
+        "source": "default"
+      },
+      "rise": {
+        "label": "swipe up",
+        "source": "default"
+      }
+    },
+    "combos": [
+      {
+        "seq": [
+          "pop",
+          "pop"
+        ],
+        "label": "listen for a spoken phrase",
+        "source": "default"
+      },
+      {
+        "seq": [
+          "click",
+          "click"
+        ],
+        "label": "go to the home screen",
+        "source": "default"
+      },
+      {
+        "seq": [
+          "hiss",
+          "click"
+        ],
+        "label": "go back",
+        "source": "default"
+      },
+      {
+        "seq": [
+          "click",
+          "hiss"
+        ],
+        "label": "go forward",
+        "source": "app-only"
+      }
+    ]
+  }
+}

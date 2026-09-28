@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -235,6 +238,91 @@ void main() {
     await tester.tap(find.text('Legacy settings'));
     await tester.pump();
     expect(b.legacyOpened, 1);
+  });
+
+  testWidgets('a phone mic source shows the mode toggle and commands the mode locally', (tester) async {
+    final b = await pumpApp(tester,
+        backend: FakeBackend(initial: VoxStatus.fromMap({
+          'service': true, 'armed': true, 'paused': false, 'mode': 'gesture', 'app': 'x.y', 'decider': 'rules',
+          'sound_source': 'phone',
+        })));
+    expect(find.byKey(const Key('mode')), findsOneWidget);
+    expect(find.text('Sleep device'), findsNothing); // no device to sleep
+    await tester.ensureVisible(find.text('Cursor'));
+    await tester.tap(find.text('Cursor'));
+    await tester.pumpAndSettle();
+    expect(b.commands.last, {'v': 1, 'mode': 'cursor'}); // the mic source owns the mode; applied here
+    expect(b.current.mode, 'cursor');
+  });
+
+  testWidgets('the bindings window shows the backend bindings (a user rule)', (tester) async {
+    const bindings = VoxBindings(
+      gesture: VoxModeBindings(sounds: {'rise': VoxBinding('zoom in', 'app')}, combos: []),
+      cursor: VoxModeBindings(sounds: {}, combos: []),
+    );
+    await pumpApp(tester,
+        backend: FakeBackend(
+            initial: const VoxStatus(service: true, armed: true, paused: false, mode: 'gesture', bindings: bindings)));
+    // The name bar shows the selected sound (rise), tagged with the source of the user rule.
+    expect(find.text('zoom in · app rule'), findsOneWidget);
+  });
+
+  testWidgets('the bindings window lists click hiss = forward in the combos', (tester) async {
+    await pumpApp(tester); // no bindings: the Vocab defaults are shown
+    final next = find.byTooltip('Next page');
+    for (var i = 0; i < 2; i++) {
+      await tester.ensureVisible(next);
+      await tester.pumpAndSettle();
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('go forward'), findsOneWidget);
+    expect(find.text('CLICK HISS'), findsOneWidget);
+    expect(find.text('HISS CLICK'), findsOneWidget);
+  });
+
+  test('VoxBindings parses the status map shape, and the defaults carry click hiss = forward', () {
+    final b = VoxBindings.fromMap({
+      'gesture': {
+        'sounds': {'rise': {'label': 'swipe up', 'source': 'default'}, 'click': null},
+        'combos': [
+          {'seq': ['click', 'hiss'], 'label': 'go forward', 'source': 'app-only'},
+        ],
+        'note': null,
+      },
+      'cursor': {
+        'sounds': {'pop': {'label': 'click', 'source': 'default'}},
+        'combos': [],
+        'note': 'voice joystick: hums move the cursor, a pop clicks, hiss goes back',
+      },
+    });
+    expect(b.gesture.sounds['rise']!.label, 'swipe up');
+    expect(b.gesture.sounds['click'], isNull);
+    expect(b.gesture.combos.single.sequence, ['click', 'hiss']);
+    expect(b.gesture.combos.single.label, 'go forward');
+    expect(b.cursor.note, 'voice joystick: hums move the cursor, a pop clicks, hiss goes back');
+    expect(VoxBindings.defaults.gesture.combos.map((c) => c.sequence.join(' ')),
+        ['pop pop', 'click click', 'hiss click', 'click hiss']);
+    expect(VoxBindings.defaults.gesture.combos.last.label, 'go forward');
+    expect(VoxBindings.defaults.cursor.note, isNull);
+    expect(VoxBindings.defaults.cursor.combos.single.sequence, ['pop', 'pop']); // names a target in cursor mode
+    expect(VoxBindings.fromMapOrNull(null), isNull);
+    expect(VoxBindings.fromMapOrNull('x'), isNull);
+  });
+
+  test('VoxBindings.defaults equals what the service sends with no rules (fixture from android BindingsTest)', () {
+    // android/app BindingsTest.defaultsFixtureForFlutter writes and checks this file from Bindings.view.
+    final m = jsonDecode(File('test/fixtures/bindings_defaults.json').readAsStringSync()) as Map<String, Object?>;
+    final want = VoxBindings.fromMap(m);
+    const have = VoxBindings.defaults;
+    for (final (mode, w, h) in [('gesture', want.gesture, have.gesture), ('cursor', want.cursor, have.cursor)]) {
+      for (final s in VoxBindings.sounds) {
+        expect([h.sounds[s]?.label, h.sounds[s]?.source], [w.sounds[s]?.label, w.sounds[s]?.source], reason: '$mode $s');
+      }
+      expect([for (final c in h.combos) [c.sequence.join(' '), c.label, c.source]],
+          [for (final c in w.combos) [c.sequence.join(' '), c.label, c.source]], reason: '$mode combos');
+      expect(h.note, w.note, reason: '$mode note');
+    }
   });
 
   group('ChannelBackend', () {

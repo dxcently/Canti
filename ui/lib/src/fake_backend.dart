@@ -96,11 +96,26 @@ class FakeBackend implements VoxBackend {
   @override
   Future<DeviceResult> deviceCommand({bool? armed, String? mode, bool sleep = false}) async {
     final label = sleep ? 'sleep' : [if (armed != null) armed ? 'arm' : 'pause', if (mode != null) 'mode $mode'].join(' + ');
-    if (!current.deviceReady) {
+    final mic = current.soundSource == 'phone' || current.soundSource == 'usb';
+    if (!current.deviceReady && !mic) {
       emit('device_cmd', {'cmd': label, 'result': 'failed', 'error': 'no device connected'});
       return DeviceResult(ok: false, result: 'failed', cmd: label, error: 'no device connected');
     }
     commands.add({'v': 1, 'armed': ?armed, 'mode': ?mode, if (sleep) 'sleep': true});
+    if (mic) {
+      // A phone or USB mic source owns the mode and arm state: applied here (VoxService.deviceCommand). No device to sleep.
+      if (sleep) {
+        emit('device_cmd', {'cmd': label, 'result': 'failed', 'error': 'no device with a mic source'});
+        return DeviceResult(ok: false, result: 'failed', cmd: label, error: 'no device with a mic source');
+      }
+      final a = armed ?? current.armed;
+      final m = mode ?? current.mode;
+      current = current.copyWith(armed: a, mode: m, deviceArmed: a, deviceMode: m, deviceError: () => null);
+      if (mode != null) emit('mode', {'mode': m});
+      if (armed != null) emit('arm', {'state': a ? 'armed' : 'disarmed', 'by': 'app'});
+      emit('device_cmd', {'cmd': label, 'result': 'applied', 'local': true});
+      return DeviceResult(ok: true, result: 'applied', cmd: label);
+    }
     emit('device_cmd', {'cmd': label, 'result': 'sent'});
     if (!confirmDevice) {
       await Future<void>.delayed(deviceTimeout);
