@@ -1,0 +1,19 @@
+{
+ "runs/jl9-J5b-s7.pt": {
+  "device": "cpu",
+  "n": 50,
+  "p50_ms": 322.35,
+  "p90_ms": 431.68,
+  "mean_ms": 334.34,
+  "jl_option_cache": true,
+  "cache_hits": 382,
+  "cache_misses": 38
+ },
+ "students/verdict/runs/verdict-bi-real-v1d": {
+  "device": "cpu",
+  "n": 50,
+  "p50_ms": 311.21,
+  "p90_ms": 482.12,
+  "mean_ms": 364.56
+ }
+}

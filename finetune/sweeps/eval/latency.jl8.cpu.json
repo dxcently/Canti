@@ -1,0 +1,20 @@
+{
+ "runs/jl8-C-s7.pt": {
+  "device": "cpu",
+  "n": 50,
+  "p50_ms": 897.52,
+  "p90_ms": 1141.0
+ },
+ "runs/jl8-J4-s7.pt": {
+  "device": "cpu",
+  "n": 50,
+  "p50_ms": 759.84,
+  "p90_ms": 1114.05
+ },
+ "students/verdict/runs/verdict-bi-real-v1d": {
+  "device": "cpu",
+  "n": 50,
+  "p50_ms": 311.13,
+  "p90_ms": 419.75
+ }
+}

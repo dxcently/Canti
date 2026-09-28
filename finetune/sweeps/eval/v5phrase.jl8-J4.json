@@ -1,0 +1,818 @@
+{
+ "test_unseen_phrasing": {
+  "runs/jl8-C-s7.pt": {
+   "all": {
+    "acc": 0.1375,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1167,
+    "n": 317
+   },
+   "cursor": {
+    "acc": 0.1083,
+    "n": 240
+   },
+   "default": {
+    "acc": 0.0047,
+    "n": 211
+   },
+   "disabled": {
+    "acc": 0.1558,
+    "n": 77
+   },
+   "global_rule": {
+    "acc": 0.1192,
+    "n": 151
+   },
+   "not_deliberate": {
+    "acc": 0.095,
+    "n": 242
+   },
+   "other": {
+    "acc": 0.0955,
+    "n": 1686
+   },
+   "phrase": {
+    "acc": 0.3171,
+    "n": 164
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.3631,
+    "n": 314
+   },
+   "phrase_rule": {
+    "acc": 0.1111,
+    "n": 153
+   },
+   "screen_phrase": {
+    "acc": 0.4133,
+    "n": 150
+   },
+   "sequence": {
+    "acc": 0.0676,
+    "n": 222
+   },
+   "unbound": {
+    "acc": 0.1644,
+    "n": 73
+   }
+  },
+  "runs/jl8-C-s8.pt": {
+   "all": {
+    "acc": 0.1265,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.0915,
+    "n": 317
+   },
+   "cursor": {
+    "acc": 0.0417,
+    "n": 240
+   },
+   "default": {
+    "acc": 0.109,
+    "n": 211
+   },
+   "disabled": {
+    "acc": 0.013,
+    "n": 77
+   },
+   "global_rule": {
+    "acc": 0.1457,
+    "n": 151
+   },
+   "not_deliberate": {
+    "acc": 0.0165,
+    "n": 242
+   },
+   "other": {
+    "acc": 0.0872,
+    "n": 1686
+   },
+   "phrase": {
+    "acc": 0.2744,
+    "n": 164
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.3376,
+    "n": 314
+   },
+   "phrase_rule": {
+    "acc": 0.1503,
+    "n": 153
+   },
+   "screen_phrase": {
+    "acc": 0.4067,
+    "n": 150
+   },
+   "sequence": {
+    "acc": 0.1486,
+    "n": 222
+   },
+   "unbound": {
+    "acc": 0.0274,
+    "n": 73
+   }
+  },
+  "runs/jl8-C-s9.pt": {
+   "all": {
+    "acc": 0.186,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.082,
+    "n": 317
+   },
+   "cursor": {
+    "acc": 0.1417,
+    "n": 240
+   },
+   "default": {
+    "acc": 0.0142,
+    "n": 211
+   },
+   "disabled": {
+    "acc": 0.4805,
+    "n": 77
+   },
+   "global_rule": {
+    "acc": 0.1192,
+    "n": 151
+   },
+   "not_deliberate": {
+    "acc": 0.5331,
+    "n": 242
+   },
+   "other": {
+    "acc": 0.1892,
+    "n": 1686
+   },
+   "phrase": {
+    "acc": 0.2317,
+    "n": 164
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.1688,
+    "n": 314
+   },
+   "phrase_rule": {
+    "acc": 0.1699,
+    "n": 153
+   },
+   "screen_phrase": {
+    "acc": 0.1,
+    "n": 150
+   },
+   "sequence": {
+    "acc": 0.0631,
+    "n": 222
+   },
+   "unbound": {
+    "acc": 0.4384,
+    "n": 73
+   }
+  },
+  "runs/jl8-J4-s7.pt": {
+   "all": {
+    "acc": 0.1615,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1104,
+    "n": 317
+   },
+   "cursor": {
+    "acc": 0.1,
+    "n": 240
+   },
+   "default": {
+    "acc": 0.0948,
+    "n": 211
+   },
+   "disabled": {
+    "acc": 0.1688,
+    "n": 77
+   },
+   "global_rule": {
+    "acc": 0.2252,
+    "n": 151
+   },
+   "not_deliberate": {
+    "acc": 0.0868,
+    "n": 242
+   },
+   "other": {
+    "acc": 0.1305,
+    "n": 1686
+   },
+   "phrase": {
+    "acc": 0.2317,
+    "n": 164
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.328,
+    "n": 314
+   },
+   "phrase_rule": {
+    "acc": 0.2484,
+    "n": 153
+   },
+   "screen_phrase": {
+    "acc": 0.4333,
+    "n": 150
+   },
+   "sequence": {
+    "acc": 0.0901,
+    "n": 222
+   },
+   "unbound": {
+    "acc": 0.2055,
+    "n": 73
+   }
+  },
+  "runs/jl8-J4-s8.pt": {
+   "all": {
+    "acc": 0.1595,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1293,
+    "n": 317
+   },
+   "cursor": {
+    "acc": 0.1292,
+    "n": 240
+   },
+   "default": {
+    "acc": 0.0569,
+    "n": 211
+   },
+   "disabled": {
+    "acc": 0.039,
+    "n": 77
+   },
+   "global_rule": {
+    "acc": 0.1722,
+    "n": 151
+   },
+   "not_deliberate": {
+    "acc": 0.0413,
+    "n": 242
+   },
+   "other": {
+    "acc": 0.1062,
+    "n": 1686
+   },
+   "phrase": {
+    "acc": 0.3963,
+    "n": 164
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.4459,
+    "n": 314
+   },
+   "phrase_rule": {
+    "acc": 0.1765,
+    "n": 153
+   },
+   "screen_phrase": {
+    "acc": 0.5,
+    "n": 150
+   },
+   "sequence": {
+    "acc": 0.0721,
+    "n": 222
+   },
+   "unbound": {
+    "acc": 0.1781,
+    "n": 73
+   }
+  },
+  "runs/jl8-J4-s9.pt": {
+   "all": {
+    "acc": 0.17,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1009,
+    "n": 317
+   },
+   "cursor": {
+    "acc": 0.1458,
+    "n": 240
+   },
+   "default": {
+    "acc": 0.0095,
+    "n": 211
+   },
+   "disabled": {
+    "acc": 0.3377,
+    "n": 77
+   },
+   "global_rule": {
+    "acc": 0.1258,
+    "n": 151
+   },
+   "not_deliberate": {
+    "acc": 0.3017,
+    "n": 242
+   },
+   "other": {
+    "acc": 0.1542,
+    "n": 1686
+   },
+   "phrase": {
+    "acc": 0.2866,
+    "n": 164
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.2548,
+    "n": 314
+   },
+   "phrase_rule": {
+    "acc": 0.2288,
+    "n": 153
+   },
+   "screen_phrase": {
+    "acc": 0.22,
+    "n": 150
+   },
+   "sequence": {
+    "acc": 0.0541,
+    "n": 222
+   },
+   "unbound": {
+    "acc": 0.3562,
+    "n": 73
+   }
+  },
+  "students/verdict/runs/verdict-bi-real-v1d": {
+   "all": {
+    "acc": 0.1835,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1514,
+    "n": 317
+   },
+   "cursor": {
+    "acc": 0.1125,
+    "n": 240
+   },
+   "default": {
+    "acc": 0.0521,
+    "n": 211
+   },
+   "disabled": {
+    "acc": 0.3377,
+    "n": 77
+   },
+   "global_rule": {
+    "acc": 0.2053,
+    "n": 151
+   },
+   "not_deliberate": {
+    "acc": 0.2438,
+    "n": 242
+   },
+   "other": {
+    "acc": 0.1643,
+    "n": 1686
+   },
+   "phrase": {
+    "acc": 0.3171,
+    "n": 164
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.2866,
+    "n": 314
+   },
+   "phrase_rule": {
+    "acc": 0.268,
+    "n": 153
+   },
+   "screen_phrase": {
+    "acc": 0.2533,
+    "n": 150
+   },
+   "sequence": {
+    "acc": 0.0946,
+    "n": 222
+   },
+   "unbound": {
+    "acc": 0.1781,
+    "n": 73
+   }
+  }
+ },
+ "test_iid": {
+  "runs/jl8-C-s7.pt": {
+   "all": {
+    "acc": 0.1625,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.113,
+    "n": 292
+   },
+   "cursor": {
+    "acc": 0.086,
+    "n": 221
+   },
+   "default": {
+    "acc": 0.0048,
+    "n": 210
+   },
+   "disabled": {
+    "acc": 0.2533,
+    "n": 75
+   },
+   "global_rule": {
+    "acc": 0.0976,
+    "n": 164
+   },
+   "not_deliberate": {
+    "acc": 0.0729,
+    "n": 247
+   },
+   "other": {
+    "acc": 0.1,
+    "n": 1670
+   },
+   "phrase": {
+    "acc": 0.4503,
+    "n": 171
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.4788,
+    "n": 330
+   },
+   "phrase_rule": {
+    "acc": 0.2078,
+    "n": 154
+   },
+   "screen_phrase": {
+    "acc": 0.5094,
+    "n": 159
+   },
+   "sequence": {
+    "acc": 0.0664,
+    "n": 241
+   },
+   "unbound": {
+    "acc": 0.197,
+    "n": 66
+   }
+  },
+  "runs/jl8-C-s8.pt": {
+   "all": {
+    "acc": 0.149,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1267,
+    "n": 292
+   },
+   "cursor": {
+    "acc": 0.0543,
+    "n": 221
+   },
+   "default": {
+    "acc": 0.0952,
+    "n": 210
+   },
+   "disabled": {
+    "acc": 0.0133,
+    "n": 75
+   },
+   "global_rule": {
+    "acc": 0.122,
+    "n": 164
+   },
+   "not_deliberate": {
+    "acc": 0.0121,
+    "n": 247
+   },
+   "other": {
+    "acc": 0.0916,
+    "n": 1670
+   },
+   "phrase": {
+    "acc": 0.4386,
+    "n": 171
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.4394,
+    "n": 330
+   },
+   "phrase_rule": {
+    "acc": 0.1818,
+    "n": 154
+   },
+   "screen_phrase": {
+    "acc": 0.4403,
+    "n": 159
+   },
+   "sequence": {
+    "acc": 0.1245,
+    "n": 241
+   },
+   "unbound": {
+    "acc": 0.0303,
+    "n": 66
+   }
+  },
+  "runs/jl8-C-s9.pt": {
+   "all": {
+    "acc": 0.1875,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.0925,
+    "n": 292
+   },
+   "cursor": {
+    "acc": 0.1086,
+    "n": 221
+   },
+   "default": {
+    "acc": 0.0238,
+    "n": 210
+   },
+   "disabled": {
+    "acc": 0.4667,
+    "n": 75
+   },
+   "global_rule": {
+    "acc": 0.1037,
+    "n": 164
+   },
+   "not_deliberate": {
+    "acc": 0.4575,
+    "n": 247
+   },
+   "other": {
+    "acc": 0.1808,
+    "n": 1670
+   },
+   "phrase": {
+    "acc": 0.3041,
+    "n": 171
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.2212,
+    "n": 330
+   },
+   "phrase_rule": {
+    "acc": 0.2078,
+    "n": 154
+   },
+   "screen_phrase": {
+    "acc": 0.1321,
+    "n": 159
+   },
+   "sequence": {
+    "acc": 0.0456,
+    "n": 241
+   },
+   "unbound": {
+    "acc": 0.5758,
+    "n": 66
+   }
+  },
+  "runs/jl8-J4-s7.pt": {
+   "all": {
+    "acc": 0.1815,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1507,
+    "n": 292
+   },
+   "cursor": {
+    "acc": 0.0814,
+    "n": 221
+   },
+   "default": {
+    "acc": 0.1286,
+    "n": 210
+   },
+   "disabled": {
+    "acc": 0.1867,
+    "n": 75
+   },
+   "global_rule": {
+    "acc": 0.1463,
+    "n": 164
+   },
+   "not_deliberate": {
+    "acc": 0.0688,
+    "n": 247
+   },
+   "other": {
+    "acc": 0.1371,
+    "n": 1670
+   },
+   "phrase": {
+    "acc": 0.3743,
+    "n": 171
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.4061,
+    "n": 330
+   },
+   "phrase_rule": {
+    "acc": 0.3182,
+    "n": 154
+   },
+   "screen_phrase": {
+    "acc": 0.4403,
+    "n": 159
+   },
+   "sequence": {
+    "acc": 0.083,
+    "n": 241
+   },
+   "unbound": {
+    "acc": 0.2424,
+    "n": 66
+   }
+  },
+  "runs/jl8-J4-s8.pt": {
+   "all": {
+    "acc": 0.174,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.1541,
+    "n": 292
+   },
+   "cursor": {
+    "acc": 0.0724,
+    "n": 221
+   },
+   "default": {
+    "acc": 0.0857,
+    "n": 210
+   },
+   "disabled": {
+    "acc": 0.0267,
+    "n": 75
+   },
+   "global_rule": {
+    "acc": 0.1463,
+    "n": 164
+   },
+   "not_deliberate": {
+    "acc": 0.0364,
+    "n": 247
+   },
+   "other": {
+    "acc": 0.1048,
+    "n": 1670
+   },
+   "phrase": {
+    "acc": 0.5263,
+    "n": 171
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.5242,
+    "n": 330
+   },
+   "phrase_rule": {
+    "acc": 0.2143,
+    "n": 154
+   },
+   "screen_phrase": {
+    "acc": 0.522,
+    "n": 159
+   },
+   "sequence": {
+    "acc": 0.0705,
+    "n": 241
+   },
+   "unbound": {
+    "acc": 0.1667,
+    "n": 66
+   }
+  },
+  "runs/jl8-J4-s9.pt": {
+   "all": {
+    "acc": 0.1805,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.0993,
+    "n": 292
+   },
+   "cursor": {
+    "acc": 0.1719,
+    "n": 221
+   },
+   "default": {
+    "acc": 0.0048,
+    "n": 210
+   },
+   "disabled": {
+    "acc": 0.3333,
+    "n": 75
+   },
+   "global_rule": {
+    "acc": 0.1341,
+    "n": 164
+   },
+   "not_deliberate": {
+    "acc": 0.2996,
+    "n": 247
+   },
+   "other": {
+    "acc": 0.1563,
+    "n": 1670
+   },
+   "phrase": {
+    "acc": 0.3275,
+    "n": 171
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.303,
+    "n": 330
+   },
+   "phrase_rule": {
+    "acc": 0.2597,
+    "n": 154
+   },
+   "screen_phrase": {
+    "acc": 0.2767,
+    "n": 159
+   },
+   "sequence": {
+    "acc": 0.0415,
+    "n": 241
+   },
+   "unbound": {
+    "acc": 0.3333,
+    "n": 66
+   }
+  },
+  "students/verdict/runs/verdict-bi-real-v1d": {
+   "all": {
+    "acc": 0.218,
+    "n": 2000
+   },
+   "app_rule": {
+    "acc": 0.2158,
+    "n": 292
+   },
+   "cursor": {
+    "acc": 0.095,
+    "n": 221
+   },
+   "default": {
+    "acc": 0.019,
+    "n": 210
+   },
+   "disabled": {
+    "acc": 0.3333,
+    "n": 75
+   },
+   "global_rule": {
+    "acc": 0.1951,
+    "n": 164
+   },
+   "not_deliberate": {
+    "acc": 0.2915,
+    "n": 247
+   },
+   "other": {
+    "acc": 0.1892,
+    "n": 1670
+   },
+   "phrase": {
+    "acc": 0.3743,
+    "n": 171
+   },
+   "phrase+screen_phrase": {
+    "acc": 0.3636,
+    "n": 330
+   },
+   "phrase_rule": {
+    "acc": 0.2792,
+    "n": 154
+   },
+   "screen_phrase": {
+    "acc": 0.3522,
+    "n": 159
+   },
+   "sequence": {
+    "acc": 0.1826,
+    "n": 241
+   },
+   "unbound": {
+    "acc": 0.1818,
+    "n": 66
+   }
+  }
+ }
+}

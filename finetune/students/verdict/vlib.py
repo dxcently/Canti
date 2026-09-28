@@ -77,6 +77,11 @@ class Student(nn.Module):
             if (Path(src) / "head.pt").exists():
                 self.head.load_state_dict(torch.load(Path(src) / "head.pt", map_location="cpu"))
         self._opt_cache: dict[str, torch.Tensor] = {}
+        # jl9 opt-in (train.py --fast-embed): embed() encodes length-sorted chunks padded only to the chunk's longest text
+        # (<= embed_chunk_tokens padded tokens per chunk) instead of one batch padded to the longest. Same function (padding
+        # is masked; XLM-R position ids skip padding); only float noise and, in training, dropout draws differ.
+        self.fast_embed = False
+        self.embed_chunk_tokens = 4096
         self.to(device)
 
     # ------------------------------------------------------------------ encoding
@@ -89,9 +94,28 @@ class Student(nn.Module):
         return out
 
     def embed(self, texts, max_len=None):
+        if self.fast_embed and len(texts) > 1:
+            return self._embed_chunked(texts, max_len)
         b = self._tok(texts, max_len=max_len)
         h = self.enc(**b).last_hidden_state
         return F.normalize(mean_pool(h, b["attention_mask"]).float(), dim=-1)
+
+    def _embed_chunked(self, texts, max_len=None):
+        enc = self.tok(texts, truncation=True, max_length=max_len or self.max_len)["input_ids"]
+        order = sorted(range(len(enc)), key=lambda i: -len(enc[i]))
+        out = [None] * len(enc)
+        i = 0
+        while i < len(order):
+            L = max(1, len(enc[order[i]]))
+            sel = order[i:i + max(1, self.embed_chunk_tokens // L)]
+            b = self.tok.pad({"input_ids": [enc[j] for j in sel]}, return_tensors="pt")
+            b = {k: v.to(self.device) for k, v in b.items()}
+            h = self.enc(**b).last_hidden_state
+            v = F.normalize(mean_pool(h, b["attention_mask"]).float(), dim=-1)
+            for j, row in zip(sel, v):
+                out[j] = row
+            i += len(sel)
+        return torch.stack(out)
 
     def option_embeddings(self, options, cache=False):
         if not cache:

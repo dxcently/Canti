@@ -62,6 +62,9 @@ def main():
                          "Saved in student.json and the ONNX export; the app only sends v2 text to a model that declares v2")
     ap.add_argument("--decay-norm-bias", type=int, choices=[0, 1], default=0,
                     help="1 = old recipe (v1a-v1e): weight decay on LayerNorm weights and biases too; 0 (default since 2026-09-27) = no decay on them")
+    ap.add_argument("--fast-embed", action="store_true",
+                    help="bi: embed contexts and (already de-duplicated) options in length-sorted chunks padded per chunk "
+                         "(vlib.Student.fast_embed); same function up to float noise, different dropout draws")
     a = ap.parse_args()
 
     torch.manual_seed(a.seed); rng = random.Random(a.seed)
@@ -83,6 +86,8 @@ def main():
     teacher = load_teacher(a.teacher_probs or None, rows)
     val_rows = load_rows(a.val, a.val_limit or None) if a.val_limit else []
     m = vlib.Student(a.init, a.arch, max_len=a.max_len, device=a.device)
+    if a.fast_embed:
+        m.fast_embed = True
     if not a.train_embeddings:
         m.enc.get_input_embeddings().weight.requires_grad_(False)
     head = list(m.head.parameters()) if a.arch == "cross" else []

@@ -76,6 +76,12 @@ $RUN "$PRE python students/verdict/predict.py --run Manav2op/verdict-small --arc
 44 pairs) for the cross archs. Token embeddings are frozen by default (`--train-embeddings` unfreezes them), which
 leaves 21.6M trainable parameters. The 250k-token vocabulary matrix is 96M of the 118M parameters, and VOX uses a small part of it.
 
+`--fast-embed` (bi, opt-in, jl9) embeds contexts and options in length-sorted chunks, each padded only to its own longest
+text. Options were already de-duplicated per batch. In fp32 the logits match the default path to 3e-6. Training runs
+about 8% faster (170 to 184 rows/s) and peak memory falls from 3.2 to 2.2 GB. A teacher cross-fit fold is only 3% faster
+(315.5 s to 306.6 s). Steps are launch-bound on the ~50-token contexts (`sweeps/logs/jl9-verdict-profile.log`), so batch
+size is the real lever (32: 254 rows/s, 64: 322 rows/s). It is not adopted, because it changes the recipe.
+
 ## Smoke results (2,000 train rows, 3 epochs, batch 16, lr 5e-5; 300 rows per test split)
 
 These were measured on a shared box: another agent was training on the same GPU the whole time, and the CPU load average

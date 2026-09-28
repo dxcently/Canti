@@ -1,0 +1,17 @@
+{
+ "runs/jl9-J5b-s7.pt": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 7.82,
+  "p90_ms": 8.86,
+  "mean_ms": 7.92,
+  "jl_option_cache": false
+ },
+ "students/verdict/runs/verdict-bi-real-v1d": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 3.18,
+  "p90_ms": 6.36,
+  "mean_ms": 3.71
+ }
+}

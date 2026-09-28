@@ -1,0 +1,26 @@
+{
+ "runs/sweep-targets-v2-e5-small-e3.pt": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 8.06,
+  "p90_ms": 8.97
+ },
+ "runs/jl7-J1.pt": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 8.12,
+  "p90_ms": 9.2
+ },
+ "runs/jl7-J2.pt": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 7.71,
+  "p90_ms": 8.7
+ },
+ "students/verdict/runs/verdict-bi-real-v1d": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 3.22,
+  "p90_ms": 6.5
+ }
+}

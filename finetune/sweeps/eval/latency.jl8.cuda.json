@@ -1,0 +1,20 @@
+{
+ "runs/jl8-C-s7.pt": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 8.17,
+  "p90_ms": 9.21
+ },
+ "runs/jl8-J4-s7.pt": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 8.11,
+  "p90_ms": 9.05
+ },
+ "students/verdict/runs/verdict-bi-real-v1d": {
+  "device": "cuda",
+  "n": 200,
+  "p50_ms": 3.19,
+  "p90_ms": 6.45
+ }
+}
