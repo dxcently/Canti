@@ -42,7 +42,7 @@ float hash(vec2 p) {
 }
 
 // The EQ band's height in cells: the bars and their peak dots stay under it (lib/src/theme/dither_background.dart
-// `eqBandCells`, the strip the status screen keeps clear for them).
+// `eqBandCells`). No screen reserves room for them; they show where content leaves space.
 const float BAND = 14.0;
 
 // Density of the EQ bars at cell column cx, y cells above the bottom bar (0 = the row standing on it); -1 for none.

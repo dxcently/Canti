@@ -11,8 +11,7 @@ import 'clearing.dart';
 import 'pixel.dart';
 
 /// The EQ band's height in cells of the field ([cellArtPx] art px each): the bars and their peak dots stay under it
-/// (shaders/dither_field.frag `BAND`). A screen that fills the page keeps this strip clear above the bottom bar so
-/// the band shows (the status screen).
+/// (shaders/dither_field.frag `BAND`). No screen reserves room for it: the bars show only where content leaves space.
 const eqBandCells = 14;
 
 /// The EQ bars' motif; its index is the shader's `uMode`.

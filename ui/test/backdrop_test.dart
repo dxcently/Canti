@@ -71,7 +71,7 @@ void main() {
     expect(mood.motif, BackdropMotif.flat);
   });
 
-  testWidgets('the status screen keeps the EQ band\'s strip clear at the bottom', (tester) async {
+  testWidgets('the status screen keeps no strip for the EQ band: the bars show only in free space', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.625;
     tester.view.viewPadding = const FakeViewPadding(bottom: 63);
@@ -82,7 +82,7 @@ void main() {
     final p = Px.of(tester.element(find.byType(StatusScreen)));
     final scroll = tester.getRect(find.byType(SingleChildScrollView).first);
     final bottom = 2400 / 2.625 - 63 / 2.625;
-    expect(bottom - scroll.bottom, moreOrLessEquals(p(cellArtPx * eqBandCells), epsilon: 0.01));
+    expect(bottom - scroll.bottom, lessThan(p(cellArtPx * eqBandCells)));
   });
 
   testWidgets('the status screen: no service is off', (tester) async {

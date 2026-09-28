@@ -11,7 +11,6 @@ import 'pair_screen.dart';
 import 'theme/assets.dart';
 import 'theme/canti_theme.dart';
 import 'theme/clearing.dart';
-import 'theme/dither_background.dart';
 import 'theme/glyphs.dart';
 import 'theme/kit.dart';
 import 'theme/motion.dart';
@@ -442,57 +441,53 @@ class _StatusScreenState extends State<StatusScreen> {
 
     return Scaffold(
       body: SafeArea(
-        // a strip kept clear at the bottom, so the background's EQ band (what Canti is doing) always shows
-        child: Padding(
-          padding: EdgeInsets.only(bottom: p(cellArtPx * eqBandCells)),
-          child: LayoutBuilder(
-            builder: (context, box) {
-              final pad = EdgeInsets.all(p(5));
-              if (box.maxWidth >= 700) {
-                return Padding(
-                  padding: pad,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: SingleChildScrollView(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(left, gap)),
-                        ),
-                      ),
-                      gap,
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Flexible(
-                              child: SingleChildScrollView(
-                                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(right, gap)),
-                              ),
-                            ),
-                            gap,
-                            Expanded(child: log),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return SingleChildScrollView(
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final pad = EdgeInsets.all(p(5));
+            if (box.maxWidth >= 700) {
+              return Padding(
                 padding: pad,
-                child: Column(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _spaced([
-                    ...left,
-                    ...right,
-                    SizedBox(height: (box.maxHeight * 0.55).clamp(p(120), 420.0), child: log),
-                  ], gap),
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: SingleChildScrollView(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(left, gap)),
+                      ),
+                    ),
+                    gap,
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Flexible(
+                            child: SingleChildScrollView(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(right, gap)),
+                            ),
+                          ),
+                          gap,
+                          Expanded(child: log),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               );
-            },
-          ),
+            }
+            return SingleChildScrollView(
+              padding: pad,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _spaced([
+                  ...left,
+                  ...right,
+                  SizedBox(height: (box.maxHeight * 0.55).clamp(p(120), 420.0), child: log),
+                ], gap),
+              ),
+            );
+          },
         ),
       ),
     );

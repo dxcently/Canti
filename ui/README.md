@@ -187,8 +187,8 @@ picks the motif, the shader's `uMode`:
 events); the calibration and training screens set `listen(on, levelDb:)` while they record and clear it when they
 close. Only the background listens: no widget rebuilds.
 
-The status screen fills the page with windows, so it keeps a strip of `eqBandCells` cells clear above the navigation
-bar (its scroll view ends there): the band always shows on the home page, on the phone and the desktop.
+No screen reserves room for the band: the bars show only where content leaves the bottom of the page free (on the
+phone's home page only when the windows end above it; on the desktop's taller layout).
 
 **Clearings.** Text and art straight on the field get a clearing, not a plate: the dots thin out to clear paper in the
 field's own terms, whole cells of its grid ordered by its Bayer matrix.
