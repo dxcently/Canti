@@ -14,7 +14,8 @@ from collections import Counter
 from students.common import load_rows
 from vox import generate as v5
 from vox.schema import APPS
-from vox.whatgen import SPLITS, decide, generate, keep_rows, synonym_group, trajectory, vocabulary
+from vox import bank
+from vox.whatgen import SPLITS, decide, load_bank, generate, keep_rows, synonym_group, trajectory, vocabulary
 
 DATA = Path(__file__).resolve().parents[1] / "data"  # gitignored; keeps test output inside the checkout
 
@@ -74,7 +75,8 @@ CASES = [
     ("play", False, [], "wait"),  # may continue 'play or pause'
     ("play", True, [], "play"),
     ("pause", True, [], "pause"),
-    ("resume", False, [], "play"),
+    ("resume", False, [], "wait"),  # may continue 'resume or halt playback' (LLM bank)
+    ("resume playing", False, [], "play"),
     ("volume up", False, [], "volume_up"),
     ("turn the volume down", False, [], "volume_down"),
     ("uh open YouTube", False, [], "open_app youtube"),
@@ -88,14 +90,27 @@ CASES = [
     ("go home then go home", True, ["home", "home"], "done"),
     ("type hello no", False, [], "wait"),
     ("type hello no wait,", False, [], "wait"),
-    ("type hello no wait,", True, [], "none"),
+    ("type hello no wait,", True, [], "wait"),  # dangling restart: keep listening
     ("type hello no wait, go home", False, [], "home"),
     ("open YouTube no wait, open Spotify", True, [], "open_app spotify"),
-    ("open YouTube no wait, open Spotify", False, ["open_app youtube"], "open_app spotify"),
+    ("open YouTube no wait, open Spotify", False, ["open_app youtube"], "undo open_app youtube"),
+    ("open YouTube no wait, open Spotify", False, ["open_app youtube", "undo open_app youtube"], "open_app spotify"),
+    ("open YouTube no wait,", False, ["open_app youtube"], "undo open_app youtube"),
+    ("open YouTube no", False, ["open_app youtube"], "wait"),  # bare trailing 'no' may be more speech
+    ("open YouTube no", True, ["open_app youtube"], "undo open_app youtube"),
+    ("open YouTube and no wait, open Spotify", False, ["open_app youtube"], "undo open_app youtube"),
+    ("scroll down three times no wait, scroll up", False, ["scroll_down 3"], "undo scroll_down 3"),
+    ("scroll down three times no wait, scroll up", True, ["scroll_down 3", "undo scroll_down 3"], "scroll_up 1"),
+    ("open YouTube no wait, open Spotify no wait, open Chrome", False,
+     ["open_app youtube", "undo open_app youtube", "open_app spotify"], "undo open_app spotify"),
+    ("go home then open YouTube no wait, go back", False, ["home", "open_app youtube"], "undo open_app youtube"),
+    ("go home then open YouTube no wait, go back", False, ["home", "open_app youtube", "undo open_app youtube"], "back"),
+    ("go home no wait, go home", True, ["home", "undo home", "home"], "done"),
     ("go home then type hello no wait, go back", True, ["home"], "back"),
-    ("go home no wait, go home", True, ["home"], "home"),
+    ("go home no wait, go home", True, ["home"], "undo home"),
+    ("go home no wait, go home", True, ["home", "undo home"], "home"),
     ("type a no wait, type b no wait, type c", True, [], 'type "c"'),
-    ("go home and", True, ["home"], "none"),
+    ("go home and", True, ["home"], "wait"),
     ("go home", True, ["back"], "none"),
     ("go home, go back after that volume up", True, ["home"], "back"),
     ("jump to the launcher", False, [], "home"),
@@ -113,8 +128,11 @@ CASES = [
     ("search for", False, [], "wait"),
     ("go home, uh, go back", True, ["home"], "back"),
     ("go home then uh", False, ["home"], "wait"),
-    ("go home and then", True, ["home"], "none"),
-    ("type Mom no wait,", True, [], "none"),
+    ("go home and then", True, ["home"], "wait"),
+    ("type Mom no wait,", True, [], "wait"),
+    ("type Mom and", True, [], 'type "Mom"'),
+    ("type Mom and", True, ['type "Mom"'], "wait"),
+    ("pause it", True, [], "pause"),  # words, not media state (v5 said none when already paused)
     ("no I'm talking to someone", True, [], "none"),
     ("hmm", True, [], "none"),
 ]
@@ -222,8 +240,10 @@ class DatasetTests(unittest.TestCase):
                     full = trajectory(utterance)
                     self.assertEqual(len([a for *_, a in full if a != "wait"]), len([r for r in episode if r["options"][r["label"]] != "wait"]))
                 last = episode[-1]
-                self.assertEqual(last["options"][last["label"]], "none" if last["meta"]["augmentation"] in {"unrelated", "trailing"} else "done")
-                if last["meta"]["augmentation"] in {"plain", "filler", "trailing"}:
+                expected = {"unrelated": "none", "trailing": "wait"}.get(last["meta"]["augmentation"], "done")
+                self.assertEqual(last["options"][last["label"]], expected)
+                if last["meta"]["augmentation"] in {"plain", "filler"} or (
+                        last["meta"]["augmentation"] == "trailing" and not utterance.endswith("no wait,")):
                     # Source-plan comparison is a test only, never oracle input.
                     actions = [r["options"][r["label"]] for r in episode if r["kind"].endswith("_action")]
                     self.assertEqual(actions, last["meta"]["steps"])
@@ -258,6 +278,7 @@ class DatasetTests(unittest.TestCase):
         answers = {r["options"][r["label"]].split()[0] for r in rows}
         self.assertLessEqual({"open_app", "search", "type", "tap", "send", "scroll_down", "swipe_left", "back", "home", "volume_up", "wait", "done", "none"}, answers)
         self.assertEqual({r["meta"]["augmentation"] for r in rows}, {"plain", "filler", "restart", "trailing", "unrelated"})
+        self.assertIn("undo", answers)
         self.assertEqual({len(r["meta"]["steps"]) for r in rows} - {0}, {1, 2, 3, 4})
 
     def test_jevlike_validator_if_available(self):
@@ -277,6 +298,35 @@ class DatasetTests(unittest.TestCase):
     def test_invalid_size(self):
         with self.assertRaises(ValueError):
             generate(self.root / "invalid", rows=0)
+
+    def test_undo_rows(self):
+        undos = [r for rows in self.rows.values() for r in rows if r["options"][r["label"]].startswith("undo ")]
+        self.assertTrue(undos)
+        for row in undos:
+            self.assertTrue(row["meta"]["augmentation"] == "restart" or row["meta"]["utterance"].endswith("no wait,"))
+            self.assertIn(row["options"][row["label"]].removeprefix("undo "), row["meta"]["done"])
+        distractors = [r for r in self.rows["train"] if r["meta"]["augmentation"] != "restart" and any(o.startswith("undo ") for o in r["options"])]
+        self.assertTrue(distractors)
+
+    def test_pause_follows_words_not_media(self):
+        rows = [r for rows in self.rows.values() for r in rows]
+        self.assertTrue([r for r in rows if r["options"][r["label"]] == "pause" and "media paused" in r["context"]])
+        self.assertTrue([r for r in rows if r["options"][r["label"]] == "play" and "media playing" in r["context"]])
+
+    def test_bank_is_training_only(self):
+        kept, dropped = load_bank()
+        words = {w for ws in kept.values() for w in ws}
+        self.assertGreater(len(words), 200)
+        self.assertIn("heldout", dropped)
+        held = [p.text for p in vocabulary(True, list(APPS))] + [w for k, v in v5.ACTION_WORDS.items() for w in v[1]]
+        for word in words:
+            self.assertFalse(any(bank.near(word, h) for h in held), word)
+        train_sources = {w for r in self.rows["train"] for w in r["meta"]["wordings"]}
+        self.assertTrue({f"action:{w}" for w in words} & train_sources)
+        for row in self.rows["test_unseen_phrasing"]:
+            text = row["meta"]["utterance"].lower()
+            for word in words:
+                self.assertNotRegex(text, rf"\b{re.escape(word.lower())}\b")
 
     def test_asr_like_heard_text(self):
         for rows in self.rows.values():
@@ -299,7 +349,7 @@ class DatasetTests(unittest.TestCase):
     def test_class_balance(self):
         # Test splits keep every boundary; train is subsampled but never loses a non-wait row.
         share = {s: Counter(r["options"][r["label"]] == "wait" for r in rows)[True] / len(rows) for s, rows in self.rows.items()}
-        self.assertLess(share["train"], 0.55)
+        self.assertLess(share["train"], 0.6)
         self.assertGreater(share["test_iid"], share["train"])
         kinds = Counter(r["kind"] for r in self.rows["train"])
         self.assertGreater(kinds["final_none"], 0.01 * len(self.rows["train"]))
@@ -308,6 +358,7 @@ class DatasetTests(unittest.TestCase):
         answers = ["wait", "wait", "wait", "home", "wait", "wait", "wait", "done"]
         keep = keep_rows(answers, random.Random(0), 0.0)
         self.assertEqual(keep, [False, False, True, True, True, False, True, True])
+        self.assertEqual(keep_rows(["wait"] * 4, random.Random(0), 0.0), [False, False, False, True])
         self.assertTrue(all(keep_rows(answers, random.Random(0), 1.0)))
 
     def test_rows_shuffled(self):

@@ -20,6 +20,7 @@ Run: python -m vox.whatgen --out data/what-v1 --seed 7 --rows 2000
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import random
@@ -40,7 +41,7 @@ SIMPLE = ("back", "home", "volume_up", "volume_down")
 FILLER = re.compile(r"^(?:uh\b[ ,]*)+", re.I)
 # v5's synthetic unrelated speech (generate.Generator.make, phrase kind): always none.
 UNRELATED = ("uh what was that", "hmm", "no I'm talking to someone", "what time is it")
-# The user trails off and ASR finalizes on a connector or a bare restart: the tail is none.
+# ASR finalizes on a dangling connector or restart: wait for the rest (timeout is task state).
 TRAILING = (" and", " then", " and then", " no wait,")
 # A typed step and a tap on the element that does the same thing are synonyms, not
 # negatives ("send it" vs tap "send button"). Never offer one as a distractor for the other.
@@ -50,9 +51,10 @@ POLICY = (
     "Wait for an unambiguous complete step; counts need a connector or final boundary. "
     "Open app, back, home, scrolling, swiping, playback and volume may commit on partials. "
     "Search, typing, symbolic taps and outward actions wait for final words. "
-    "A no wait restart cancels pending steps, retaining completed steps. "
+    "A no wait restart cancels pending steps; if the step just before it was already done, undo it first. "
+    "Play and pause follow the words, not the media state. "
     "After all steps are completed choose done only on final, otherwise wait. "
-    "Unrecognized final speech, or final words that end on a connector or restart, is none. "
+    "Final words that end on a connector or restart still wait for the rest. Unrecognized final speech is none. "
     "Outward actions still require runtime confirmation."
 )
 
@@ -66,6 +68,46 @@ class Phrase:
     text: str
     step: str
     source: str
+
+
+BANK = Path(__file__).resolve().parents[1] / "wordings_llm" / "bank.json"
+KEYS = SIMPLE + MOVES + ("play_pause", "like", "take_photo", "open_camera")
+
+
+@functools.cache
+def load_bank() -> tuple[dict[str, tuple[str, ...]], dict[str, list[str]]]:
+    """Training-only action wordings from the LLM bank, filtered by vox.bank.
+
+    vox.bank drops anything near a held-out wording: v5's held-out action wordings
+    and every held-out WHAT phrase (targets, payload templates, app openings).
+    Here we also drop wordings that would change how an utterance is split or
+    parsed: connector/restart words, commas, slash forms, slot verbs (tap/search/
+    type...), 'camera' outside open_camera, and a wording filed under two keys.
+    """
+    from . import bank as B
+    held = {"actions": {k: v[1] for k, v in V5.ACTION_WORDS.items()},
+            "what": [p.text for p in vocabulary(True, list(APPS))]}
+    kept, dropped = B.load(BANK, held, set(V5.HELDOUT_PHRASES))
+    kept = {k: [w for w in kept["actions"].get(k, [])] for k in KEYS}
+    owners = Counter(w.lower() for k in KEYS for w in dict.fromkeys(kept[k]))
+    slot = re.compile(r"^(?:tap|select|go for|search|find|look|type|write|start typing)\b|\b(?:and|then|after|no)\b|[,/'\"]", re.I)
+    out = {}
+    for key in KEYS:
+        words = []
+        for word in dict.fromkeys(kept[key]):
+            why = ("ambiguous" if owners[word.lower()] > 1 else
+                   "syntax" if slot.search(word) else
+                   "camera" if ("camera" in word) != (key == "open_camera") else None)
+            if why:
+                dropped.setdefault("what_" + why, []).append(f"{key}: {word}")
+            else:
+                words.append(word)
+        out[key] = tuple(words)
+    return out, dropped
+
+
+def bank_words(key: str) -> list[str]:
+    return list(load_bank()[0][key])
 
 
 def vocabulary(held: bool, apps: list[str]) -> list[Phrase]:
@@ -82,7 +124,7 @@ def vocabulary(held: bool, apps: list[str]) -> list[Phrase]:
         out.append(Phrase(text, step, source))
 
     for key in SIMPLE + MOVES + ("play_pause", "like", "take_photo"):
-        words = V5.ACTION_WORDS[key][1] if held else W.ACTION_WORDS_TRAIN[key] + PHRASES.get(key, [])
+        words = V5.ACTION_WORDS[key][1] if held else W.ACTION_WORDS_TRAIN[key] + PHRASES.get(key, []) + bank_words(key)
         for word in dict.fromkeys(words):
             if word == "keep scrolling down":
                 continue  # continuous, never a one-shot scroll
@@ -100,7 +142,7 @@ def vocabulary(held: bool, apps: list[str]) -> list[Phrase]:
                 add(word, step, f"action:{word}")
     for package in apps:
         name = APPS[package]
-        words = V5.ACTION_WORDS["open_camera"][1] if held else W.ACTION_WORDS_TRAIN["open_camera"]
+        words = V5.ACTION_WORDS["open_camera"][1] if held else W.ACTION_WORDS_TRAIN["open_camera"] + bank_words("open_camera")
         for word in words:
             add(word.replace("camera", name), "open_app " + name.lower(), f"open:{word}")
             if not held and "the camera" in word:
@@ -152,14 +194,15 @@ def synonym_group(step: str) -> str | None:
 
 
 def reversible(step: str) -> bool:
-    return step.split()[0] in {*SIMPLE, *MOVES, "open_app", "play", "pause", "play_pause"}
+    return step.split()[0] in {*SIMPLE, *MOVES, "open_app", "play", "pause", "play_pause", "undo"}
 
 
 def chunks(heard: str) -> list[tuple[str, str]]:
     """Split outside quoted strings, retaining incomplete connectors/restarts.
 
-    A trailing 'no' is already a cancellation signal. Literal 'no wait' within
-    a quoted query/text is data. Commas are connectors, except in 'no wait,'.
+    'no wait' is a restart; a bare 'no' is one too, but decide() waits while it is
+    the last word heard. Literal 'no wait' within a quoted query/text is data.
+    Commas are connectors, except in 'no wait,'.
     """
     pattern = r'"(?:\\.|[^"\\])*"?|\bno(?:\s+wait)?\b,?|\band(?:\s+then)?\b|\bthen\b|\bafter(?:\s+that)?\b|,'
     out, start = [], 0
@@ -167,7 +210,8 @@ def chunks(heard: str) -> list[tuple[str, str]]:
         token = match.group()
         if token.startswith('"'):
             continue
-        out.append((heard[start:match.start()].strip(), "restart" if token.lower().startswith("no") else "connector"))
+        kind = "connector" if not token.lower().startswith("no") else "restart" if "wait" in token.lower() else "no"
+        out.append((heard[start:match.start()].strip(), kind))
         start = match.end()
     out.append((heard[start:].strip(), "end"))
     return out
@@ -212,24 +256,38 @@ def parse_step(text: str, closed: bool) -> str | None:
 def decide(heard: str, final: bool, done: list[str] | tuple[str, ...] = ()) -> str:
     """Visible-prefix oracle. Completed occurrences are consumed in order.
 
-    Restarts erase pending work, not already committed occurrences. Repeating a
-    command intentionally is distinct from having completed its first occurrence.
-    Invalid/incomplete completed-history alignments fail closed.
+    A restart erases pending work. If the step right before it was already
+    committed, the restart retracts it: the next step is 'undo <step>' (reversible,
+    so it commits on a partial). A bare 'no' as the last word heard waits.
+    Repeating a command intentionally is distinct from having completed its first
+    occurrence. Invalid/incomplete completed-history alignments fail closed.
     """
     remaining = list(done)
     pending: list[str | None] = []
     saw_command = False
-    for text, boundary in chunks(heard):
+    parts = chunks(heard)
+    if not final and len(parts) > 1 and parts[-2][1] == "no" and not parts[-1][0]:
+        return "wait"
+    committed = None  # the last step heard, if it was already executed
+    for text, boundary in parts:
         text = FILLER.sub("", text).strip()  # a lone mid-utterance 'uh' is not a step
         if text:
             step = parse_step(text, boundary != "end" or final)
             saw_command |= step is not None
+            committed = None
             if remaining and step == remaining[0] and not pending:
-                remaining.pop(0)
+                committed = remaining.pop(0)
             else:
                 pending.append(step)
-        if boundary == "restart":
+        if boundary in ("restart", "no"):
             pending.clear()
+            if committed:
+                undo = "undo " + committed
+                if remaining and remaining[0] == undo:
+                    remaining.pop(0)
+                else:
+                    pending.append(undo)
+            committed = None
     if remaining:
         return "none" if final else "wait"
     if pending:
@@ -237,8 +295,11 @@ def decide(heard: str, final: bool, done: list[str] | tuple[str, ...] = ()) -> s
         if step is None:
             return "none" if final else "wait"
         return step if final or reversible(step) else "wait"
-    # A trailing connector/restart is an unfinished request even at ASR final.
-    if final and saw_command and chunks(heard)[-1][0]:
+    # A dangling connector/restart at ASR final: keep listening. If nothing follows,
+    # the task-state code times out; that is not a model decision.
+    if len(parts) > 1 and not parts[-1][0]:
+        return "wait"
+    if final and saw_command:
         return "done"
     return "none" if final else "wait"
 
@@ -262,11 +323,12 @@ def trajectory(utterance: str) -> list[tuple[str, bool, list[str], str]]:
 
 
 def keep_rows(answers: list[str], rng: random.Random, wait_keep: float) -> list[bool]:
-    """Every non-wait row and every wait next to a label change; interior waits by chance."""
+    """Every non-wait row, every wait next to a label change and the terminal (final)
+    row; other waits by chance."""
     keep = []
     for i, answer in enumerate(answers):
         draw = rng.random() < wait_keep if answer == "wait" else True  # one draw per wait: a stable stream
-        edge = any(0 <= j < len(answers) and answers[j] != "wait" for j in (i - 1, i + 1))
+        edge = i == len(answers) - 1 or any(0 <= j < len(answers) and answers[j] != "wait" for j in (i - 1, i + 1))
         keep.append(answer != "wait" or edge or draw)
     return keep
 
@@ -284,7 +346,7 @@ def make_episode(rng: random.Random, split: str, serial: int, wait_keep: float =
     utterance = steps[0].text
     for step in steps[1:]:
         utterance += rng.choice(CONNECTORS) + step.text
-    augmentation = rng.choices(["plain", "filler", "restart", "trailing", "unrelated"], [60, 15, 15, 5, 5])[0]
+    augmentation = rng.choices(["plain", "filler", "restart", "trailing", "unrelated"], [55, 15, 15, 5, 10])[0]
     cancelled = None
     if augmentation == "filler":
         utterance = "uh " + utterance
@@ -318,6 +380,12 @@ def make_episode(rng: random.Random, split: str, serial: int, wait_keep: float =
     candidates.update("open_app " + APPS[a].lower() for a in rng.sample(apps, 2))
     for p in rng.sample(pool, 4):
         negative(p.step)
+    # Undo is an option whenever a restart could retract a step, and a plain
+    # distractor otherwise, so its presence does not give the restart away.
+    if cancelled and reversible(cancelled.step):
+        candidates.add("undo " + cancelled.step)
+    if steps and rng.random() < 0.3:
+        candidates.add("undo " + rng.choice(steps).step)
     rows = []
     path = trajectory(utterance)
     keep = keep_rows([answer for *_, answer in path], rng, wait_keep)
@@ -334,7 +402,7 @@ def make_episode(rng: random.Random, split: str, serial: int, wait_keep: float =
         if not keep[index]:
             continue
         kind = "final_" if final else "partial_"
-        kind += "wait" if answer == "wait" else "done" if answer == "done" else "none" if answer == "none" else "action"
+        kind += answer.split()[0] if answer.split()[0] in ("wait", "done", "none", "undo") else "action"
         rows.append({
             "context": scene.text() + f"\nheard so far: {quoted(heard)}\nfinal: {'yes' if final else 'no'}\ndone steps: {json.dumps(done)}",
             "options": options, "option_keys": options.copy(), "label": options.index(answer), "kind": kind,
@@ -350,10 +418,12 @@ def generate(out: Path, seed: int = 7, rows: int = 40000, wait_keep: float = 0.2
     if rows < 5:
         raise ValueError("rows must be at least 5 (one trajectory per split)")
     out.mkdir(parents=True, exist_ok=True)
-    sources = [Path(__file__), *(Path(__file__).with_name(n) for n in ("generate.py", "schema.py", "wordings.py", "targets.py", "bank.py"))]
+    sources = [Path(__file__), *(Path(__file__).with_name(n) for n in ("generate.py", "schema.py", "wordings.py", "targets.py", "bank.py")), BANK]
     hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
     manifest = {"seed": seed, "requested_rows": rows, "wait_keep": wait_keep, "code_hash": hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest(),
-                "source_hashes": hashes, "synthetic_only": True, "splits": {}}
+                "source_hashes": hashes, "synthetic_only": True,
+                "bank_kept": {k: len(v) for k, v in load_bank()[0].items()},
+                "bank_dropped": {k: len(v) for k, v in sorted(load_bank()[1].items())}, "splits": {}}
     # Whole episodes remain together. Duplicate utterances across splits are
     # rejected, including their normalized filler/restart variants.
     seen: set[str] = set()
