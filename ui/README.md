@@ -110,6 +110,13 @@ calibration v2 (the settings window then shows the "4 new steps" nudge). With `V
 live by default (a take records for about 2 s with a made-up pitch trace; the first arch take is heard as a dip), or
 held still with `VOX_PREVIEW_HOLD=grid|recording|failed|finished`.
 
+`VOX_PREVIEW=recorder` opens the in-app test recorder on the in-memory `FakeRecorderBackend`
+(`desktop/lib/recorder_preview.dart`, dev builds only on the phone): live by default, or held still with
+`VOX_PREVIEW_HOLD=start|hub|ready|countdown|recording|longest|room|saved|no_sound|rate|done` (`longest` records the
+spec's longest cue). `VOX_PREVIEW=quickrec` is the quick record screen on a snapshot, `VOX_PREVIEW=shape` the
+heard-vs-expected plot's variants. `test/recorder_layout_test.dart` renders every recorder and quick record screen
+at Z Flip size, light and dark; `VOX_SHOTS_DIR=<dir>` also writes them there as PNGs.
+
 To run it headless (no window on your desktop), for example for a screenshot, force X11 under Xvfb:
 `env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a <the binary>`. Without that, GTK uses the Wayland session even
 inside `xvfb-run`.

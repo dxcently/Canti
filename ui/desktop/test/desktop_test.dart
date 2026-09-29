@@ -107,4 +107,42 @@ void main() {
     await tester.pump();
     p.backend.dispose();
   });
+
+  // [rec]
+  for (final (hold, key) in const [
+    ('start', 'rec_start'),
+    ('hub', 'rec_hub'),
+    ('ready', 'rec_ready'),
+    ('countdown', 'rec_countdown'),
+    ('recording', 'rec_seconds'),
+    ('longest', 'rec_cue'),
+    ('room', 'rec_room'),
+    ('saved', 'rec_saved'),
+    ('no_sound', 'rec_no_sound'),
+    ('rate', 'rec_rate'),
+    ('done', 'rec_pull'),
+  ]) {
+    testWidgets('the recorder preview holds $hold', (tester) async {
+      final p = await preview(tester, {'VOX_PREVIEW': 'recorder', 'VOX_PREVIEW_HOLD': hold});
+      await waitFor(tester, find.byKey(Key(key)));
+      expect(tester.takeException(), isNull);
+      p.backend.dispose();
+    });
+  }
+
+  testWidgets('the quickrec preview shows a snapshot', (tester) async {
+    final p = await preview(tester, {'VOX_PREVIEW': 'quickrec'});
+    await waitFor(tester, find.byKey(const Key('qr_clip')));
+    expect(tester.takeException(), isNull);
+    p.backend.dispose();
+  });
+
+  testWidgets('the shape preview renders all variants', (tester) async {
+    final p = await preview(tester, {'VOX_PREVIEW': 'shape'});
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('shape_plot_contour')), findsWidgets);
+    expect(find.byKey(const Key('shape_plot_beat')), findsOneWidget);
+    p.backend.dispose();
+  });
 }

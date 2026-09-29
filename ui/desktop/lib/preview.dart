@@ -6,6 +6,7 @@ import 'package:vox_ui/vox_ui.dart';
 import 'package:vox_ui/src/theme/pixel.dart' show Px;
 
 import 'train_preview.dart'; // [train]
+import 'recorder_preview.dart'; // [rec]
 
 /// The desktop preview of the voice cursor screens, on the in-memory backend's made-up `calib_status` stream
 /// (a push every 100 ms, as the service sends them). Picked by VOX_PREVIEW:
@@ -108,8 +109,15 @@ class Preview {
       case 'train': // [train]
         final t = TrainPreview.create(b, hold);
         return Preview._(b, t.screen, t.start);
+      case 'recorder': // [rec]
+        final t = RecorderPreview.create(b, hold);
+        return Preview._(b, t.screen, t.start);
+      case 'quickrec': // [rec]
+        return Preview._(b, QuickRecScreen(backend: b), () {});
+      case 'shape': // [rec]
+        return Preview._(b, ShapePreview.screen(), () {});
     }
-    throw ArgumentError('VOX_PREVIEW=$kind: expected calibrate, cursor, settings, pair or train');
+    throw ArgumentError('VOX_PREVIEW=$kind: expected calibrate, cursor, settings, pair, train, recorder, quickrec or shape');
   }
 }
 

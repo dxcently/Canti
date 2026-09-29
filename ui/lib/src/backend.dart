@@ -36,6 +36,8 @@ class VoxStatus {
     this.calibrated,
     this.calibrating = false,
     this.training = false,
+    this.devRecorder = false,
+    this.recording = false,
     this.bindings,
   });
 
@@ -133,6 +135,12 @@ class VoxStatus {
   /// A gesture-training round is open now (its sounds go to the trainer, not to actions).
   final bool training;
 
+  /// The dev-only in-app test recorder is compiled in (android BuildConfig.DEV_RECORDER).
+  final bool devRecorder;
+
+  /// A recorder session is open now (its sounds are judged and dropped as "recording").
+  final bool recording;
+
   /// The bindings window's picture (null from a service without one, or when the service is off): the effective
   /// sound -> action per mode, resolved on the Kotlin side (`Bindings.kt`), for the current app.
   final VoxBindings? bindings;
@@ -173,6 +181,8 @@ class VoxStatus {
         calibrated: m['calibrated'] as bool?,
         calibrating: m['calibrating'] == true,
         training: m['training'] == true,
+        devRecorder: m['dev_recorder'] == true,
+        recording: m['recording'] == true,
         bindings: VoxBindings.fromMapOrNull(m['bindings']),
       );
 
@@ -227,6 +237,8 @@ class VoxStatus {
         calibrated: calibrated,
         calibrating: calibrating,
         training: training,
+        devRecorder: devRecorder,
+        recording: recording,
         bindings: bindings,
       );
 

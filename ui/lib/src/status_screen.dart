@@ -8,6 +8,8 @@ import 'calibration.dart';
 import 'calibration_screen.dart';
 import 'canti_head.dart';
 import 'pair_screen.dart';
+import 'quickrec_screen.dart'; // [rec]
+import 'recorder_screen.dart'; // [rec]
 import 'theme/assets.dart';
 import 'theme/canti_theme.dart';
 import 'theme/clearing.dart';
@@ -54,6 +56,8 @@ class _StatusScreenState extends State<StatusScreen> {
   bool _again = false;
   bool _pairOpen = false;
   bool _calibOpen = false;
+  bool _recOpen = false; // [rec]
+  bool _quickOpen = false; // [rec]
   bool _calibPromptDismissed = false;
 
   /// Bumped after a calibration is saved, so the voice cursor section reloads.
@@ -175,6 +179,13 @@ class _StatusScreenState extends State<StatusScreen> {
   void _openRoute(String? route) {
     if (route == 'pair') _openPair();
     if (route == 'calibrate') _openCalib();
+    if (route == 'quickrec') _quickRoute(); // [rec]
+  }
+
+  /// The badge's QUICK REC (a snapshot is pending): dev builds only, so the status is fetched first if it is not in yet. // [rec]
+  Future<void> _quickRoute() async {
+    if (_status == null) await _refresh();
+    if (mounted && _status?.devRecorder == true) _openQuickRec();
   }
 
   /// The first-run pairing screen (once, however many times it is asked for); the status is fetched again after.
@@ -197,6 +208,24 @@ class _StatusScreenState extends State<StatusScreen> {
     final saved = await openCalibration(context, widget.backend, _calibSource, steps: steps);
     _calibOpen = false;
     if (saved) _calibVersion.value++;
+    if (mounted) _refresh();
+  }
+
+  /// The in-app test recorder (once, however many times it is asked for). // [rec]
+  Future<void> _openRecorder() async {
+    if (_recOpen || !mounted) return;
+    _recOpen = true;
+    await openRecorder(context, widget.backend);
+    _recOpen = false;
+    if (mounted) _refresh();
+  }
+
+  /// The quick record screen (once, however many times it is asked for). // [rec]
+  Future<void> _openQuickRec({bool snap = false}) async {
+    if (_quickOpen || !mounted) return;
+    _quickOpen = true;
+    await openQuickRec(context, widget.backend, snap: snap);
+    _quickOpen = false;
     if (mounted) _refresh();
   }
 
@@ -426,6 +455,8 @@ class _StatusScreenState extends State<StatusScreen> {
       ?calibrating,
       control,
       if (s != null && s.service) TrainGesturesWindow(backend: widget.backend, source: _calibSource), // [train]
+      if (s != null && s.service && s.devRecorder)
+        RecorderEntryWindow(backend: widget.backend, onOpen: _openRecorder, onQuick: () => _openQuickRec(snap: true)), // [rec]
       VoiceCursorWindow(
         backend: widget.backend,
         source: _calibSource,
