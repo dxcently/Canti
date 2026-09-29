@@ -16,8 +16,10 @@ data class Stamp(val startMs: Long, val endMs: Long, val sound: Long? = null, va
  * Groups sounds into sequences (sound phrases) and decides WHEN to resolve them.
  *
  * Timing rule: act at once, unless a multi-sound sequence bound in the active profile (for this app and mode) starts
- * with the sounds heard so far. Only then wait for the next sound. With the default bindings "click" waits (for
- * "click click" / "click hiss") and "pop" waits (for "pop pop", listen for a phrase: a lone pop taps after the gap).
+ * with the sounds heard so far. Only then wait for the next sound. With the default bindings (2026-09-28): a lone
+ * "click" waits one gap (for "click click" / "click hiss" / "click click click"); "click click" waits one more gap (for
+ * "click click click") and then goes home; "click click click" reaches maxLen 3 and resolves at once (listen for a
+ * phrase). In cursor mode nothing waits (see [Profile.sequences]).
  *
  * Grouping clock:
  *  - "device" (every sound carries a [Stamp]): two sounds belong together iff the device gap

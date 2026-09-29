@@ -71,27 +71,32 @@ class CoreTest {
     }
 
     /**
-     * 2026-09-27 (user): pop pop replaced click pop as listen-for-phrase. The fixture comes from finetune's generator,
-     * which still has click pop = listen and pop pop unbound, until the data is regenerated: those two default labels
-     * are the one allowed difference (gesture mode; a user rule on either still has to match).
+     * 2026-09-28 (user): a pop counts as a click. The fixture comes from finetune's generator, which still has
+     * "click pop" = listen, "pop pop" unbound and "click click click" unbound. After the fold the app sees "click click"
+     * (home) for the first two and "click click click" (listen); those are the allowed differences (gesture mode; a user
+     * rule on either still has to match).
      */
     private fun movedListen(s: Scene, want: String, got: String): Boolean {
         if (s.mode != "gesture" || s.phrase != null) return false
-        return (s.sequence == listOf("click", "pop") && want == "listen_for_phrase" && got == "none") ||
-            (s.sequence == listOf("pop", "pop") && want == "none" && got == "listen_for_phrase")
+        // 2026-09-28: the fold turns every "pop" into "click" before the app decides, while the generator (finetune)
+        // still labels the old way, so any sequence containing "pop" is an allowed difference (a user rule still matches).
+        if ("pop" in s.sequence) return true
+        // the app's new defaults make a lone "click" tap and "click click click" listen; the generator still leaves both unbound.
+        if (s.sequence == listOf("click") && want == "none" && got == "tap") return true
+        if (s.sequence == listOf("click", "click", "click") && want == "none" && got == "listen_for_phrase") return true
+        return false
     }
 
     @Test fun defaultBindingsAreTheAgreedOnes() {
         assertEquals("back", Vocab.DEFAULT_BINDINGS[listOf("hiss")])
-        assertEquals("tap", Vocab.DEFAULT_BINDINGS[listOf("pop")])
+        assertEquals("tap", Vocab.DEFAULT_BINDINGS[listOf("click")])   // 2026-09-28: "pop" folded to "click" at intake
         assertEquals("long_press", Vocab.DEFAULT_BINDINGS[listOf("flat")])
-        // 2026-09-27 (user): pop pop replaced click pop as the listen gesture; click pop is unbound
-        assertEquals("listen_for_phrase", Vocab.DEFAULT_BINDINGS[listOf("pop", "pop")])
-        assertFalse(listOf("click", "pop") in Vocab.DEFAULT_BINDINGS)
-        assertEquals(listOf(listOf("click", "pop")), Vocab.FREED_SEQUENCES)
+        assertEquals("listen_for_phrase", Vocab.DEFAULT_BINDINGS[listOf("click", "click", "click")])
         assertEquals("home", Vocab.DEFAULT_BINDINGS[listOf("click", "click")])
         assertEquals("back", Vocab.DEFAULT_BINDINGS[listOf("hiss", "click")])
         assertEquals("forward", Vocab.APP_ONLY_BINDINGS[listOf("click", "hiss")])
+        assertFalse("no key contains pop (folded at intake)", Vocab.DEFAULT_BINDINGS.keys.any { "pop" in it })
+        assertEquals(listOf(listOf("click", "pop")), Vocab.FREED_SEQUENCES)
         assertFalse("forward is app-only: never a model option", "forward" in Vocab.ACTIONS)
     }
 
@@ -113,12 +118,13 @@ class CoreTest {
         assertEquals("swipe_down", decide(listOf("fall")).action)
         assertEquals("swipe_right", decide(listOf("arch")).action)
         assertEquals("swipe_left", decide(listOf("dip")).action)
-        assertEquals("tap", decide(listOf("pop")).action)
+        assertEquals("tap", decide(listOf("pop")).action)          // 2026-09-28: a raw "pop" decides as a click (fold)
+        assertEquals("tap", decide(listOf("click")).action)
         assertEquals("back", decide(listOf("hiss")).action)
         assertEquals("long_press", decide(listOf("flat")).action)
-        assertEquals("listen_for_phrase", decide(listOf("pop", "pop")).action)
-        assertEquals("none", decide(listOf("click", "pop")).action)
+        assertEquals("listen_for_phrase", decide(listOf("click", "click", "click")).action)
         assertEquals("home", decide(listOf("click", "click")).action)
+        assertEquals("home", decide(listOf("pop", "pop")).action)   // folded to "click click"
         assertEquals("back", decide(listOf("hiss", "click")).action)
         assertEquals("forward", decide(listOf("click", "hiss")).action)
         val maps = Profile.parse(JSONObject(resourceProfile))
@@ -127,7 +133,7 @@ class CoreTest {
         // The screen never vetoes an explicit gesture: a swipe on a non-scrollable screen is still a swipe.
         val flat = ScreenContext("other", "none", "not scrollable", "hidden")
         assertEquals("swipe_up", decide(listOf("rise"), screen = flat).action)
-        assertEquals("tap", decide(listOf("pop"), screen = ScreenContext("dialog", "none", "not scrollable", "open")).action)
+        assertEquals("tap", decide(listOf("click"), screen = ScreenContext("dialog", "none", "not scrollable", "open")).action)
     }
 
     @Test fun phraseTieBreak() {
@@ -145,7 +151,8 @@ class CoreTest {
         val loud = StateBuilder.build("cursor", "x", "X", listOf(sound("rise", "loud")), listOf("rise"), null, Profile.empty(), emptyList(), "stopped", null)
         assertEquals("move_up_fast", RuleDecider().decide(DecisionInput(loud, Profile.empty())).action)
         assertEquals("move_left_slow", decide(listOf("dip"), mode = "cursor").action)
-        assertEquals("click", decide(listOf("pop"), mode = "cursor").action)
+        assertEquals("click", decide(listOf("pop"), mode = "cursor").action)     // folded to "click"
+        assertEquals("click", decide(listOf("click"), mode = "cursor").action)
         assertEquals("stop", decide(listOf("flat"), mode = "cursor").action)
         assertEquals("back", decide(listOf("hiss"), mode = "cursor").action)
         assertEquals("none", decide(listOf("click", "click"), mode = "cursor").action)
@@ -176,73 +183,115 @@ class CoreTest {
         return Triple(s, q, out)
     }
 
-    @Test fun popWaitsForPopPopWithDefaults() {
-        // The cost the user accepted for pop pop = listen: a lone pop taps only after the gap.
+    @Test fun loneClickWaitsAndResolvesAfterTheGap() {
+        // h. a lone click waits one gap (for click click / click hiss / click click click) and resolves ["click"].
         val bound = Profile.empty().boundSequences("x", "gesture")
-        assertTrue(listOf("pop", "pop") in bound)
-        val (s, q, out) = seqHarness(bound)
-        q.add("gesture", "x", listOf("l"), listOf("pop"), bound)
-        assertTrue("a lone pop waits for a second pop", out.isEmpty())
-        s.advance(599); assertTrue(out.isEmpty())
-        s.advance(1); assertEquals(listOf(listOf("pop") to 600L), out)
-    }
-
-    @Test fun popPopWithinTheGapIsOneListen() {
-        val bound = Profile.empty().boundSequences("x", "gesture")
-        val (s, q, out) = seqHarness(bound)
-        q.add("gesture", "x", listOf("l"), listOf("pop"), bound)
-        s.advance(250)
-        q.add("gesture", "x", listOf("l"), listOf("pop"), bound)
-        assertEquals(listOf(listOf("pop", "pop") to 250L), out)
-        assertEquals("listen_for_phrase", decide(listOf("pop", "pop")).action)
-    }
-
-    @Test fun popPopFurtherApartThanTheGapIsTwoTaps() {
-        val (s, q, out) = stampHarness()
-        s.advance(90); q.sound("pop", Stamp(0, 30))
-        s.advance(800); q.sound("pop", Stamp(830, 860))              // device gap 800 > gap_ms 600
-        s.advance(1000)
-        assertEquals(listOf("pop", "pop"), seqs(out))
-        assertEquals(listOf("tap", "tap"), out.map { decide(it.first.sequence).action })
-    }
-
-    @Test fun clickPopIsUnbound() {
-        assertEquals("none", decide(listOf("click", "pop")).action)
-        assertEquals("rules:unbound", decide(listOf("click", "pop")).source)
-        // the click still waits (click click = home, click hiss = forward)
-        val bound = Profile.empty().boundSequences("x", "gesture")
-        assertFalse(listOf("click", "pop") in bound)
-        val (s, q, out) = seqHarness(bound)
+        assertTrue(listOf("click", "click", "click") in bound)
+        val s = FakeScheduler()
+        val out = mutableListOf<Pair<List<String>, Long>>()
+        val waits = mutableListOf<List<List<String>>>()
+        val q = Sequencer(s, { 600L }, onResolve = { out += it.sequence.toList() to s.t },
+            onWait = { _, waitingFor, _ -> waits += waitingFor })
         q.add("gesture", "x", listOf("l"), listOf("click"), bound)
-        assertTrue(out.isEmpty())
-        s.advance(200)
-        q.add("gesture", "x", listOf("l"), listOf("click"), bound)
-        assertEquals(listOf(listOf("click", "click") to 200L), out)
-    }
-
-    @Test fun lonelyClickResolvesAfterGap() {
-        val bound = Profile.empty().boundSequences("x", "gesture")
-        val (s, q, out) = seqHarness(bound)
-        q.add("gesture", "x", listOf("l"), listOf("click"), bound)
+        assertTrue("a lone click waits", out.isEmpty())
+        val w = waits.single().map { it.joinToString(" ") }
+        assertTrue("for click click", "click click" in w)
+        assertTrue("for click hiss", "click hiss" in w)
+        assertTrue("for click click click", "click click click" in w)
         s.advance(599); assertTrue(out.isEmpty())
         s.advance(1); assertEquals(listOf(listOf("click") to 600L), out)
+        assertEquals("tap", decide(listOf("click")).action)
     }
 
-    @Test fun anAppRuleCanClaimPopPop() {
-        val p = Profile.parse(JSONObject("""{"app:ai.vox.fixture":[{"phrase":["pop","pop"],"kind":"fixed","action":"like"}]}"""))
-        assertEquals("like", decide(listOf("pop", "pop"), profile = p).action)
-        // Other apps keep the default (listen).
-        assertTrue(listOf("pop", "pop") in p.boundSequences("other.app", "gesture"))
-        assertEquals("listen_for_phrase", decide(listOf("pop", "pop"), pkg = "other.app", profile = p).action)
+    @Test fun clickClickWaitsAgainThenGoesHome() {
+        // h. click + click (gap 200) waits one more gap (for click click click), then resolves ["click","click"].
+        val bound = Profile.empty().boundSequences("x", "gesture")
+        val s = FakeScheduler()
+        val out = mutableListOf<Pair<List<String>, Long>>()
+        val waits = mutableListOf<List<List<String>>>()
+        val q = Sequencer(s, { 600L }, onResolve = { out += it.sequence.toList() to s.t },
+            onWait = { _, waitingFor, _ -> waits += waitingFor })
+        q.add("gesture", "x", listOf("l"), listOf("click"), bound)
+        s.advance(200)
+        q.add("gesture", "x", listOf("l"), listOf("click"), bound)
+        assertTrue("click click waits for click click click", out.isEmpty())
+        assertTrue(waits[1].any { it.joinToString(" ") == "click click click" })
+        s.advance(600)
+        assertEquals(listOf(listOf("click", "click") to 800L), out)
+        assertEquals("home", decide(listOf("click", "click")).action)
     }
 
-    @Test fun disablingPopPopMakesPopActAtOnce() {
-        val p = Profile.parse(JSONObject("""{"global":[{"phrase":["pop","pop"],"kind":"fixed","action":"none"}]}"""))
+    @Test fun threeClicksResolveAtOnce() {
+        // h. three clicks (gaps 150, 180) resolve at once, endedBy max-length, decide() == listen_for_phrase.
+        val bound = Profile.empty().boundSequences("x", "gesture")
+        val s = FakeScheduler()
+        val out = mutableListOf<Pair<Sequencer.Pending, Long>>()
+        val q = Sequencer(s, { 600L }, { 150L }, onResolve = { out += it to s.t })
+        q.add("gesture", "x", listOf("l", "l", "l"), listOf("click", "click", "click"), bound,
+            listOf(Stamp(0, 30), Stamp(180, 210), Stamp(390, 420)))
+        assertEquals(listOf("click click click"), seqs(out))
+        assertEquals("max-length", out[0].first.endedBy)
+        assertEquals("listen_for_phrase", decide(listOf("click", "click", "click")).action)
+    }
+
+    @Test fun cursorModeIsInstant() {
+        // i. cursor mode never waits: empty bound set, onResolve fires synchronously, onWait is never called.
+        assertTrue(Profile.empty().boundSequences("x", "cursor").isEmpty())
+        val p = Profile.parse(JSONObject("""{"cursor":[{"phrase":["click","click"],"kind":"fixed","action":"drag_toggle"}]}"""))
+        assertTrue("a multi-sound cursor rule parses but is inert", p.boundSequences("x", "cursor").isEmpty())
+        for (label in listOf("click", "hiss")) {
+            val s = FakeScheduler()
+            val out = mutableListOf<String>()
+            var waited = false
+            val q = Sequencer(s, { 600L }, onResolve = { out += it.sequence.joinToString(" ") },
+                onWait = { _, _, _ -> waited = true })
+            q.add("cursor", "x", listOf("l"), listOf(label), p.boundSequences("x", "cursor"))
+            assertFalse("$label waited", waited)
+            assertEquals(listOf(label), out)
+            s.advance(1000); assertEquals(listOf(label), out)
+        }
+    }
+
+    @Test fun cursorListenLongVsShortHiss() {
+        // j. long hiss (>= 700 ms) listens; short hiss does not; background noise and ignores never count.
+        val mouth = "a hiss; duration long (over 1 s); loudness normal; sounds like mouth sound"
+        val short = "a hiss; duration short (150-400 ms); loudness normal; sounds like mouth sound"
+        assertFalse(CursorListen.isLong("hiss", Stamp(0, 650), mouth))
+        assertTrue(CursorListen.isLong("hiss", Stamp(0, 750), mouth))
+        assertTrue(CursorListen.isLong("hiss", Stamp(0, 1200), "a hiss; duration long (over 1 s); loudness normal; sounds like mouth sound"))
+        assertFalse(CursorListen.isLong("hiss", Stamp(0, 1200), "a hiss; duration long (over 1 s); loudness normal; sounds like background noise"))
+        assertTrue("no stamp: the 'long (over 1 s)' bucket", CursorListen.isLong("hiss", null, mouth))
+        assertFalse("no stamp: medium is not long", CursorListen.isLong("hiss", null, "a hiss; duration medium (400-1000 ms); loudness normal; sounds like mouth sound"))
+        assertFalse(CursorListen.isLong("click", Stamp(0, 900), mouth))
+        assertFalse(CursorListen.isLong("hiss", Stamp(0, 1200), Personal.ignoreLine(mouth)))
+    }
+
+    @Test fun profileParseFoldsPopRules() {
+        // l. an old rule on ["pop"] becomes ["click"], and ["pop","pop"] becomes ["click","click"] (last rule wins).
+        val p = Profile.parse(JSONObject("""{"global":[{"phrase":["pop"],"kind":"fixed","action":"like"}]}"""))
+        assertEquals(listOf("click"), p.globalBindings().single().phrase)
+        val app = Profile.parse(JSONObject("""{"app:x":[{"phrase":["pop","pop"],"kind":"fixed","action":"like"}]}"""))
+        assertEquals(listOf("click", "click"), app.appBindings("x").single().phrase)
+        assertEquals("like", decide(listOf("pop", "pop"), "x", profile = app).action)   // beats home in app x
+    }
+
+    @Test fun anAppRuleCanClaimClickClickClick() {
+        val p = Profile.parse(JSONObject("""{"app:ai.vox.fixture":[{"phrase":["click","click","click"],"kind":"fixed","action":"like"}]}"""))
+        assertEquals("like", decide(listOf("click", "click", "click"), profile = p).action)
+        assertEquals("listen_for_phrase", decide(listOf("click", "click", "click"), pkg = "other.app", profile = p).action)
+    }
+
+    @Test fun disablingClickClickClickMakesClickActAtOnce() {
+        val p = Profile.parse(JSONObject("""{"global":[{"phrase":["click","click","click"],"kind":"fixed","action":"none"}]}"""))
         val bound = p.boundSequences("x", "gesture")
-        assertFalse(listOf("pop", "pop") in bound)
+        assertFalse(listOf("click", "click", "click") in bound)
         val (_, q, out) = seqHarness(bound)
-        q.add("gesture", "x", listOf("l"), listOf("pop"), bound)
-        assertEquals(listOf(listOf("pop") to 0L), out)
+        q.add("gesture", "x", listOf("l"), listOf("click"), bound)
+        assertTrue(out.isEmpty())                          // click still waits for click click
+        val (s, q2, out2) = seqHarness(bound)
+        q2.add("gesture", "x", listOf("l"), listOf("click"), bound)
+        s.advance(600)
+        assertEquals(listOf(listOf("click") to 600L), out2)
     }
 
     // --- device timestamps: grouping by device gaps, not arrival --------------------------------------------------
@@ -350,13 +399,11 @@ class CoreTest {
         assertFalse("exit_cursor_mode" in Vocab.CURSOR_ACTIONS)
         assertEquals(25, Vocab.ACTIONS.size)
         assertEquals(24, Vocab.CURSOR_ACTIONS.size)
-        // Only "pop pop" (name a target, handled by the app) is bound in cursor mode by default.
-        assertEquals(listOf("pop", "pop"), Profile.CURSOR_LISTEN)
-        assertEquals(setOf(Profile.CURSOR_LISTEN), Profile.empty().boundSequences("x", "cursor"))
+        // 2026-09-28: cursor mode never waits — no bound sequences (multi-sound cursor rules parse but are inert).
+        assertEquals(emptySet<List<String>>(), Profile.empty().boundSequences("x", "cursor"))
         val p = Profile.parse(JSONObject("""{"cursor":[{"phrase":["click","click"],"kind":"fixed","action":"drag_toggle"}]}"""))
-        assertEquals(setOf(listOf("click", "click"), Profile.CURSOR_LISTEN), p.boundSequences("x", "cursor"))
-        val off = Profile.parse(JSONObject("""{"cursor":[{"phrase":["pop","pop"],"kind":"fixed","action":"none"}]}"""))
-        assertTrue("a cursor rule can switch pop pop off", off.boundSequences("x", "cursor").isEmpty())
+        assertTrue("a multi-sound cursor rule parses but is inert", p.boundSequences("x", "cursor").isEmpty())
+        // the rule still parses, and the decider honours it if the sequence is ever given directly
         assertEquals("drag_toggle", decide(listOf("click", "click"), mode = "cursor", profile = p).action)
     }
 

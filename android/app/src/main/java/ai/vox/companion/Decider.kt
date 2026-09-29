@@ -46,7 +46,8 @@ class RuleDecider : Decider {
     override val name = "rules"
 
     override fun decide(input: DecisionInput): Decision {
-        val s = input.scene
+        // A raw "pop" (tests, the state_parity fixture, a stored name) decides as a click: fold the sequence first.
+        val s = input.scene.copy(sequence = SoundFold.seq(input.scene.sequence))
         return when {
             s.phrase != null -> phrase(s, input.profile)
             s.mode == "cursor" -> cursor(s, input.profile)
@@ -86,7 +87,7 @@ class RuleDecider : Decider {
         val a = when {
             dir != null -> "move_${dir}_${if (loud) "fast" else "slow"}"
             seq[0] == "flat" -> "stop"
-            seq[0] == "pop" -> "click"
+            seq[0] == "click" -> "click"
             seq[0] == "hiss" -> "back"
             else -> return Decision("none", "rules:unbound")
         }
@@ -126,7 +127,8 @@ class RuleDecider : Decider {
             }
         }
 
-        private val NOT_GESTURE_SOURCES = setOf("talking", "laughing", "coughing", "background music", "background noise")
+        /** Not a deliberate gesture (POLICY); used by [notDeliberate] and [CursorListen.isLong]. */
+        val NOT_GESTURE_SOURCES = setOf("talking", "laughing", "coughing", "background music", "background noise")
 
         /** Why the sequence is not a deliberate gesture (POLICY), or null if every sound passes. */
         fun notDeliberate(s: Scene): String? {

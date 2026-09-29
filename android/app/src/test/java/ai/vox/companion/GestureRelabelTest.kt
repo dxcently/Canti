@@ -41,7 +41,8 @@ class GestureRelabelTest {
         // a discrete class: an extractor click that is the user's pop
         val p = m.match(SoundFeatures(popC.copyOf(), "fp1", DoubleArray(0)))
         val pop = Personal.rewrite(p, clickLine, "click")
-        assertEquals(Personal.Rewritten("a short lip pop; instant sound; loudness loud; sounds like mouth sound", "pop", relabelFrom = "click"), pop)
+        // 2026-09-28: a "pop" class folds to "click", so a click matching it agrees (trusted), never relabels to "pop".
+        assertEquals(Personal.Rewritten(clickLine, "click", trusted = true), pop)
     }
 
     @Test fun noRelabelBeyondTheThreshold() {

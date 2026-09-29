@@ -424,7 +424,7 @@ object Personal {
             EnrollmentStore.CUSTOM -> customLine(m.cls!!.name, line)?.let { Rewritten(it, MY + m.cls.name) } ?: Rewritten(line, label)
             EnrollmentStore.IGNORE -> Rewritten(ignoreLine(line), label)
             EnrollmentStore.GESTURE -> {
-                val g = m.cls!!.name
+                val g = SoundFold.label(m.cls!!.name)   // an old enrolled `gesture:pop` class that matches is "click", trusted
                 when {
                     g == label -> Rewritten(line, label, trusted = true)
                     !gestureRelabel -> Rewritten(line, label)

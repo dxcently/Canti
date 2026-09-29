@@ -172,17 +172,17 @@ def fixture_arch_swipes_right(c: Ctx):
 
 
 @test
-def fixture_pop_taps_after_the_pop_pop_gap(c: Ctx):
-    # 2026-09-27: pop pop = listen, so a lone pop waits one gap for a second pop, then taps
+def fixture_click_taps_after_one_gap(c: Ctx):
+    # 2026-09-28: click click = home, click click click = listen, so a lone click waits one gap, then taps
     c.open(FEED)
     m = c.ev.mark()
-    o = c.act("pop")
+    o = c.act("click")
     expect(o, "tap")
     assert o["resolve"]["waited"] and 550 <= o["resolve"]["held_ms"] <= 900, o["resolve"]
     w = next((e for e in c.ev.since(m) if e["ev"] == "wait"), None)
-    assert w and "pop pop" in w["for"], w
+    assert w and "click click" in w["for"] and "click click click" in w["for"], w
     c.texts_until("feed_state", "paused")
-    c.note(f"pop held {o['resolve']['held_ms']} ms before deciding (waiting for pop pop)")
+    c.note(f"click held {o['resolve']['held_ms']} ms before deciding (waiting for click click / click click click)")
 
 
 @test
@@ -203,15 +203,15 @@ def fixture_hiss_goes_back(c: Ctx):
 
 
 @test
-def fixture_pop_pop_listens_then_phrase_uses_screen_tiebreak(c: Ctx):
+def fixture_click_click_click_listens_then_phrase_uses_screen_tiebreak(c: Ctx):
     c.open(FEED)
     m = c.ev.mark()
-    assert c.vox.sounds("pop")["waiting"] is True, "pop should wait for a possible second pop"
-    time.sleep(0.15)
-    c.vox.sounds("pop")
-    # pop pop = listen, owned by the app: it resolves and acts at once, with no state event (no model is asked).
+    # three clicks (three messages 150 ms apart) resolve "click click click" at once
+    c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click")
+    # click click click = listen, owned by the app: it resolves and acts at once, with no state event (no model is asked).
     r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
-    assert r and r["sequence"] == "pop pop" and r["waited"], r
+    assert r and r["sequence"] == "click click click" and r["waited"], r
+    assert r["ended_by"] == "max-length", r
     d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("n") == r["n"], 2)
     assert d and d["action"] == "listen_for_phrase" and d["source"] == "app:listen", d
     e = c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("n") == r["n"], 2)
@@ -257,7 +257,7 @@ def fixture_list_scrolls(c: Ctx):
 @test
 def fixture_controls_tap_toggles_button(c: Ctx):
     c.open(CONTROLS)
-    o = c.act("pop")
+    o = c.act("click")
     expect(o, "tap")
     c.texts_until("toggle_state", "State: ON")
     c.note(f"confirmed by {o['confirm']['by']} in {o['confirm']['ms']} ms")
@@ -271,24 +271,23 @@ def timing_lonely_click_waits_one_gap_then_resolves(c: Ctx):
     m = c.ev.mark()
     c.vox.sounds("click")
     w = c.ev.wait(m, lambda e: e["ev"] == "wait", 2)
-    assert w and "click click" in w["for"] and "click pop" not in w["for"], w
+    assert w and "click click" in w["for"] and "click click click" in w["for"], w
     o = c.outcome(m, timeout=3)
     assert o["resolve"]["waited"] and 550 <= o["resolve"]["held_ms"] <= 900, o["resolve"]
-    expect(o, "none", confirm=None)
+    expect(o, "tap", confirm=None)
+    c.texts_until("feed_state", "paused")   # the lone click tapped the feed
     c.note(f"click alone held {o['resolve']['held_ms']} ms (gap 600)")
 
 
 @test
-def timing_an_app_rule_can_claim_pop_pop(c: Ctx):
+def timing_an_app_rule_can_claim_click_click_click(c: Ctx):
     c.open(FEED)
-    c.vox.control("profile", profile={"app:ai.vox.fixture": [{"phrase": ["pop", "pop"], "kind": "fixed", "action": "like"}]})
-    # pop pop -> like (double-tap). Liking is outward, so it waits for a confirm pop before it runs.
+    c.vox.control("profile", profile={"app:ai.vox.fixture": [{"phrase": ["click", "click", "click"], "kind": "fixed", "action": "like"}]})
+    # click click click -> like. Liking is outward, so it waits for a confirm click before it runs.
     m = c.ev.mark()
-    assert c.vox.sounds("pop")["waiting"] is True
-    time.sleep(0.15)
-    c.vox.sounds("pop")
+    c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click")
     r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
-    assert r and r["sequence"] == "pop pop", r
+    assert r and r["sequence"] == "click click click", r
     st = c.ev.wait(m, lambda e: e["ev"] == "state" and e.get("n") == r["n"], 2)
     assert st, "no state event"
     rules = st["text"].split("my rules:")[1]
@@ -297,10 +296,10 @@ def timing_an_app_rule_can_claim_pop_pop(c: Ctx):
     assert d and d["action"] == "like", d
     ask = c.ev.wait(m, lambda e: e["ev"] == "confirm_ask" and e.get("n") == r["n"], 2)
     assert ask and ask["why"] == "outward action", ask
-    assert not any(x["ev"] == "exec" and x.get("n") == r["n"] for x in c.ev.since(m)), "like must wait for its confirm pop"
-    # the confirm pop runs it
+    assert not any(x["ev"] == "exec" and x.get("n") == r["n"] for x in c.ev.since(m)), "like must wait for its confirm click"
+    # the confirm click runs it
     m3 = c.ev.mark()
-    c.vox.sounds("pop")
+    c.vox.sounds("click")
     cf = c.ev.wait(m3, lambda e: e["ev"] == "confirm_ask" and e.get("event") == "confirmed", 2)
     assert cf, [e["ev"] for e in c.ev.since(m3)]
     e = c.ev.wait(m3, lambda e: e["ev"] == "exec" and e.get("n") == r["n"] and e.get("action") == "like", 3)
@@ -310,13 +309,22 @@ def timing_an_app_rule_can_claim_pop_pop(c: Ctx):
         cnf = c.ev.wait(m3, lambda e: e["ev"] == "confirm" and e.get("watch") == w, 5)
         assert cnf and cnf["result"] == "confirmed (events)", cnf
     c.texts_until("feed_likes", "likes: 1")
-    # other apps keep the default: pop pop opens the listen window there (no state, no confirm)
+    # the legacy fold: a rule written as ["pop","pop"] parses as click click (so it claims "click click" as swipe_up)
+    c.vox.control("profile", profile={"app:ai.vox.fixture": [{"phrase": ["pop", "pop"], "kind": "fixed", "action": "swipe_up"}]})
+    c.open(FEED)
+    m4 = c.ev.mark()
+    c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click")
+    r4 = c.ev.wait(m4, lambda e: e["ev"] == "resolve", 2)
+    assert r4 and r4["sequence"] == "click click", r4
+    d4 = c.ev.wait(m4, lambda e: e["ev"] == "decision" and e.get("n") == r4["n"], 2)
+    assert d4 and d4["action"] == "swipe_up", d4
+    # other apps keep the default: click click click opens the listen window there (no state, no confirm)
     sh("input keyevent KEYCODE_HOME")
     time.sleep(1.0)
     m = c.ev.mark()
-    c.vox.sounds("pop"); time.sleep(0.15); c.vox.sounds("pop")
+    c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click")
     r3 = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
-    assert r3 and r3["sequence"] == "pop pop", r3
+    assert r3 and r3["sequence"] == "click click click", r3
     d3 = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("n") == r3["n"], 2)
     assert d3 and d3["action"] == "listen_for_phrase" and d3["source"] == "app:listen", d3
     e3 = c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("n") == r3["n"], 2)
@@ -355,45 +363,45 @@ def timing_device_stamps_merge_a_late_follow_up(c: Ctx):
     c.vox.sounds("click", timing=[(t - 40, t)])
     first = c.anchor(c.vox.next_id)
     time.sleep(0.65)
-    c.vox.sounds("pop", timing=[(t + 300, t + 330)])         # happened 300 ms after the click; delivered late
+    c.vox.sounds("click", timing=[(t + 300, t + 330)])         # happened 300 ms after the click; delivered late
     r = resolves_after(c, first, 1)[0]
-    assert r["sequence"] == "click pop" and r["clock"] == "device" and r["gaps_ms"] == [300], r
+    assert r["sequence"] == "click click" and r["clock"] == "device" and r["gaps_ms"] == [300], r
     w = next(e for e in c.ev.since(first) if e["ev"] == "wait")
     c.note(f"device clock: waited {w['wait_ms']} ms for the follow-up; resolved as {r['sequence']!r} ({r['ended_by']})")
-    # The same arrival pattern without stamps: arrival fallback splits it (click alone, then pop taps after its gap).
+    # The same arrival pattern without stamps: arrival fallback splits it (click alone, then click taps after its gap).
     c.vox.control("reset")
     c.open(FEED)
     c.vox.sounds("click")
     first = c.anchor(c.vox.next_id)
     time.sleep(0.65)
-    c.vox.sounds("pop")
+    c.vox.sounds("click")
     rs = resolves_after(c, first, 2)
-    assert [x["sequence"] for x in rs[:2]] == ["click", "pop"] and rs[0]["clock"] == "arrival", rs
-    c.note("arrival clock, same timing: 'click' + 'pop' (split)")
+    assert [x["sequence"] for x in rs[:2]] == ["click", "click"] and rs[0]["clock"] == "arrival", rs
+    c.note("arrival clock, same timing: 'click' + 'click' (split)")
 
 
 @test
 def timing_device_stamps_split_a_burst(c: Ctx):
-    """A stall delivers click and pop 50 ms apart (arrival would merge into click pop), but they were 660 ms apart."""
+    """A stall delivers click and click 50 ms apart (arrival would merge into click click), but they were 660 ms apart."""
     c.open(FEED)
     t = device_ms()
     c.vox.sounds("click", timing=[(t - 800, t - 760)])       # the click happened 760 ms ago (stalled link)
     first = c.anchor(c.vox.next_id)
-    c.vox.sounds("pop", timing=[(t - 100, t - 60)])          # device gap 660 ms
+    c.vox.sounds("click", timing=[(t - 100, t - 60)])        # device gap 660 ms
     rs = resolves_after(c, first, 2)
-    assert [x["sequence"] for x in rs[:2]] == ["click", "pop"], rs
+    assert [x["sequence"] for x in rs[:2]] == ["click", "click"], rs
     assert rs[0]["ended_by"] == "device-gap" and rs[1]["clock"] == "device", rs
     c.note(f"device clock: {rs[0]['sequence']!r} ended by {rs[0]['ended_by']}, then {rs[1]['sequence']!r}: {rs[1]['note']}")
-    c.texts_until("feed_state", "paused")                    # the pop tapped the feed
-    # Without stamps the same burst merges into "click pop" (unbound since 2026-09-27: nothing happens).
+    c.texts_until("feed_state", "paused")                    # the click tapped the feed
+    # Without stamps the same burst merges into "click click" (home since 2026-09-28).
     c.vox.control("reset")
     c.open(FEED)
     c.vox.sounds("click")
     first = c.anchor(c.vox.next_id)
-    c.vox.sounds("pop")
+    c.vox.sounds("click")
     r = resolves_after(c, first, 1)[0]
-    assert r["sequence"] == "click pop" and r["clock"] == "arrival", r
-    c.note("arrival clock, same burst: 'click pop' (merged)")
+    assert r["sequence"] == "click click" and r["clock"] == "arrival", r
+    c.note("arrival clock, same burst: 'click click' (merged)")
 
 
 # --- confirmer ---------------------------------------------------------------------------------------------------------
@@ -401,7 +409,7 @@ def timing_device_stamps_split_a_burst(c: Ctx):
 @test
 def confirmer_reports_no_visible_change_on_static_screen(c: Ctx):
     c.open(STATIC)
-    o = c.act("pop")
+    o = c.act("click")
     expect(o, "tap", confirm="no visible change")
 
 
@@ -446,8 +454,9 @@ def cursor_mode_moves_stops_and_clicks(c: Ctx):
     c.vox.mode("cursor")
     assert c.ev.wait(m, lambda e: e["ev"] == "mode" and e.get("mode") == "cursor", 2)
     c.vox.control("joy_recentre")            # the cursor position persists across tests; put it back at the centre
-    o = c.act("pop", mode="cursor")          # cursor starts at the centre: click lands on the Toggle button
+    o = c.act("click", mode="cursor")        # cursor starts at the centre: click lands on the Toggle button
     assert "mode: cursor" in o["state"]["text"] and "cursor: stopped" in o["state"]["text"], o["state"]["text"]
+    assert o["resolve"]["waited"] is False, o["resolve"]   # a cursor click taps at once (no wait)
     expect(o, "click")
     c.texts_until("toggle_state", "State: ON")
     o = c.act("rise", mode="cursor", loud="loud")
@@ -456,20 +465,63 @@ def cursor_mode_moves_stops_and_clicks(c: Ctx):
     o = c.act("flat", mode="cursor")
     assert "cursor: moving up fast" in o["state"]["text"], o["state"]["text"]
     expect(o, "stop", confirm=None)
-    o = c.act("click", "click", mode="cursor")   # unbound in cursor mode by default (the button owns the mode)
-    expect(o, "none", confirm=None)
-    # a user rule can bind it: click click -> drag_toggle, sent as two messages (click now waits for a second click)
-    c.vox.control("profile", profile={"cursor": [{"phrase": ["click", "click"], "kind": "fixed", "action": "drag_toggle"}]})
-    assert c.vox.sounds("click", mode="cursor")["waiting"] is True
-    time.sleep(0.15)
-    c.vox.sounds("click", mode="cursor")
-    o = c.outcome(c.anchor(c.vox.next_id - 1))
-    assert o["resolve"]["sequence"] == "click click", o["resolve"]
+    # click click in one message = two instant clicks (multi-sound cursor rules are inert now)
+    m2 = c.ev.mark()
+    c.vox.sounds("click", "click", mode="cursor")
+    r = c.ev.wait(m2, lambda e: e["ev"] == "resolve", 2)
+    assert r and r["sequence"] == "click" and not r["waited"], r
+    # a single-sound cursor rule can bind a gesture: dip -> drag_toggle
+    c.vox.control("profile", profile={"cursor": [{"phrase": ["dip"], "kind": "fixed", "action": "drag_toggle"}]})
+    o = c.act("dip", mode="cursor")
     expect(o, "drag_toggle", confirm=None)
     assert o["exec"]["how"].startswith("drag started"), o["exec"]
     m = c.ev.mark()
     c.vox.mode("gesture")
     assert c.ev.wait(m, lambda e: e["ev"] == "mode" and e.get("mode") == "gesture", 2)
+
+
+@test
+def cursor_short_hiss_backs_long_hiss_listens(c: Ctx):
+    c.open(CONTROLS)
+    enter_cursor(c)
+    # a short hiss (300 ms) -> back, at once
+    m = c.ev.mark()
+    t = device_ms()
+    c.vox.sounds("hiss", mode="cursor", timing=[(t, t + 300)])
+    r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
+    assert r and r["sequence"] == "hiss" and not r["waited"], r
+    d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("n") == r["n"], 2)
+    assert d and d["action"] == "back", d
+    # a long hiss (900 ms) -> listen, at once (source app:cursor-listen)
+    c.open(CONTROLS)
+    m2 = c.ev.mark()
+    t = device_ms()
+    c.vox.sounds("hiss", mode="cursor", timing=[(t, t + 900)])
+    d2 = c.ev.wait(m2, lambda e: e["ev"] == "decision" and e.get("source") == "app:cursor-listen", 3)
+    assert d2 and d2["action"] == "listen_for_phrase", [e["ev"] for e in c.ev.since(m2)]
+    c.vox.mode("gesture")
+
+
+@test
+def pop_is_click(c: Ctx):
+    c.open(FEED)
+    m = c.ev.mark()
+    c.vox.sounds("pop")
+    r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
+    assert r and r["sequence"] == "click", r
+    assert c.ev.wait(m, lambda e: e["ev"] == "msg" and e.get("raw") == "pop", 2), "the msg event logs the raw pop"
+
+
+@test
+def click_heard_twice_counts_once(c: Ctx):
+    c.open(FEED)
+    m = c.ev.mark()
+    t = device_ms()
+    # the logged case: the extractor's click (t, t+70) and the tick detector's pop (t+21, t+61) are one mouth click
+    c.vox.sounds("click", "pop", timing=[(t, t + 70), (t + 21, t + 61)])
+    r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
+    assert r and r["sequence"] == "click", r
+    assert c.ev.wait(m, lambda e: e["ev"] == "merged", 2), "the copy merges into one click"
 
 
 @test
@@ -542,7 +594,7 @@ def jev_local_systemone_vox_jevlike(c: Ctx):
             ("fall", ("fall",), {}, "swipe_down", None),
             ("dip", ("dip",), {}, "swipe_left", ("feed_page", "page: 1")),
             ("arch", ("arch",), {}, "swipe_right", ("feed_page", "page: -1")),
-            ("pop", ("pop",), {}, "tap", ("feed_state", "paused")),
+            ("click", ("click",), {}, "tap", ("feed_state", "paused")),
             ("flat", ("flat",), {}, "long_press", ("feed_long", "long presses: 1")),
             ("talking", ("rise",), {"lines": [talking()]}, "none", None),
             ("click rise", ("click", "rise"), {}, "none", None),
@@ -557,10 +609,10 @@ def jev_local_systemone_vox_jevlike(c: Ctx):
             if name == "hiss" and o["decision"]["action"] == "back":
                 time.sleep(1.0)
                 assert c.vox.control("ping")["app"] != "ai.vox.fixture", "back did not leave the feed"
-        # pop pop -> listen (the app, source app:listen), then the phrase "next" (screen tie-break: video feed -> swipe up)
+        # click click click -> listen (the app, source app:listen), then the phrase "next" (screen tie-break: video feed -> swipe up)
         c.open(FEED)
-        o = c.act("pop", "pop", timeout=200)
-        check("pop pop", o, "listen_for_phrase")
+        o = c.act("click", "click", "click", timeout=200)
+        check("click click click", o, "listen_for_phrase")
         if o["decision"]["action"] == "listen_for_phrase":
             assert c.ev.wait(0, lambda e: e["ev"] == "listening" and e.get("state") == "open", 3)
             m = c.ev.mark()
@@ -580,14 +632,13 @@ def jev_local_systemone_vox_jevlike(c: Ctx):
         adb("reverse", "--remove", "tcp:8765", check=False)
 
 
-# --- intent cursor mode: pop pop, a spoken target, then tap / highlight / not on screen ----------------------------
+# --- intent cursor mode: a long hiss, a spoken target, then tap / highlight / not on screen ----------------------------
 
 def name_target(c: Ctx, phrase: str, timeout: float = 10) -> dict:
-    """In cursor mode: "pop pop" (the app opens the listening window), then the phrase. Returns the target events."""
+    """In cursor mode: a long hiss opens the listening window, then the phrase. Returns the target events."""
     m = c.ev.mark()
-    assert c.vox.sounds("pop", mode="cursor")["waiting"] is True, "in cursor mode pop must wait for a second pop"
-    time.sleep(0.15)
-    c.vox.sounds("pop", mode="cursor")
+    t = device_ms()
+    c.vox.sounds("hiss", mode="cursor", timing=[(t, t + 900)])
     d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("source") == "app:cursor-listen", 3)
     assert d and d["action"] == "listen_for_phrase", [e["ev"] for e in c.ev.since(m)]
     assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
@@ -644,9 +695,8 @@ def intent_cursor_confident_target_is_tapped(c: Ctx):
     want = "What's New (tab, top)"
     enter_cursor(c)
     m = c.ev.mark()
-    assert c.vox.sounds("pop", mode="cursor")["waiting"] is True, "in cursor mode pop must wait for a second pop"
-    time.sleep(0.15)
-    c.vox.sounds("pop", mode="cursor")
+    t = device_ms()
+    c.vox.sounds("hiss", mode="cursor", timing=[(t, t + 900)])
     d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("source") == "app:cursor-listen", 3)
     assert d and d["action"] == "listen_for_phrase", [e["ev"] for e in c.ev.since(m)]
     assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
@@ -663,7 +713,7 @@ def intent_cursor_confident_target_is_tapped(c: Ctx):
 
 
 @test
-def intent_cursor_low_confidence_highlights_top3_and_rise_rise_pop_taps_third(c: Ctx):
+def intent_cursor_low_confidence_highlights_top3_and_rise_rise_click_taps_third(c: Ctx):
     srv = FakeSystemOne()
     try:
         use_fake_targets(c, srv)
@@ -701,13 +751,13 @@ def intent_cursor_low_confidence_highlights_top3_and_rise_rise_pop_taps_third(c:
             e = c.ev.wait(m, lambda e, w=want: e["ev"] == "choice" and e.get("event") == "select" and e.get("selected") == w, 3)
             assert e, [x for x in c.ev.since(m) if x["ev"] == "choice"]
         assert e["option"] == cands[2]
-        c.vox.sounds("pop", mode="cursor")
+        c.vox.sounds("click", mode="cursor")
         tap = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
         assert tap and tap["option"] == cands[2] and tap["why"] == "picked 3 of 3" and tap["ok"], tap
         cf = c.ev.wait(m, lambda e: e["ev"] == "confirm" and e.get("watch") == tap["watch"], 5)
         assert cf and cf["result"] == "confirmed (events)", cf
         selected_tab_becomes(c, "Bookmarked Playlists")
-        c.note(f"highlight diff {d:.2%}; rise, rise, pop -> {tap['option']}; confirm {cf['result']} by {cf['by']}")
+        c.note(f"highlight diff {d:.2%}; rise, rise, click -> {tap['option']}; confirm {cf['result']} by {cf['by']}")
     finally:
         srv.close()
 
@@ -749,9 +799,8 @@ def intent_cursor_not_on_screen_cancel_and_timeout(c: Ctx):
         # with the rule decider there is no model to ask: a local miss is a toast, nothing is tapped
         c.vox.control("config", decider="rules")
         m4 = c.ev.mark()
-        assert c.vox.sounds("pop", mode="cursor")["waiting"] is True
-        time.sleep(0.15)
-        c.vox.sounds("pop", mode="cursor")
+        t = device_ms()
+        c.vox.sounds("hiss", mode="cursor", timing=[(t, t + 900)])
         assert c.ev.wait(m4, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
         c.vox.phrase("the switch")
         t = c.ev.wait(m4, lambda e: e["ev"] == "toast" and "on screen" in e.get("text", ""), 3)

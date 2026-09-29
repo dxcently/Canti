@@ -158,7 +158,7 @@ class OllamaTest {
             assertEquals("rules:default", esc.decide(input(listOf("rise"))).source)
             assertEquals("move_up_slow", esc.decide(input(listOf("rise"), mode = "cursor")).action)
             assertEquals("rules:phrase", esc.decide(input(phrase = "go back")).source)
-            assertEquals("rules:unbound", esc.decide(input(listOf("click", "pop"))).source)
+            assertEquals("rules:unbound", esc.decide(input(listOf("rise", "rise"))).source)   // 2026-09-28: "click pop" folds to home, so a truly unbound sequence
             assertEquals(0, f.bodies.size); assertEquals(0, local.calls)
             // An ambiguous gesture with a confident local model: local answer, no cloud.
             assertEquals("zoom_in", esc.decide(input(listOf("pop", "pop"), profile = ruleProfile)).action)

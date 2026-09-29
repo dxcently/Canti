@@ -369,12 +369,11 @@ class VoxBindings {
         'arch': VoxBinding('swipe right', 'default'),
         'dip': VoxBinding('swipe left', 'default'),
         'flat': VoxBinding('hold', 'default'),
-        'pop': VoxBinding('tap', 'default'),
-        'click': null,
+        'click': VoxBinding('tap', 'default'),
         'hiss': VoxBinding('back', 'default'),
       },
       combos: [
-        VoxBinding('listen', 'default', ['pop', 'pop']),
+        VoxBinding('listen', 'default', ['click', 'click', 'click']),
         VoxBinding('home', 'default', ['click', 'click']),
         VoxBinding('back', 'default', ['hiss', 'click']),
         VoxBinding('forward', 'app-only', ['click', 'hiss']),
@@ -387,13 +386,11 @@ class VoxBindings {
         'arch': VoxBinding('cursor right', 'default'),
         'dip': VoxBinding('cursor left', 'default'),
         'flat': VoxBinding('stop', 'default'),
-        'pop': VoxBinding('click', 'default'),
-        'click': null,
+        'click': VoxBinding('click', 'default'),
+        // A long hiss listens for a name (the service's `long` key; E10UI shows it).
         'hiss': VoxBinding('back', 'default'),
       },
-      combos: [
-        VoxBinding('listen for a name', 'default', ['pop', 'pop']),
-      ],
+      combos: [],
     ),
   );
 }

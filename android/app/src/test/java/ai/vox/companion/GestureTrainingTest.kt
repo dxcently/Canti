@@ -85,14 +85,16 @@ class GestureTrainingTest {
     @Test fun planHasEightCellsPerContourFourPerDiscrete() {
         for (g in TrainPlan.CONTOURS) assertEquals(g, 8, TrainPlan.cells(g).size)
         for (g in TrainPlan.DISCRETE) assertEquals(g, 4, TrainPlan.cells(g).size)
-        assertEquals(52, TrainPlan.TOTAL)
+        assertEquals(48, TrainPlan.TOTAL)
+        assertFalse("pop is folded into click", "pop" in TrainPlan.GESTURES)
+        assertEquals(listOf("soft-1", "soft-2", "loud-1", "loud-2"), TrainPlan.cells("click").map { it.id })
         for (g in TrainPlan.GESTURES) assertTrue("under the class cap", TrainPlan.cells(g).size <= EnrollmentStore.MAX_EXAMPLES)
         assertEquals("Whistle a QUICK rise, starting LOW", TrainPlan.cell("rise", "whistle-low-quick").prompt)
         assertEquals("Hum a SLOW arch, starting HIGH", TrainPlan.cell("arch", "hum-high-slow").prompt)
         assertEquals(mapOf("tone" to "hum", "pitch" to "low", "length" to "long"), TrainPlan.cell("flat", "hum-low-long").tags)
         assertEquals("Hum a LONG flat note, LOW", TrainPlan.cell("flat", "hum-low-long").prompt)
-        assertEquals(mapOf("loudness" to "loud", "take" to "2"), TrainPlan.cell("pop", "loud-2").tags)
-        assertEquals("Pop your lips LOUDLY (2 of 2)", TrainPlan.cell("pop", "loud-2").prompt)
+        assertEquals(mapOf("loudness" to "loud", "take" to "2"), TrainPlan.cell("click", "loud-2").tags)
+        assertEquals("Click your tongue LOUDLY (2 of 2)", TrainPlan.cell("click", "loud-2").prompt)
         // every cell is distinct
         for (g in TrainPlan.GESTURES) assertEquals(TrainPlan.cells(g).size, TrainPlan.cells(g).map { it.id }.toSet().size)
     }
@@ -105,7 +107,7 @@ class GestureTrainingTest {
         assertEquals("hum", v.heard["tone"]); assertEquals(180, v.heard["f0_hz"])
         assertEquals(TrainJudge.startHz(feats(180.0))!!.toInt(), v.heard["start_hz"])
         assertTrue(TrainJudge.judge(TrainPlan.cell("rise", "whistle-high-slow"), heard("rise", 1200.0, 1500)).ok)
-        assertTrue(TrainJudge.judge(TrainPlan.cell("pop", "soft-1"), heard("pop", null, 40)).ok)
+        assertTrue(TrainJudge.judge(TrainPlan.cell("click", "soft-1"), heard("click", null, 40)).ok)
     }
 
     @Test fun judgeExplainsAWrongShapeAndOffersKeepAnyway() {
@@ -113,10 +115,10 @@ class GestureTrainingTest {
         assertFalse(v.ok)
         assertEquals("Heard a dip (down then up): an arch goes up then down.", v.reason)
         assertTrue("a wrong label alone can be kept", v.canKeep)
-        val d = TrainJudge.judge(TrainPlan.cell("pop", "loud-1"), heard("click", null, 30))
-        assertEquals("Heard a click: a pop is a short lip pop.", d.reason); assertTrue(d.canKeep)
-        // a contour class needs the pitch track: a pop cannot be kept as a rise
-        val p = TrainJudge.judge(TrainPlan.cell("rise", "hum-low-quick"), heard("pop", null, 30))
+        val d = TrainJudge.judge(TrainPlan.cell("click", "loud-1"), heard("hiss", null, 30))
+        assertEquals("Heard a hiss: a click is a tongue click.", d.reason); assertTrue(d.canKeep)
+        // a contour class needs the pitch track: a click cannot be kept as a rise
+        val p = TrainJudge.judge(TrainPlan.cell("rise", "hum-low-quick"), heard("click", null, 30))
         assertFalse(p.canKeep)
         val u = TrainJudge.judge(TrainPlan.cell("rise", "hum-low-quick"), heard("unknown", 200.0, 500))
         assertTrue(u.reason, u.reason.startsWith("Canti did not count that as a gesture"))
@@ -141,7 +143,7 @@ class GestureTrainingTest {
         val two = TrainJudge.judge(TrainPlan.cell("arch", "hum-low-slow"),
             TrainHeard(listOf("rise", "fall"), listOf(line("rise"), line("fall")), 600, feats(200.0)))
         assertEquals("Heard 2 sounds (rise then fall): make it one unbroken sound.", two.reason); assertFalse(two.canKeep)
-        val none = TrainJudge.judge(TrainPlan.cell("pop", "soft-1"), TrainHeard(listOf("pop"), listOf(line("pop")), 30, null))
+        val none = TrainJudge.judge(TrainPlan.cell("click", "soft-1"), TrainHeard(listOf("click"), listOf(line("click")), 30, null))
         assertEquals(listOf("features"), none.reasons.map { it.first }); assertFalse(none.canKeep)
     }
 
@@ -170,7 +172,7 @@ class GestureTrainingTest {
         @Suppress("UNCHECKED_CAST")
         val rise = (st["gestures"] as List<Map<String, Any?>>).first { it["name"] == "rise" }
         assertEquals(1, rise["done"]); assertEquals(8, rise["total"])
-        assertEquals(1, st["done"]); assertEquals(52, st["total"])
+        assertEquals(1, st["done"]); assertEquals(48, st["total"])
         // NEXT records the next missing cell at once
         st = t.command("train_next", emptyMap())
         assertEquals("recording", session(st)["state"]); assertEquals("hum-low-quick", session(st)["cell"])
@@ -204,7 +206,7 @@ class GestureTrainingTest {
 
     @Test fun silenceTimesOutWithAReasonAndABlockerFailsAtOnce() {
         val h = FakeHost(); val t = GestureTrainer(h)
-        t.command("train_start", mapOf("gesture" to "pop")); t.command("train_record", emptyMap())
+        t.command("train_start", mapOf("gesture" to "click")); t.command("train_record", emptyMap())
         h.advance(GestureTrainer.TAKE_TIMEOUT_MS)
         val s = session(t.status(null)); assertEquals("failed", s["state"]); assertEquals("Heard nothing in 8 s.", s["reason"])
         h.block = "Canti is in cursor mode: switch to gesture mode to train gestures."
@@ -214,7 +216,7 @@ class GestureTrainingTest {
 
     @Test fun heardButDroppedSoundsReportTheDropReasonInsteadOfSilence() {
         val h = FakeHost(); val t = GestureTrainer(h)
-        t.command("train_start", mapOf("gesture" to "pop")); t.command("train_record", emptyMap())
+        t.command("train_start", mapOf("gesture" to "click")); t.command("train_record", emptyMap())
         // The mic heard sounds but dropped them (level gate, touch, a calibration): the timeout says so.
         h.drop = "Heard 3 sounds, all below the level gate"
         h.advance(GestureTrainer.TAKE_TIMEOUT_MS)
@@ -231,31 +233,31 @@ class GestureTrainingTest {
 
     @Test fun soundsOutsideARecordingAreSwallowedAndTheCardResumes() {
         val h = FakeHost(); val t = GestureTrainer(h)
-        assertFalse("no session: sounds act as usual", t.onSounds(msg("pop")))
-        t.command("train_start", mapOf("gesture" to "pop"))
-        assertTrue("session open, not recording: dropped", t.onSounds(msg("pop")))
-        assertNull(h.store("phone").find("pop"))
+        assertFalse("no session: sounds act as usual", t.onSounds(msg("click")))
+        t.command("train_start", mapOf("gesture" to "click"))
+        assertTrue("session open, not recording: dropped", t.onSounds(msg("click")))
+        assertNull(h.store("phone").find("click"))
         // record two cells, stop, and start again: only the missing ones are asked for
-        for (i in 0 until 2) { t.command(if (i == 0) "train_record" else "train_next", emptyMap()); t.onSounds(msg("pop", null, 40)); h.advance(GestureTrainer.SETTLE_MS) }
+        for (i in 0 until 2) { t.command(if (i == 0) "train_record" else "train_next", emptyMap()); t.onSounds(msg("click", null, 40)); h.advance(GestureTrainer.SETTLE_MS) }
         t.command("train_cancel", emptyMap()); assertFalse(t.active); assertFalse(h.ticksOn)
-        val s = session(t.command("train_start", mapOf("gesture" to "pop")))
+        val s = session(t.command("train_start", mapOf("gesture" to "click")))
         assertEquals("loud-1", s["cell"]); assertEquals(2, s["count"])
         // a finished card refuses a new round until Delete / redo
-        for (i in 0 until 2) { t.command(if (i == 0) "train_record" else "train_next", emptyMap()); t.onSounds(msg("pop", null, 40)); h.advance(GestureTrainer.SETTLE_MS) }
+        for (i in 0 until 2) { t.command(if (i == 0) "train_record" else "train_next", emptyMap()); t.onSounds(msg("click", null, 40)); h.advance(GestureTrainer.SETTLE_MS) }
         assertEquals("passed", session(t.status(null))["state"])
         assertEquals("done", session(t.command("train_next", emptyMap()))["state"])
         t.command("train_cancel", emptyMap())
-        assertTrue((t.command("train_start", mapOf("gesture" to "pop"))["error"] as String).contains("Delete / redo"))
+        assertTrue((t.command("train_start", mapOf("gesture" to "click"))["error"] as String).contains("Delete / redo"))
         // redo one cell: it replaces its example
-        t.command("train_start", mapOf("gesture" to "pop", "cell" to "soft-2")); t.command("train_record", emptyMap())
-        t.onSounds(msg("pop", null, 40)); h.advance(GestureTrainer.SETTLE_MS)
-        assertEquals(4, h.store("phone").find("pop")!!.examples.size)
+        t.command("train_start", mapOf("gesture" to "click", "cell" to "soft-2")); t.command("train_record", emptyMap())
+        t.onSounds(msg("click", null, 40)); h.advance(GestureTrainer.SETTLE_MS)
+        assertEquals(4, h.store("phone").find("click")!!.examples.size)
         t.command("train_cancel", emptyMap())
         // Delete / redo: one cell, then the card
-        t.command("train_delete", mapOf("gesture" to "pop", "cell" to "loud-1"))
-        assertEquals(3, h.store("phone").find("pop")!!.examples.size)
-        t.command("train_delete", mapOf("gesture" to "pop"))
-        assertNull(h.store("phone").find("pop"))
+        t.command("train_delete", mapOf("gesture" to "click", "cell" to "loud-1"))
+        assertEquals(3, h.store("phone").find("click")!!.examples.size)
+        t.command("train_delete", mapOf("gesture" to "click"))
+        assertNull(h.store("phone").find("click"))
     }
 
     @Test fun trainingIsPerSource() {
@@ -524,5 +526,43 @@ class GestureTrainingTest {
         val pitch = ((s["result"] as Map<String, Any?>)["checks"] as List<Map<String, Any?>>).first { it["id"] == "PITCH" }
         assertEquals("ok", pitch["state"])
         assertEquals(1100.0, (t.status(null)["scale"] as Map<*, *>)["home_hz"])
+    }
+
+    /** A pop counts as a click (2026-09-28): an old UI's "pop" opens the click card, and train_goto folds it too. */
+    @Test fun legacyPopGestureFoldsToClickInStartAndGoto() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "pop"))
+        assertEquals("click", session(t.status(null))["gesture"]); assertEquals("soft-1", session(t.status(null))["cell"])
+        t.command("train_cancel", emptyMap())
+        t.command("train_goto", mapOf("gesture" to "pop", "cell" to "loud-1"))
+        assertEquals("click", session(t.status(null))["gesture"]); assertEquals("loud-1", session(t.status(null))["cell"])
+    }
+
+    /** A legacy gesture:pop class stays in the store but is not part of the plan; train_delete {gesture:"pop"} removes
+     *  only it (never the click class). */
+    @Test fun legacyPopClassIsNotCountedAndDeletesOnItsOwn() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        h.store("phone").add("gesture", "pop", List(4) { feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "soft-1")) })
+        assertEquals(0, t.status(null)["done"])   // the legacy pop class is not counted toward 48
+        @Suppress("UNCHECKED_CAST")
+        val legacy = t.status(null)["legacy"] as List<Map<String, Any?>>
+        assertEquals(listOf(mapOf("gesture" to "pop", "n" to 4)), legacy)
+        // train_delete {gesture:"pop"} removes only the legacy pop class, never the click class
+        h.store("phone").add("gesture", "click", List(3) { feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "soft-1")) })
+        t.command("train_delete", mapOf("gesture" to "pop"))
+        assertNull(h.store("phone").find("pop"))
+        assertNotNull(h.store("phone").find("click"))   // the click class is untouched
+    }
+
+    /** A click take whose extractor said "pop" stores without a label_mismatch (the fold, 2026-09-28). */
+    @Test fun aPopHeardForAClickCellIsNotALabelMismatch() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "click")); t.command("train_record", emptyMap())
+        t.onSounds(msg("pop", null, 40)); h.advance(GestureTrainer.SETTLE_MS)
+        val s = session(t.status(null))
+        assertEquals("passed", s["state"])
+        val ex = h.store("phone").find("click")!!.examples.single()
+        assertEquals("pop", ex.meta!!.getJSONObject("heard").getString("label"))
+        assertFalse(ex.meta!!.optBoolean("label_mismatch"))
     }
 }
