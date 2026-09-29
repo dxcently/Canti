@@ -43,6 +43,7 @@ class RecEngine(
         val calibrating: Boolean
         val training: Boolean
         val measuring: Boolean
+        val pcStream: Boolean          // [rec] a PC stream is open (its sounds are dropped as "pc stream")
         val freeBytes: Long
         val scale: JSONObject?        // {low_hz, home_hz, high_hz} from the saved calibration, or null
         val appForeground: String
@@ -224,6 +225,7 @@ class RecEngine(
         if (env.calibrating) return "a calibration is open"
         if (env.training) return "a training round is open"
         if (env.measuring) return "a measurement is open"
+        if (env.pcStream) return "PC stream is open"   // [rec]
         if (env.freeBytes < MIN_FREE_BYTES) return "not enough free space"
         return null
     }

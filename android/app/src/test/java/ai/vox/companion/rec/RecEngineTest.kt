@@ -40,6 +40,7 @@ class RecEngineTest {
         override var calibrating = false
         override var training = false
         override var measuring = false
+        override var pcStream = false
         override var freeBytes = 1L shl 30
         override var scale: JSONObject? = null
         override val micName = "phone built-in mic"

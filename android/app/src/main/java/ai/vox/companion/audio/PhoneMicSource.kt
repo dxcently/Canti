@@ -79,7 +79,9 @@ class PhoneMicSource(
     /** [rec] Whether a recorder session is dropping mic sounds, read live (VoxService sets it; null = the gate is off):
      *  every phone/usb sound is dropped as its reason while a session is open. */
     @Volatile var recDrop: (() -> String?)? = null
-    val recorderRecording: Boolean get() = recDrop?.invoke() != null
+    val recorderRecording: Boolean get() = recDrop?.invoke() == "recording"
+    /** [rec] A PC stream is open (mic sounds are dropped as "pc stream"). */
+    val pcStreamOpen: Boolean get() = recDrop?.invoke() == "pc stream"
     /** [rec] Capture states go to the recorder (abort a take on stop / restart). Set by VoxService. */
     @Volatile var recCaptureState: ((state: String, gen: Int) -> Unit)? = null
     private val recTap = object : MicCapture.MonoTap {
@@ -535,7 +537,7 @@ class PhoneMicSource(
         Measure.startError(settings.source, capture.isRunning, measure != null)?.let { err ->
             return JSONObject().put("ok", false).put("error", err)
         }
-        if (recDrop?.invoke() != null) return JSONObject().put("ok", false).put("error", "Test recorder is open")   // [rec]
+        if (recorderRecording) return JSONObject().put("ok", false).put("error", "Test recorder is open")   // [rec]
         val phase = m.getString("phase")
         val everyMs = m.optInt("every_ms", Measure.DEFAULT_EVERY_MS).coerceIn(2000, 30000)
         val gestures = if (m.has("gestures")) {

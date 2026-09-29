@@ -123,6 +123,7 @@ class VoxService : AccessibilityService() {
     private var rec: ai.vox.companion.rec.RecEngine? = null
     private var quick: ai.vox.companion.rec.QuickRec? = null
     private var recPump: Runnable? = null
+    private var pcm: ai.vox.companion.rec.PcmStream? = null   // [rec] the PC stream (pcm_*)
     private var matcher: Matcher? = null
     // Per-feature std floors by fp_version: assets/fp_floors.json, overridden by files/fp_floors.json (op fp_floors).
     private var floors: FpFloors = FpFloors.EMPTY
@@ -291,7 +292,7 @@ class VoxService : AccessibilityService() {
         val m = mic ?: return
         val spec = assets.open(ai.vox.companion.rec.RangePlan.ASSET).use { it.readBytes() }
         val push: (Map<String, Any?>) -> Unit = { st -> recSink?.invoke(st); Unit }
-        m.recDrop = { ai.vox.companion.rec.RecDrops.reason(rec?.recording == true) }   // the §3 "recording" drop
+        m.recDrop = { ai.vox.companion.rec.RecDrops.reason(rec?.recording == true, pcm?.isOpen == true) }   // the §3 "recording" / "pc stream" drop
         val env = object : ai.vox.companion.rec.RecEngine.Env {
             override val rate get() = settings.mic.rate
             override val source get() = settings.mic.source
@@ -302,6 +303,7 @@ class VoxService : AccessibilityService() {
             override val calibrating get() = joy?.calibrating == true
             override val training get() = train?.active == true
             override val measuring get() = m.measuring
+            override val pcStream get() = pcm?.isOpen == true   // [rec] the recorder refuses while a stream is open
             override val freeBytes get() = filesDir.usableSpace
             override val scale get() = recScale()
             override val appForeground get() = currentApp()
@@ -324,6 +326,18 @@ class VoxService : AccessibilityService() {
             }
         }
         rec = ai.vox.companion.rec.RecEngine(scheduler, { System.currentTimeMillis() }, m.ring, m.heard, spec, env, push)
+        // [rec] The PC stream (pcm_*): the same capture/ring, polled over the debug socket.
+        pcm = ai.vox.companion.rec.PcmStream(scheduler, m.ring, object : ai.vox.companion.rec.PcmStream.Env {
+            override val source get() = settings.mic.source
+            override val micName get() = env.micName
+            override val capturing get() = m.capturing
+            override val listening get() = m.state == "listening"
+            override val mode get() = deviceMode
+            override val calibrating get() = joy?.calibrating == true
+            override val training get() = train?.active == true
+            override val measuring get() = m.measuring
+            override val recording get() = rec?.recording == true
+        })
         quick = ai.vox.companion.rec.QuickRec(scheduler, { System.currentTimeMillis() }, m.ring, m.heard,
             object : ai.vox.companion.rec.QuickRec.Env {
                 override val source get() = settings.mic.source
@@ -357,8 +371,13 @@ class VoxService : AccessibilityService() {
         return r.command(method, args)
     }
 
-    /** [rec] Calibration and training refuse while a recorder session is open (its sounds are dropped as "recording"). */
-    private fun recRefusal(): String? = if (rec?.recording == true) "Test recorder is open" else null
+    /** [rec] Calibration and training refuse while a recorder session or a PC stream is open (sounds dropped as
+     *  "recording" / "pc stream"). */
+    private fun recRefusal(): String? = when {
+        rec?.recording == true -> "Test recorder is open"
+        pcm?.isOpen == true -> "PC stream is open"
+        else -> null
+    }
 
     /** [rec] UiBridge closed: an open recorder session ends (its sounds would otherwise stay dropped). */
     fun recUiClosed() { rec?.onUiClosed() }
@@ -406,6 +425,7 @@ class VoxService : AccessibilityService() {
         holdScroll.stop("service stopped")
         train?.cancel("service stopped"); train = null   // [train]
         rec?.close("service stopped"); recPump?.let(main::removeCallbacks); rec = null; quick = null; recPump = null   // [rec]
+        pcm?.closeForShutdown(); pcm = null   // [rec]
         try { audio.unregisterAudioPlaybackCallback(playbackWatch) } catch (_: Exception) {}
         try { audio.unregisterAudioDeviceCallback(routeWatch) } catch (_: Exception) {}
         main.removeCallbacks(mediaWindowEnd); main.removeCallbacks(mediaRecheck)
@@ -2147,6 +2167,16 @@ class VoxService : AccessibilityService() {
                     if (err != null) { reply.put("ok", false).put("error", err) }
                     else { val j = trainJson(r); for (k in j.keys()) if (k != "error") reply.put(k, j.get(k)) }
                 }
+            }
+            // [rec] the PC stream (pcm_*): flat replies, the map's own ok/error carried through. Disabled when the gate is off.
+            "pcm_open", "pcm_read", "pcm_close" -> {
+                val r = when {
+                    !ai.vox.companion.rec.DevRec.enabled -> mapOf("ok" to false, "error" to "recorder disabled")
+                    pcm == null -> mapOf("ok" to false, "error" to "not listening")
+                    else -> pcm!!.command(op, m.keys().asSequence().filter { it != "op" && it != "type" }.associateWith { JsonMaps.value(m.get(it)) })
+                }
+                val j = trainJson(r)
+                for (k in j.keys()) reply.put(k, j.get(k))
             }
             "fp_floors" -> {
                 // {} shows the table in use; {table: {...}} stores an override (entries replace the asset's per
