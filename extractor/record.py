@@ -345,6 +345,7 @@ class Recorder:
         self.msg_f = (outdir / "messages.jsonl").open("a")
         self.print_events, self.show_protocol, self.sender = print_events, show_protocol, sender
         self.n = 0                              # samples captured
+        self.arrivals: list[tuple[float, int]] = []   # (time.monotonic(), first sample) per block, for clock mapping
         self.cond = threading.Condition()
         self.blocks: list[tuple[int, np.ndarray]] = []   # (first sample, block) for the last keep_s seconds
         self.keep = int(keep_s * self.rate)
@@ -387,6 +388,7 @@ class Recorder:
 
     def _take(self, x: np.ndarray) -> None:
         x = np.asarray(x, dtype=np.float32)
+        self.arrivals.append((time.monotonic(), self.n))   # host arrival of this block's first sample
         self.wav.write(x)
         with self.cond:
             self.blocks.append((self.n, x))
