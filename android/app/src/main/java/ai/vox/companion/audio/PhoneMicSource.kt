@@ -15,9 +15,14 @@ import ai.vox.companion.FeatureSource
 import ai.vox.companion.Matcher
 import ai.vox.companion.Sink
 import ai.vox.companion.SoundFeatures
+import ai.vox.companion.TrainJudge
 import ai.vox.companion.joystick.CalibV2
 import ai.vox.companion.joystick.ClickPopRule
 import ai.vox.companion.joystick.LevelGate
+import ai.vox.companion.rec.DevRec
+import ai.vox.companion.rec.HeardLog
+import ai.vox.companion.rec.HeardLogListener
+import ai.vox.companion.rec.RingBuffer
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -65,6 +70,23 @@ class PhoneMicSource(
     // Near-field measurement (round7-plan §3c, Measure.kt): one session at a time, owned here because it needs the
     // capture (tee, stereo) and the judge path (mic_sound.tmpl). Main thread except the tee (capture thread).
     private var measure: MeasureSession? = null
+
+    // [rec] The recorder + quick record's shared RAM ring and heard log (gate on only). The ring is fed by the capture
+    // thread's monoTap; the heard log by an EventLog listener (installed in start(), never called from inside it).
+    val ring = RingBuffer()
+    val heard = HeardLog()
+    private val heardListener = HeardLogListener(heard)
+    /** [rec] Whether a recorder session is open, read live (VoxService sets it; null = the gate is off): every
+     *  phone/usb sound is dropped as "recording" while it is. */
+    @Volatile var recorderOpen: (() -> Boolean)? = null
+    val recorderRecording: Boolean get() = recorderOpen?.invoke() == true
+    /** [rec] Capture states go to the recorder (abort a take on stop / restart). Set by VoxService. */
+    @Volatile var recCaptureState: ((state: String, gen: Int) -> Unit)? = null
+    private val recTap = object : MicCapture.MonoTap {
+        override fun frames(buf: java.nio.ByteBuffer, frames: Int, firstFrame: Long, rate: Int, gen: Int) {
+            ring.write(buf, frames, firstFrame, rate, gen)
+        }
+    }
     /** The last sid handed out (sids are wall-clock ms, strictly increasing: Measure.newSid). */
     private var lastSid = 0L
     var state = "off"; private set
@@ -128,6 +150,9 @@ class PhoneMicSource(
     /** The capture is running (the mic hears). */
     val capturing: Boolean get() = capture.isRunning
 
+    /** [rec] A near-field measurement is open (the recorder refuses to start while one runs). */
+    val measuring: Boolean get() = measure != null
+
     /** A calibration profile's extractor overrides (VxNative.overridesJson); a change restarts the capture. Null (the
      *  default, and all profiles today) = the extractor's defaults, byte-identical to before. */
     var extractorJson: String? = null
@@ -169,6 +194,7 @@ class PhoneMicSource(
         this.sink = sink
         current = this
         audio.registerAudioDeviceCallback(devices, main)
+        if (DevRec.enabled) EventLog.addListener(heardListener.onEvent)   // [rec]
         EventLog.ev("source", "name" to name, "state" to "started", "native" to (VxNative.loadError ?: VxNative.version()),
             "unprocessed" to capture.unprocessedSupported())
         refresh("start")
@@ -176,6 +202,8 @@ class PhoneMicSource(
 
     override fun stop() {
         measure?.let { stopMeasure(it, "service", restore = false) }
+        if (DevRec.enabled) EventLog.removeListener(heardListener.onEvent)   // [rec]
+        capture.monoTap = null   // [rec]
         capture.stop()
         speechHold = null
         touchWatch.stop()
@@ -281,6 +309,14 @@ class PhoneMicSource(
     private fun captureState(s: String, info: JSONObject, gen: Int) {
         lastCaptureInfo = info
         EventLog.ev("mic_capture", "state" to s, "info" to info, "gen" to gen)
+        // [rec] the tap feeds the ring only while a capture runs; a newer generation clears what Canti heard (an old
+        // capture's late "stopped" after the new "listening" changes neither: the tap stays, the log keeps its gen).
+        if (DevRec.enabled && gen >= capture.generation) {
+            if (s == "listening") capture.monoTap = recTap
+            else if (capture.monoTap === recTap) capture.monoTap = null
+            heard.setGen(gen)
+        }
+        recCaptureState?.invoke(s, gen)   // [rec]
         // A measurement ends when the capture it records from stops, fails or is replaced (reason "capture"). States of
         // an older capture (a stereo restart's own "stopped", which can arrive after the new "listening") are ignored:
         // the generation tells them apart.
@@ -380,17 +416,27 @@ class PhoneMicSource(
             measureFields += "sid" to sess.sid
             measureFields += "tmpl" to tmplFor(n)   // null (nothing enrolled / no match) is logged as "tmpl": null
         }
+        // [rec] the sound's pitch, from the native features (all builds; the recorder and calibration redesign both read it).
+        val feat = n.optJSONObject("features")
+        val sf = try { feat?.let { SoundFeatures.parse(it, "mic_sound.features") } } catch (e: Exception) { null }
+        val pitched = sf?.pitched == true
+        val pitch16 = if (pitched) sf!!.pitch16.map { Math.round(it * 10) / 10.0 } else emptyList<Double>()
+        val f0Hz = if (pitched) TrainJudge.f0Hz(sf)?.let { Math.round(it).toDouble() } else null
+        // The drop precedence: touch ?: level gate ?: joystick ?: recording ?: dry_run (a recorder session drops sounds
+        // like calibration does, so a hiss cannot press Back on the recorder screen).
+        val drop = touch?.let { "touch" } ?: level?.reason ?: joy ?: if (recorderRecording) "recording" else if (dry) "dry_run" else null
         EventLog.ev("mic_sound", "label" to n.optString("label"), "sound" to n.optLong("sound"), "source" to source,
             "t_start_ms" to n.optLong("t_start_ms"), "t_end_ms" to n.optLong("t_end_ms"),
             "detect_ms" to Math.round(detect * 10) / 10.0, "latency_ms" to Math.round(lat * 10) / 10.0,
             "text" to n.optString("text"), "gate" to n.optJSONObject("gate"),
-            "dropped" to (touch?.let { "touch" } ?: level?.reason ?: joy ?: if (dry) "dry_run" else null), "touch_ms" to touch?.let { it.atMs - t0 },
+            "dropped" to drop, "touch_ms" to touch?.let { it.atMs - t0 },
             "relabel" to rl?.let { "${it.from}->${it.to}" },
             "tick" to if (n.optBoolean("tick")) true else null,
             "media" to playing, "media_speaker" to onSpeaker, "gated" to gated,   // media playing at judge time (speaker: its route)
+            "pitch16" to JSONArray(pitch16), "f0_hz" to f0Hz,
             *measureFields.toTypedArray())
-        if (touch == null && level == null && joy == null && !dry) s.deliver(out, source)
-        else noteDrop(touch?.let { "touch" } ?: level?.reason ?: joy ?: "dry_run")
+        if (drop == null) s.deliver(out, source)
+        else noteDrop(drop)
     }
 
     /**
@@ -478,6 +524,7 @@ class PhoneMicSource(
         Measure.startError(settings.source, capture.isRunning, measure != null)?.let { err ->
             return JSONObject().put("ok", false).put("error", err)
         }
+        if (recorderRecording) return JSONObject().put("ok", false).put("error", "Test recorder is open")   // [rec]
         val phase = m.getString("phase")
         val everyMs = m.optInt("every_ms", Measure.DEFAULT_EVERY_MS).coerceIn(2000, 30000)
         val gestures = if (m.has("gestures")) {

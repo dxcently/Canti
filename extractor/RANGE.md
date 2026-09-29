@@ -143,7 +143,7 @@ Each block starts `measure_start` with `phase=range-<block>`, `prompt=false`,
 `measure_prompt {sid,n,gesture,text,t_ms}`. The PC displays the same cue text.
 After stopping, `measure.pull` verifies remote/local byte counts, PCM framing,
 rate/channels/sample count, and exports the continuous WAV plus event lines.
-The driver never clears phone files.
+The `run` driver never clears phone files.
 
 Phone slices are `[cue.t_ms - pre_roll, cue.t_ms + max_s + post_roll)`, translated
 to samples by subtracting `measure_start.wav_t0_ms`. Backgrounds are exactly
@@ -154,6 +154,36 @@ verified data; retries preserve partial transfers and use a fresh export
 folder. A lost start reply with no session ID requires coordinator recovery;
 the driver refuses to guess a session ID. A block reaching the 20-minute cap
 stops, exports completed attempts, and can be resumed in another sitting.
+
+### In-app test recorder (dev builds)
+
+A debug build can record the same spec on the phone alone (PROTOCOL.md, *Test
+recorder (dev)*): the app shows the cue, cuts each take from its RAM ring and
+writes this exact layout under its private `files/range/<name>/` (session names
+as `default_session_name`; `recorder: "app"`, Hz pending). Nothing leaves the
+phone until the PC pulls it, from `android/`:
+
+```sh
+./dev env python3 suite/range_phone.py pull [--session <name>]... [--quickrec] [--clear [--yes]]
+```
+
+`pull` refuses while a session is open in the app, copies every finished file
+(size-checked, WAV framing checked) into a staging folder, validates each
+session with `validate_session`, then swaps it in under `zflip/range/<name>`
+(or `--out` below a private root; an existing folder is replaced only if it is
+an app session, the old copy is kept aside until the new one is in place).
+`--quickrec` also copies quick records to `zflip/quickrec/<id>` (a save still in
+progress is skipped). The phone copy is deleted only with `--clear` and a typed
+yes (`--yes` skips the question), and only the verified names and ids. The
+destinations are gitignored. Then finalize each session under `extractor/run`
+as above, and run `range_suite.py` on it.
+
+A take the app heard nothing in (`no_sound`) is kept, not overwritten by the
+retry: `takes/<block>/<take_id>.a<N>.wav` with `no_sound: true, attempt: N` in
+its row. The plain path is the heard attempt; `take_rows` gives each take's last
+heard row (else its last missed one), `no_sound_rows` every missed attempt, and
+`range_suite` counts each missed attempt as a gate miss and lists them under
+`no_sound` in its report.
 
 ## Checks-runner API and timing
 
@@ -171,7 +201,8 @@ counts = validate_session(session, spec, complete=False)
 `ValueError`; missing/invalid input JSON can also raise the usual file/JSON/key
 errors. By default an incomplete sitting is valid. `complete=True` additionally
 requires every planned take, background, block rating and four measured Hz
-values. The return dict contains `takes`, `backgrounds`, `ratings`, `sittings`.
+values. The return dict contains `takes`, `backgrounds`, `ratings`, `sittings`,
+`no_sound` (missed attempts, above).
 Background rows use last name wins, ratings preserve sitting history.
 
 `t_go_ms` is on the source stream clock, **not** a take-relative clock. Extra

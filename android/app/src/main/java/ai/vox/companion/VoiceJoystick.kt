@@ -437,6 +437,7 @@ class VoiceJoystick(
         require(src != MicSettings.PICO) { "the Pico's mic can't be calibrated yet (phone and USB mics only)" }
         require(src == source) { "the sound source is $source, not $src: switch to it first" }
         require(mic?.capturing == true) { "the mic is off (${mic?.state ?: "no mic source"}): resume Canti first" }
+        require(mic?.recorderRecording != true) { "Test recorder is open" }   // [rec]
         val c = saves.start(spec, src, steps, resume, System.currentTimeMillis())
         calib = c
         applyTicks(); applyGate()

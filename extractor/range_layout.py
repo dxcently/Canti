@@ -2,8 +2,14 @@
 
 validate_session(path, spec=None, complete=False) raises ValueError on invalid
 metadata/audio and returns counts. Incomplete sittings are valid by default.
-The last labels.jsonl row for a take_id wins. t_go_ms is on the source clock;
+The last labels.jsonl row for a take_id wins (take_rows). t_go_ms is on the source clock;
 clip_start_ms and go_offset_ms map it to the local take WAV, dur_ms is WAV length.
+
+Missed takes (the phone's in-app recorder): a take its silence detector heard nothing in is saved with
+`no_sound: true` and `attempt: <n>` (its redo) at takes/<block>/<take_id>.a<n>.wav, so a Try again never overwrites
+it. The plain takes/<block>/<take_id>.wav is always the latest heard attempt. The take is its last heard row, else
+(only missed attempts) its last missed one; no_sound_rows lists every missed attempt (range_suite counts them as
+gate misses).
 """
 from __future__ import annotations
 
@@ -126,6 +132,31 @@ def read_rows(path):
 
 def latest_rows(path, key='take_id'):
     return {r[key]: r for r in read_rows(path)}
+
+
+def is_no_sound(row):
+    """A missed attempt: the recorder's silence detector heard nothing (the phone app tags it; kept, never overwritten)."""
+    return row.get('no_sound') is True
+
+
+def take_file(block, take_id, attempt=None):
+    """A take's WAV: the plain path for a heard attempt, `.a<attempt>` for a missed (no_sound) one."""
+    return f"takes/{block}/{take_id}.wav" if attempt is None else f"takes/{block}/{take_id}.a{attempt}.wav"
+
+
+def take_rows(path_or_rows):
+    """{take_id: the take's row}: its last heard (not no_sound) row, else its last row (only missed attempts)."""
+    out = {}
+    for r in (read_rows(path_or_rows) if isinstance(path_or_rows, (str, Path)) else path_or_rows):
+        if not is_no_sound(r) or r['take_id'] not in out or is_no_sound(out[r['take_id']]):
+            out[r['take_id']] = r
+    return out
+
+
+def no_sound_rows(path_or_rows):
+    """Every missed (no_sound) attempt, in journal order."""
+    rows = read_rows(path_or_rows) if isinstance(path_or_rows, (str, Path)) else path_or_rows
+    return [r for r in rows if is_no_sound(r)]
 
 
 def append_row(path, row):
@@ -297,7 +328,9 @@ def validate_session(path, spec=None, complete=False):
     safe_name(session_speaker(meta))
     full = build_plan(spec, profile=profile)
     plan = {t['take_id']: t for t in full if t['kind'] == 'takes'}
-    rows = latest_rows(path / 'labels.jsonl')
+    journal = read_rows(path / 'labels.jsonl')
+    rows = take_rows(journal)
+    missed = no_sound_rows(journal)
 
     def wav_info(file):
         target = (path / file).resolve()
@@ -311,14 +344,25 @@ def validate_session(path, spec=None, complete=False):
                 raise ValueError('empty/truncated WAV')
         return n * 1000 / rate
 
-    for tid, r in rows.items():
+    # the take rows, plus every missed attempt (each keeps its own .a<n> WAV)
+    checked = list(rows.values()) + [r for r in missed if r is not rows.get(r['take_id'])]
+    for r in checked:
+        tid = r['take_id']
         if tid not in plan:
             raise ValueError('unknown take_id')
         t = plan[tid]
         for k in ('block', 'expect', 'cond', 'cond_id', 'rep', 'bg'):
             if r[k] != t[k]:
                 raise ValueError(f'{tid}: {k} differs from spec')
-        if r['file'] != f"takes/{t['block']}/{tid}.wav" or type(r['redo']) is not int or r['redo'] < 0:
+        if 'no_sound' in r and not isinstance(r['no_sound'], bool):
+            raise ValueError('bad no_sound flag')
+        if is_no_sound(r):
+            if type(r.get('attempt')) is not int or r['attempt'] < 0:
+                raise ValueError(f'{tid}: a no_sound row needs an int attempt')
+            want = take_file(t['block'], tid, r['attempt'])
+        else:
+            want = take_file(t['block'], tid)
+        if r['file'] != want or type(r['redo']) is not int or r['redo'] < 0:
             raise ValueError('bad file/redo')
         if any(not math.isfinite(r[k]) or r[k] < 0 for k in ('t_go_ms', 'dur_ms')) or abs(
                 wav_info(r['file']) - r['dur_ms']) > 1000 / meta['rate']:
@@ -348,7 +392,10 @@ def validate_session(path, spec=None, complete=False):
     if complete and (set(rows) != set(plan) or set(bgs) != set(expected_bg) or
                      {r['block'] for r in ratings} != blocks):
         raise ValueError('incomplete session')
-    return dict(takes=len(rows), backgrounds=len(bgs), ratings=len(ratings), sittings=len(meta['sittings']))
+    if len({(r['take_id'], r['attempt']) for r in missed}) != len(missed):
+        raise ValueError('duplicate no_sound attempt')
+    return dict(takes=len(rows), backgrounds=len(bgs), ratings=len(ratings), sittings=len(meta['sittings']),
+                no_sound=len(missed))
 
 
 def session_profile(meta):

@@ -49,6 +49,9 @@ class VoxService : AccessibilityService() {
         const val OPTION_FORMAT_MAX_AGE_MS = 10 * 60_000L
         /** [train] The UI channel's `train_status` pushes (UiBridge sets it; main thread). */
         @Volatile var trainSink: ((Map<String, Any?>) -> Unit)? = null
+        /** [rec] The `ai.vox/recorder` channel's `rec_status` / `qr_snapshot` pushes (UiBridge sets them; main thread). */
+        @Volatile var recSink: ((Map<String, Any?>) -> Unit)? = null
+        @Volatile var qrSink: ((Map<String, Any?>) -> Unit)? = null
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -112,6 +115,10 @@ class VoxService : AccessibilityService() {
     private var enroll = EnrollmentStore(Profile.DEFAULT_NAME)
     // [train] Gesture training (GestureTraining.kt, PROTOCOL.md "Gesture training"): the UI's train_* session.
     var train: GestureTrainer? = null; private set
+    // [rec] The in-app test recorder + quick record (package ai.vox.companion.rec); null while the gate is off.
+    private var rec: ai.vox.companion.rec.RecEngine? = null
+    private var quick: ai.vox.companion.rec.QuickRec? = null
+    private var recPump: Runnable? = null
     private var matcher: Matcher? = null
     // Per-feature std floors by fp_version: assets/fp_floors.json, overridden by files/fp_floors.json (op fp_floors).
     private var floors: FpFloors = FpFloors.EMPTY
@@ -258,6 +265,7 @@ class VoxService : AccessibilityService() {
             joy?.onCalibChanged = { updateBadge("") }   // a calibration shows the paused face while it runs
         } catch (e: Exception) { EventLog.ev("error", "where" to "joystick", "error" to e.toString()) }
         train = GestureTrainer(trainHost(scheduler))   // [train]
+        if (ai.vox.companion.rec.DevRec.enabled) setupRec(scheduler)   // [rec]
         if (settings.debugSource) sources += DebugSocketSource(this)
         for (s in sources) try { s.start(sink) } catch (e: Exception) { EventLog.ev("error", "where" to "source ${s.name}", "error" to e.toString()) }
         EventLog.ev("service", "state" to "connected", "vocab" to Vocab.SOURCE_DIGEST, "decider" to decider.name,
@@ -272,11 +280,108 @@ class VoxService : AccessibilityService() {
     override fun onDestroy() { shutdown(); super.onDestroy() }
     override fun onInterrupt() {}
 
+    // [rec] The in-app test recorder + quick record (package ai.vox.companion.rec), wired only while the gate is on.
+    private fun setupRec(scheduler: Scheduler) {
+        val m = mic ?: return
+        val spec = assets.open("range/range_v1.json").use { it.readBytes() }
+        val push: (Map<String, Any?>) -> Unit = { st -> recSink?.invoke(st); Unit }
+        m.recorderOpen = { rec?.recording == true }   // the §3 "recording" drop reads the open session live
+        val env = object : ai.vox.companion.rec.RecEngine.Env {
+            override val rate get() = settings.mic.rate
+            override val source get() = settings.mic.source
+            override val micName get() = if (settings.mic.source == "usb") "usb: ${m.device ?: ""}" else "phone built-in mic"
+            override val capturing get() = m.capturing
+            override val listening get() = m.state == "listening"
+            override val mode get() = deviceMode
+            override val calibrating get() = joy?.calibrating == true
+            override val training get() = train?.active == true
+            override val measuring get() = m.measuring
+            override val freeBytes get() = filesDir.usableSpace
+            override val scale get() = recScale()
+            override val appForeground get() = currentApp()
+            override val filesDir get() = this@VoxService.filesDir
+        }
+        rec = ai.vox.companion.rec.RecEngine(scheduler, { System.currentTimeMillis() }, m.ring, m.heard, spec, env, push)
+        quick = ai.vox.companion.rec.QuickRec(scheduler, { System.currentTimeMillis() }, m.ring, m.heard,
+            object : ai.vox.companion.rec.QuickRec.Env {
+                override val source get() = settings.mic.source
+                override val micName get() = env.micName
+                override val appForeground get() = currentApp()
+                override val mode get() = deviceMode
+                override val minLevelDb get() = m.levelGate?.minLevelDbfs
+            }, filesDir)
+        m.recCaptureState = { state, gen -> rec?.onCaptureState(state, gen) }
+        // The 10 Hz status push while ready/countdown/recording (countdown_s / rec_s / level change continuously).
+        val pump = object : Runnable { override fun run() { rec?.pushIfActive(); main.postDelayed(this, 100) } }
+        recPump = pump
+        main.postDelayed(pump, 100)
+    }
+
+    /** The source's saved calibration range (read-only), or null: {low_hz, home_hz, high_hz}. */
+    private fun recScale(): org.json.JSONObject? {
+        val p = joy?.load(settings.mic.source) ?: return null
+        val j = p.toJson()
+        val home = j.opt("home_hz")
+        if (home === org.json.JSONObject.NULL || home == null) return null
+        return org.json.JSONObject().put("low_hz", j.opt("range_lo_hz")).put("home_hz", home).put("high_hz", j.opt("range_hi_hz"))
+    }
+
+    /** The `ai.vox/recorder` + debug socket's rec_* / qr_* ops (flat replies). */
+    fun recCommand(method: String, args: Map<String, Any?>): Map<String, Any?> {
+        if (!ai.vox.companion.rec.DevRec.enabled) return mapOf("enabled" to false)
+        if (method == "rec_list") return recList()
+        val r = rec ?: return mapOf("enabled" to true, "active" to false)
+        if (method.startsWith("qr_")) return quick?.command(method, args) ?: mapOf("id" to null)
+        return r.command(method, args)
+    }
+
+    /** [rec] Calibration and training refuse while a recorder session is open (its sounds are dropped as "recording"). */
+    private fun recRefusal(): String? = if (rec?.recording == true) "Test recorder is open" else null
+
+    /** [rec] UiBridge closed: an open recorder session ends (its sounds would otherwise stay dropped). */
+    fun recUiClosed() { rec?.onUiClosed() }
+
+    private fun recList(): Map<String, Any?> {
+        val root = java.io.File(filesDir, "range")
+        val spec = assets.open("range/range_v1.json").use { it.readBytes() }
+        val openName = rec?.openName
+        val sessions = (if (root.isDirectory) root.listFiles()?.filter { it.isDirectory } ?: emptyList() else emptyList())
+            .map { d -> sessionSummary(d, spec, openName) }
+            .sortedByDescending { it["name"] as String }
+        return mapOf("enabled" to true, "sessions" to sessions, "free_bytes" to filesDir.usableSpace,
+            "quickrec" to ai.vox.companion.rec.quickrecSummary(filesDir))
+    }
+
+    private fun sessionSummary(d: java.io.File, spec: ByteArray, openName: String?): Map<String, Any?> {
+        val meta = try { org.json.JSONObject(java.io.File(d, "session.json").readText()) } catch (e: Exception) { org.json.JSONObject() }
+        val profile = meta.optString("profile", "short")
+        val plan = try { ai.vox.companion.rec.RangePlan.parse(spec, profile) } catch (e: Exception) { null }
+        val labels = readJsonl(java.io.File(d, "labels.jsonl"))
+        val bgs = readJsonl(java.io.File(d, "backgrounds.jsonl"))
+        val ratings = readJsonl(java.io.File(d, "ratings.jsonl"))
+        val labelIds = labels.map { it.optString("take_id") }.toSet()
+        val bgNames = bgs.map { it.optString("name") }.toSet()
+        val rated = ratings.map { it.optString("block") }.toSet()
+        val done = plan?.takes?.count { it.kind == "takes" && it.takeId in labelIds } ?: 0
+        val total = plan?.takes?.count { it.kind == "takes" } ?: 0
+        val bgDone = plan?.takes?.count { it.kind == "backgrounds" && it.name in bgNames } ?: 0
+        val bgTotal = plan?.takes?.count { it.kind == "backgrounds" } ?: 0
+        val bytes = if (d.isDirectory) d.walkBottomUp().filter { it.isFile }.sumOf { it.length() } else 0L
+        return mapOf("name" to d.name, "speaker" to meta.optString("speaker", ""), "profile" to profile,
+            "mic" to meta.optString("mic", ""), "rate" to meta.optInt("rate", 0),
+            "done" to done, "total" to total, "backgrounds_done" to bgDone, "backgrounds_total" to bgTotal,
+            "rated_blocks" to rated.toList(), "bytes" to bytes, "open" to (d.name == openName))
+    }
+
+    private fun readJsonl(f: java.io.File): List<org.json.JSONObject> =
+        if (!f.exists()) emptyList() else f.readLines().filter { it.isNotBlank() }.map { org.json.JSONObject(it) }
+
     private fun shutdown() {
         if (instance == null) return
         instance = null
         holdScroll.stop("service stopped")
         train?.cancel("service stopped"); train = null   // [train]
+        rec?.close("service stopped"); recPump?.let(main::removeCallbacks); rec = null; quick = null; recPump = null   // [rec]
         try { audio.unregisterAudioPlaybackCallback(playbackWatch) } catch (_: Exception) {}
         try { audio.unregisterAudioDeviceCallback(routeWatch) } catch (_: Exception) {}
         main.removeCallbacks(mediaWindowEnd); main.removeCallbacks(mediaRecheck)
@@ -637,6 +742,9 @@ class VoxService : AccessibilityService() {
         "calibrated" to (joy?.calibrated() ?: false),
         // a calibration run is open now (its sounds are dropped as "calibrating"); a training round is open ([train])
         "calibrating" to (joy?.calibrating ?: false), "training" to (train?.active ?: false),
+        // [rec] the dev recorder: the gate and whether a recorder session is open (the UI shows recorder entries only
+        // when dev_recorder is true).
+        "dev_recorder" to ai.vox.companion.rec.DevRec.enabled, "recording" to (rec?.recording ?: false),
         // the bindings window: the effective sound -> action per mode (Bindings), for the current app
         "bindings" to Bindings.view(profile, currentApp(), settings.mic.usesMic),
     ) + (ble?.setup() ?: emptyMap())
@@ -1481,6 +1589,10 @@ class VoxService : AccessibilityService() {
         override val joystick get() = joy?.on == true
         override fun recentre() { joy?.recentre("badge") }
         override fun calibrate() { Pairing.openRoute(this@VoxService, Pairing.ROUTE_CALIBRATE, "badge") }
+        override fun quickRec() {   // [rec] QUICK REC: snapshot the ring, then open the quickrec screen.
+            quick?.snap()?.let { qrSink?.invoke(it) }
+            Pairing.openRoute(this@VoxService, Pairing.ROUTE_QUICKREC, "badge")
+        }
         override fun setSource(src: String) {
             if (!ai.vox.companion.audio.SoundSource.set(this@VoxService, src, "badge")) ai.vox.companion.audio.SoundSource.choose(this@VoxService)
             // The Pico with no device remembered: the first-run pairing screen.
@@ -1621,7 +1733,8 @@ class VoxService : AccessibilityService() {
         private fun block() = TrainBlock.of(TrainBlock.Inputs(calibrating = joy?.calibrating == true, paused = paused,
             armed = armed, usesMic = settings.mic.usesMic, cursorMode = deviceMode == "cursor", micState = mic?.state,
             deviceReady = ble?.link?.ready == true))
-        override fun blocker(): String? = block()?.first
+        override fun blocker(): String? = recRefusal() ?: block()?.first   // [rec] recRefusal
+        override fun refuseStart(): String? = recRefusal()   // [rec]
         override fun blockerAction(): String? = block()?.second
         override fun dropSummary(sinceMs: Long): String? = mic?.dropSummary(sinceMs)
         override fun liveTrace() = settings.mic.usesMic && mic != null
@@ -1821,6 +1934,19 @@ class VoxService : AccessibilityService() {
                 val r = (mic ?: throw IllegalArgumentException("mic source not running")).control(op, m)
                 if (!r.optBoolean("ok", true)) { reply.put("ok", false).put("error", r.optString("error")) }
                 else for (k in r.keys()) if (k != "ok") reply.put(k, r.get(k))
+            }
+            // [rec] the in-app test recorder + quick record: flat replies like measure_*. Disabled when the gate is off.
+            "rec_list", "rec_start", "rec_open", "rec_status", "rec_next", "rec_go", "rec_abort", "rec_skip",
+            "rec_redo_last", "rec_rate", "rec_close", "rec_clear",
+            "qr_snap", "qr_pending", "qr_save", "qr_discard" -> {
+                if (!ai.vox.companion.rec.DevRec.enabled) { reply.put("ok", false).put("error", "recorder disabled") }
+                else {
+                    // JSON args as plain lists/maps (what the channel passes); the map reply as nested JSON
+                    val r = recCommand(op, m.keys().asSequence().filter { it != "op" && it != "type" }.associateWith { JsonMaps.value(m.get(it)) })
+                    val err = r["error"] as? String
+                    if (err != null) { reply.put("ok", false).put("error", err) }
+                    else { val j = trainJson(r); for (k in j.keys()) if (k != "error") reply.put(k, j.get(k)) }
+                }
             }
             "fp_floors" -> {
                 // {} shows the table in use; {table: {...}} stores an override (entries replace the asset's per

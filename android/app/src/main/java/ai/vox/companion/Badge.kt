@@ -208,6 +208,8 @@ interface BadgeActions {
     fun recentre() {}
     /** Open the calibration screen (route `calibrate`). */
     fun calibrate() {}
+    /** [rec] Take a quick-record snapshot and open the quickrec screen (route `quickrec`); gate on only. */
+    fun quickRec() {}
 
     companion object {
         /** Menu rows: sound-source keys (audio.SoundSource) and their labels. */

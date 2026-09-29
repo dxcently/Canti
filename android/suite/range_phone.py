@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import time
 import wave
@@ -239,6 +240,143 @@ def run_session(args, vox=None):
     return out
 
 
+def pull_dest(out):
+    """The recorder's local destination: <repo>/zflip/range by default, or --out under a private root."""
+    if out is None:
+        return EXTRACTOR.parent / 'zflip' / 'range'
+    return L.private_dir(out)
+
+
+QUICKREC_ROOTS = (EXTRACTOR.parent / 'zflip' / 'quickrec', EXTRACTOR.parent / 'android' / '.state')
+
+
+def quickrec_dir(path):
+    """Quick-record clips land only under the gitignored zflip/quickrec or android/.state (never a tracked path)."""
+    path = Path(path).expanduser().resolve()
+    if not any(path == root or path.is_relative_to(root) for root in QUICKREC_ROOTS):
+        raise ValueError('quick records go under zflip/quickrec or android/.state')
+    return path
+
+
+def _remote_entries(prefix):
+    """The run-as find listing under [prefix] (relative to the app's data dir), byte-safe. Stdlib only."""
+    return [e for e in
+            measure.adb("exec-out", "run-as", voxlib.APP, "sh", "-c",
+                        f"find {prefix} -type f 2>/dev/null; true", binary=True).decode(errors="replace").split()
+            if e]
+
+
+def _remote_names(folder):
+    return [n for n in measure.adb("exec-out", "run-as", voxlib.APP, "sh", "-c", f"ls {folder} 2>/dev/null; true",
+                                   binary=True).decode(errors="replace").split() if n]
+
+
+def _copy_remote_dir(prefix, target):
+    """Byte-exact copy of every finished remote file under [prefix] into [target]; every WAV is checked with
+    measure.wav_info. The app writes <name>.tmp(.wav) then renames, so a .tmp file is a write in progress: skipped."""
+    files = [f for f in _remote_entries(prefix) if '.tmp' not in f.rsplit('/', 1)[-1]]
+    target.mkdir(parents=True, exist_ok=True)
+    for rf in files:
+        rel = rf[len(prefix) + 1:]
+        if not rel:
+            continue
+        size = int(measure.adb("exec-out", "run-as", voxlib.APP, "stat", "-c", "%s", rf).strip())
+        L.disk_guard(target, size)
+        data = measure.adb("exec-out", "run-as", voxlib.APP, "cat", rf, binary=True)
+        if len(data) != size:
+            raise ValueError(f"{rel}: byte size mismatch ({len(data)} != {size})")
+        if rel.endswith('.wav'):
+            measure.wav_info(data)
+        p = target / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+        if p.stat().st_size != size:
+            raise ValueError(f"{rel}: local verification failed")
+    return target
+
+
+def _replace(target, src, check=None):
+    """Swaps [src] in for [target]: the old folder is renamed aside first and deleted only after the new one is in
+    place, so a failure never leaves neither. [check] refuses an existing folder (a desktop session is never replaced)."""
+    if target.exists():
+        if check:
+            check(target)
+        aside = target.with_name(f'.old-{time.time_ns()}-{target.name}')
+        target.rename(aside)
+        try:
+            src.rename(target)
+        except BaseException:
+            aside.rename(target)
+            raise
+        shutil.rmtree(aside)
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(target)
+
+
+def _app_only(target):
+    meta = target / 'session.json'
+    if not meta.exists() or json.loads(meta.read_text()).get('recorder') != 'app':
+        raise ValueError(f"{target.name}: existing local folder is not a recorder 'app' session")
+
+
+def pull(vox, dest, sessions=None, quickrec=False, clear=False, quickrec_dest=None, confirm=None):
+    """The recorder pull (contract §8): verify every session into .pull-<ns>, replace (recorder "app" folders only),
+    then, only with [clear] and a yes from [confirm], rec_clear exactly the verified names/ids. Everything lands under
+    gitignored roots (zflip/range or --out via private_dir; zflip/quickrec). Never runs against a real device in tests."""
+    dest = Path(dest).expanduser().resolve()
+    qdest = quickrec_dir(quickrec_dest or QUICKREC_ROOTS[0])
+    st = vox.control("rec_status")
+    if st.get("active"):
+        raise RuntimeError(f"session {st.get('name')} is open in the app; rec_close first")
+    names = _remote_names("files/range")
+    if sessions is not None:
+        missing = [s for s in sessions if s not in names]
+        if missing:
+            raise ValueError(f"no such session: {', '.join(missing)}")
+        names = [n for n in names if n in sessions]
+    for name in names:
+        L.safe_name(name)
+        L.private_dir(dest / name)
+    qids = [q for q in _remote_names("files/quickrec") if L.safe_name(q)] if quickrec else []
+    if not names and not qids:
+        raise ValueError("nothing to pull: no recorder sessions" + (" or quick records" if quickrec else "")
+                         + " on the device")
+    staging = dest / f".pull-{time.time_ns()}"
+    qdone = []
+    try:
+        for name in names:
+            _copy_remote_dir(f"files/range/{name}", staging / name)
+            L.validate_session(staging / name)   # complete=False
+        for qid in qids:
+            q = _copy_remote_dir(f"files/quickrec/{qid}", staging / 'quickrec' / qid)
+            if (q / 'clip.wav').exists() and (q / 'meta.json').exists():
+                qdone.append(qid)                  # an unfinished save stays on the phone (never cleared)
+        # all verified: replace, then clear only the verified names/ids
+        for name in names:
+            _replace(dest / name, staging / name, _app_only)
+        for qid in qdone:
+            _replace(qdest / qid, staging / 'quickrec' / qid)
+        if clear and (names or qdone):
+            what = f"{len(names)} session(s) and {len(qdone)} quick record(s)"
+            if confirm is None or not confirm(f"Pulled and verified {what}. Delete them from the phone? [y/N] "):
+                print("Left on the phone.")
+            else:
+                r = vox.control("rec_clear", sessions=names, quickrec=qdone)
+                if not r.get("ok"):
+                    raise RuntimeError(f"rec_clear: {r.get('error')}")
+                gone = r.get("deleted") or {}
+                if sorted(gone.get("sessions", [])) != sorted(names) or sorted(gone.get("quickrec", [])) != sorted(qdone):
+                    print(f"Warning: the phone deleted {gone}, asked for {names} + {qdone}")
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return names, qdone
+
+
+def ask(prompt):
+    return input(prompt).strip().lower() in ('y', 'yes')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     subs = p.add_subparsers(dest='command', required=True)
@@ -255,12 +393,29 @@ def main():
     run.add_argument('--channels', type=int, choices=[1, 2])
     finalize = subs.add_parser('finalize')
     finalize.add_argument('session', type=Path)
+    pull_cmd = subs.add_parser('pull', help='copy test recorder sessions (and quick records) off the phone')
+    pull_cmd.add_argument('--out', type=Path, help='default zflip/range; must be a private root')
+    pull_cmd.add_argument('--session', action='append', help='only this session (repeatable); default all')
+    pull_cmd.add_argument('--quickrec', action='store_true', help='also pull quick records to zflip/quickrec')
+    pull_cmd.add_argument('--clear', action='store_true', help='after verifying, offer to delete them on the phone')
+    pull_cmd.add_argument('--yes', action='store_true', help='with --clear: delete without asking')
     args = p.parse_args()
     if args.command == 'finalize':
         from range_session import finalize_range
         out = L.private_dir(args.session)
         finalize_range(out, L.load_spec(out / 'spec.json'))
         L.validate_session(out)
+    elif args.command == 'pull':
+        dest = pull_dest(args.out)
+        vox = voxlib.Vox()
+        try:
+            names, qids = pull(vox, dest, args.session, args.quickrec, args.clear,
+                               confirm=(lambda _: True) if args.yes else ask)
+            print("Pulled: " + " ".join(names + [f"quickrec/{q}" for q in qids]))
+            if names:
+                print("Next: finalize each session under extractor/run (range_session.py), then range_suite.py.")
+        finally:
+            vox.close()
     else:
         run_session(args)
 

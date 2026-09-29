@@ -15,6 +15,8 @@ object Pairing {
     const val ROUTE_PAIR = "pair"
     /** The voice joystick's calibration (Flutter setup screen, ../ui/lib/src/calibration.dart): the badge menu's CALIBRATE. */
     const val ROUTE_CALIBRATE = "calibrate"
+    /** [rec] The quick-record screen (Flutter, ../ui): the badge menu's QUICK REC. */
+    const val ROUTE_QUICKREC = "quickrec"
 
     /**
      * The user refused the Bluetooth permissions with "don't ask again" (the last request came back denied without a

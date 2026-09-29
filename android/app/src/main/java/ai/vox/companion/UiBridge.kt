@@ -204,6 +204,12 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
     private val trainMethods = MethodChannel(messenger, TRAIN)
     private val trainSink: (Map<String, Any?>) -> Unit = { m -> trainMethods.invokeMethod("train_status", m) }
 
+    // [rec] the recorder's method channel (ai.vox/recorder): RecChannel owns its handler; it pushes rec_status /
+    // qr_snapshot through these sinks (set on VoxService so the engine and badge can push).
+    private val recChannel = ai.vox.companion.rec.RecChannel(messenger) { method, args ->
+        VoxService.instance?.recCommand(method, args) ?: mapOf("service" to false, "enabled" to false)
+    }
+
     init { trainInit() }
 
     private fun trainInit() {
@@ -220,6 +226,7 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
             }
         }
         VoxService.trainSink = trainSink
+        VoxService.recSink = recChannel.statusSink; VoxService.qrSink = recChannel.snapshotSink   // [rec]
     }
 
     fun close() {
@@ -230,6 +237,11 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
         // A calibration left open makes Canti deaf (every mic sound is dropped as "calibrating"): this screen's one ends
         // with it (another Canti screen that took over the calibration pushes keeps its run).
         if (VoiceJoystick.uiSink === calibSink) { VoiceJoystick.uiSink = null; VoxService.instance?.joy?.cancelCalibration("ui closed") }
+        // [rec] the recorder screen is gone: end an open session (its sounds would otherwise stay dropped).
+        if (VoxService.recSink === recChannel.statusSink) VoxService.recSink = null
+        if (VoxService.qrSink === recChannel.snapshotSink) VoxService.qrSink = null
+        recChannel.close()
+        VoxService.instance?.recUiClosed()
         permissionResult?.success(mapOf("service" to (VoxService.instance != null))); permissionResult = null
         methods.setMethodCallHandler(null)
         events.setStreamHandler(null)

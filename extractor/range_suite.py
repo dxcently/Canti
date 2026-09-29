@@ -7,7 +7,8 @@ folder (never into the repo). The session folders are private: this program only
 writes its two report files beside them (it refuses a folder outside the private roots).
 
 Sessions are read through range_layout (the recorders' own contract): the session's saved spec.json,
-validate_session, last-row-wins labels/backgrounds and the session's profile ("full" or "short") and
+validate_session, last-row-wins labels/backgrounds (a take is its last heard row: range_layout.take_rows) and the
+session's profile ("full" or "short") and
 speaker ("self" or another speaker's pseudonymous id). This runner holds no grid of its own; the SNR
 steps come from the spec's analysis.snr_db (override with --snr).
 
@@ -39,6 +40,9 @@ The checks (each a section of the report); the extractor runs once per take and 
                 (vox_extract.vocab.DEFAULT_BINDINGS). Refuses the phone: serial R5CX62H7PNJ, adb server
                 port 5037, host port 7788, and any serial that is not emulator-*.
   6. ratings     ratings.jsonl per block with seconds and redos.
+  no sound       the phone recorder's missed attempts (labels rows with no_sound: true, each kept as its own
+                .a<n> WAV): every one counts as a gate miss in section 2's keep-rate (none of its expected sounds
+                kept), and the report lists them (per gesture, and how many a Try again then got).
 
 With several sessions it also prints a summary grouped by speaker and device (--summary-out writes it
 as summary.json/.md into a private folder).
@@ -88,19 +92,23 @@ JOY_SPEC = HERE / "prompts" / "joystick_v1.json"
 # --------------------------------------------------------------------------------- session loading
 
 def load_session(directory: str | Path) -> dict:
-    """One session through range_layout: validated layout, the session's own spec/profile/speaker, the last row per
-    take_id (in plan order), the last row per background name, and the ratings."""
+    """One session through range_layout: validated layout, the session's own spec/profile/speaker, the take row per
+    take_id (its last heard row, else its last missed one; in plan order), every missed (no_sound) attempt, the last
+    row per background name, and the ratings."""
     d = Path(directory).expanduser().resolve()
     spec = L.load_spec(d / "spec.json" if (d / "spec.json").exists() else L.SPEC_PATH)
     counts = L.validate_session(d, spec)
     meta = json.loads((d / "session.json").read_text())
     profile = L.session_profile(meta)
-    rows = L.latest_rows(d / "labels.jsonl")
+    journal = L.read_rows(d / "labels.jsonl")
+    rows = L.take_rows(journal)
+    plan = L.build_plan(spec, profile=profile)
     # each row carries its plan cell's quiet flag (the room step: nothing expected, not a gesture take)
-    takes = [dict(rows[t["take_id"]], quiet=L.is_quiet(t)) for t in L.build_plan(spec, profile=profile)
-             if t["take_id"] in rows]
+    takes = [dict(rows[t["take_id"]], quiet=L.is_quiet(t)) for t in plan if t["take_id"] in rows]
+    quiet = {t["take_id"]: L.is_quiet(t) for t in plan}
+    no_sound = [dict(r, quiet=quiet.get(r["take_id"], False)) for r in L.no_sound_rows(journal)]
     return {"dir": d, "meta": meta, "spec": spec, "profile": profile, "speaker": L.session_speaker(meta),
-            "device": meta["device"], "counts": counts, "takes": takes,
+            "device": meta["device"], "counts": counts, "takes": takes, "no_sound": no_sound,
             "backgrounds": list(L.latest_rows(d / "backgrounds.jsonl", "name").values()),
             "ratings": L.read_rows(d / "ratings.jsonl")}
 
@@ -452,12 +460,13 @@ def _nf_summary(events: list[dict]) -> dict:
 
 def check_gates(session: dict, events: dict[str, list[dict]], bg_events: dict[str, dict], gate: dict) -> dict:
     """With [gate]: per take, how many expected sounds survive it (keep-rate); per background, how many events would
-    act per minute."""
+    act per minute. Every missed (no_sound) attempt is a gate miss: none of its expected sounds kept (a take whose
+    row is a missed attempt is counted there, once)."""
     per_gesture: dict = {}
     kept_total = total_total = 0
     per_take = []
     for t in session["takes"]:
-        if t.get("quiet"):
+        if t.get("quiet") or L.is_no_sound(t):
             continue
         evs = events[t["take_id"]]
         expect = list(t.get("expect") or [])
@@ -468,6 +477,17 @@ def check_gates(session: dict, events: dict[str, list[dict]], bg_events: dict[st
         per_gesture_add(per_gesture, expect, kept)
         per_take.append({"take_id": t["take_id"], "block": t.get("block"), "cond_id": t.get("cond_id"),
                          "kept": k, "total": tot, "rate": frac(k, tot), "nearfield": _nf_summary(evs)})
+    for t in session.get("no_sound", []):
+        if t.get("quiet"):
+            continue
+        expect = list(t.get("expect") or [])
+        k, tot = recall_counts(expect, [])
+        kept_total += k
+        total_total += tot
+        per_gesture_add(per_gesture, expect, [])
+        per_take.append({"take_id": t["take_id"], "block": t.get("block"), "cond_id": t.get("cond_id"),
+                         "attempt": t.get("attempt"), "no_sound": True, "kept": k, "total": tot, "rate": frac(k, tot),
+                         "nearfield": None})
     backgrounds = []
     for b in session["backgrounds"]:
         be = bg_events[b["name"]]
@@ -482,8 +502,9 @@ def check_gates(session: dict, events: dict[str, list[dict]], bg_events: dict[st
 
 
 def mixable(take: dict) -> bool:
-    """A clean gesture take the mixer uses (not a real-check take, not the range step's long holds)."""
-    return take.get("bg") is None and take.get("block") != "range" and not take.get("quiet")
+    """A clean gesture take the mixer uses (not a real-check take, not the range step's long holds, not a take the
+    recorder heard nothing in: a missed attempt is not a clean example to mix)."""
+    return take.get("bg") is None and take.get("block") != "range" and not take.get("quiet") and not L.is_no_sound(take)
 
 
 def check_mixing(session: dict, cfg: Config, gates: dict[str, dict], bgs: Backgrounds, snr_steps: tuple,
@@ -589,6 +610,23 @@ def check_real_vs_mix(session: dict, cfg: Config, gate: dict, bgs: Backgrounds, 
     overall = None if not verdicts else "insufficient" if all(v == "insufficient" for v in verdicts) else (
         "representative" if all(v in ("representative", "insufficient") for v in verdicts) else "not representative")
     return {"flag": flag, "rows": rows, "per_bg": per_bg, "verdict": overall}
+
+
+def check_no_sound(session: dict) -> dict:
+    """The phone recorder's missed attempts (no_sound rows): how many, per gesture, per take, and how many takes a
+    later attempt then heard (their take row is a heard one)."""
+    heard_later = {t["take_id"] for t in session["takes"] if not L.is_no_sound(t)}
+    per_gesture: Counter = Counter()
+    per_take: dict = {}
+    for r in session.get("no_sound", []):
+        for g in r.get("expect") or []:
+            per_gesture[g] += 1
+        per_take.setdefault(r["take_id"], {"take_id": r["take_id"], "block": r.get("block"),
+                                           "cond_id": r.get("cond_id"), "attempts": 0,
+                                           "heard_later": r["take_id"] in heard_later})["attempts"] += 1
+    return {"attempts": len(session.get("no_sound", [])), "takes": len(per_take),
+            "heard_later": sum(t["heard_later"] for t in per_take.values()),
+            "per_gesture": dict(per_gesture), "per_take": list(per_take.values())}
 
 
 def check_ratings(session: dict) -> list[dict]:
@@ -752,6 +790,7 @@ def run_session(directory: str | Path, opts: argparse.Namespace, gate_from: dict
         "real_vs_mix": check_real_vs_mix(session, cfg, gate, bgs, events, snr_steps, opts.seed, opts.flag),
         "app_replay": app_replay,
         "ratings": check_ratings(session),
+        "no_sound": check_no_sound(session),
         "notes": [],
     }
     room = gate.get("room") or {}
@@ -916,6 +955,13 @@ def build_markdown(r: dict) -> str:
         out.append(md_table(["take", "expect", "expected action", "actions", "match"],
                             [[x["take_id"], x["expect"], x["expected_action"], x["actions"], x["match"]]
                              for x in ar["rows"]]))
+
+    ns = r.get("no_sound") or {}
+    if ns.get("attempts"):
+        out.append(f"\n## no sound: {ns['attempts']} missed attempt(s) on {ns['takes']} take(s), "
+                   f"{ns['heard_later']} heard on a later attempt (each counts as a gate miss in section 2)")
+        out.append(md_table(["take", "cond_id", "attempts", "heard later"],
+                            [[x["take_id"], x["cond_id"], x["attempts"], x["heard_later"]] for x in ns["per_take"]]))
 
     out.append("\n## 6. ratings")
     out.append(md_table(["block", "n", "mean rating", "seconds", "redos", "notes"],

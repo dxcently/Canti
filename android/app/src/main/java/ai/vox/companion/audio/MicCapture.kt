@@ -47,6 +47,14 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
         fun write(buf: ByteBuffer, bytes: Int, streamMs: Long, channels: Int)
     }
 
+    /** [rec] The recorder's mono tap: the capture thread hands each read's MONO PCM16 here, right after the extractor
+     *  got it. [buf] holds [frames] mono samples in native order (the extractor's [pushBuf]; channel 0 of a stereo
+     *  capture); [firstFrame] is [buf]'s first stream frame (the pushed count before this read); [rate] and [gen] are
+     *  this capture's rate and generation. Must not move [buf]'s position and must not allocate per call. */
+    interface MonoTap {
+        fun frames(buf: ByteBuffer, frames: Int, firstFrame: Long, rate: Int, gen: Int)
+    }
+
     interface Listener {
         /** Native messages (JSON strings) that just finished; [baseMs] maps stream ms to nanoTime ms; [gen] is the
          *  capture ([generation]) that heard them. */
@@ -73,6 +81,9 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
     // The tee is bound to one capture generation: a restart's old thread (still in its last read) never writes to it.
     class TeeBinding(val gen: Int, val tee: Tee)
     @Volatile var tee: TeeBinding? = null
+    // [rec] The recorder's mono tap (the ring / take buffer), installed only while the gate is on and a capture runs
+    // (PhoneMicSource). Independent of the measurement tee. A throwing tap is cleared (same guard as the tee).
+    @Volatile var monoTap: MonoTap? = null
     /** Bumped by every [start]: identifies one capture (its stream clock, its states, its messages). */
     @Volatile var generation = 0; private set
     /** The current stream's first-frame clock (System.nanoTime), 0 until its first read. Only the current thread sets it. */
@@ -212,6 +223,12 @@ class MicCapture(private val audio: AudioManager, private val listener: Listener
                 // Stereo: the extractor is mono, so it gets channel 0 (de-interleaved, no allocation); the WAV keeps both.
                 val pushBuf = if (channels == 2) { Measure.deinterleaveCh0(stereoSrc!!, stereoDst!!, k); monoBuf } else buf
                 val msgs = VxNative.pushDirect(handle, pushBuf, k, false)
+                // [rec] the recorder's mono tap: the mono buffer the extractor just got, firstFrame = pushed before
+                // this read (so firstFrame*1000/rate = the stream ms of mic_sound's t_start_ms clock). Never throws.
+                val tap = monoTap
+                if (tap != null) {
+                    try { tap.frames(pushBuf, k, pushed, cfg.rate, gen) } catch (_: Throwable) { if (monoTap === tap) monoTap = null }
+                }
                 pushed += k
                 // The measurement tee, only for the capture it is bound to. It never throws; the catch is a last guard:
                 // a failed recording must never end the gesture capture.

@@ -1,0 +1,4060 @@
+{
+ "short": [
+  {
+   "take_id": "range-bottom_hz-r1",
+   "block": "range",
+   "cue": "LOWEST comfortable hum; do not strain \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "range-home_hz-r1",
+   "block": "range",
+   "cue": "HOME note; a relaxed normal hum \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "range-top_hz-r1",
+   "block": "range",
+   "cue": "HIGHEST comfortable hum; do not strain \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "range-whistle_home_hz-r1",
+   "block": "range",
+   "cue": "WHISTLE home; a relaxed whistle \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "room-room-r1",
+   "block": "room",
+   "cue": "Stay quiet for 3 seconds",
+   "expect": [],
+   "cond_id": "na-na-na-na-na-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-hand-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-soft-hand-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-across-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-hand-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-soft-hand-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-across-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-hand-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-soft-hand-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-across-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  }
+ ],
+ "full": [
+  {
+   "take_id": "range-bottom_hz-r1",
+   "block": "range",
+   "cue": "LOWEST comfortable hum; do not strain \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "range-home_hz-r1",
+   "block": "range",
+   "cue": "HOME note; a relaxed normal hum \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "range-top_hz-r1",
+   "block": "range",
+   "cue": "HIGHEST comfortable hum; do not strain \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "range-whistle_home_hz-r1",
+   "block": "range",
+   "cue": "WHISTLE home; a relaxed whistle \u00b7 hold about 2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "room-room-r1",
+   "block": "room",
+   "cue": "Stay quiet for 3 seconds",
+   "expect": [],
+   "cond_id": "na-na-na-na-na-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-bottom-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-top-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-top-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-slow-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-slow-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-quick-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-quick-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-soft-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-table-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-table-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-normal-normal-across-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-whistle-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-whistle-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-bottom-normal-soft-across-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-bottom-normal-soft-across-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-top-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-top-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-quick-soft-table-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-hum-home-quick-soft-table-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-whistle-home-quick-normal-across-na-r1",
+   "block": "contours",
+   "cue": "RISE \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-rise-whistle-home-quick-normal-across-na-r2",
+   "block": "contours",
+   "cue": "RISE \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-bottom-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-top-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-top-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-slow-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-slow-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-quick-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-quick-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-soft-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-table-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-table-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-normal-normal-across-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-whistle-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-whistle-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-bottom-normal-soft-across-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-bottom-normal-soft-across-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-top-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-top-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-quick-soft-table-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-hum-home-quick-soft-table-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-whistle-home-quick-normal-across-na-r1",
+   "block": "contours",
+   "cue": "FALL \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-fall-whistle-home-quick-normal-across-na-r2",
+   "block": "contours",
+   "cue": "FALL \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-bottom-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-top-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-top-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-slow-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-slow-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-quick-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-quick-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-soft-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-table-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-table-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-normal-normal-across-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-whistle-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-whistle-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-bottom-normal-soft-across-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-bottom-normal-soft-across-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-top-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-top-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-quick-soft-table-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-hum-home-quick-soft-table-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-whistle-home-quick-normal-across-na-r1",
+   "block": "contours",
+   "cue": "ARCH \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-arch-whistle-home-quick-normal-across-na-r2",
+   "block": "contours",
+   "cue": "ARCH \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-bottom-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-top-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-top-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-slow-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-slow-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-quick-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-quick-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-soft-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-table-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-table-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-normal-normal-across-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-whistle-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-whistle-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-bottom-normal-soft-across-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-bottom-normal-soft-across-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-top-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-top-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-quick-soft-table-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-hum-home-quick-soft-table-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-whistle-home-quick-normal-across-na-r1",
+   "block": "contours",
+   "cue": "DIP \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-dip-whistle-home-quick-normal-across-na-r2",
+   "block": "contours",
+   "cue": "DIP \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 centre \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-bottom-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-bottom-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch bottom \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-bottom-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-top-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-top-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch top \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-top-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-slow-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-slow-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 speed slow \u00b7 about 1.2 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-slow-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-quick-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-quick-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 speed quick \u00b7 about 0.3 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-quick-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-soft-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-soft-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 loud soft \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-table-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-table-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 dist table \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-across-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-normal-normal-across-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-whistle-home-normal-normal-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-whistle-home-normal-normal-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 tone whistle \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "whistle-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-bottom-normal-soft-across-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-bottom-normal-soft-across-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch bottom \u00b7 loud soft \u00b7 dist across \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-bottom-normal-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-top-normal-loud-hand-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-top-normal-loud-hand-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 pitch top \u00b7 loud loud \u00b7 about 0.6 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-top-normal-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-quick-soft-table-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-hum-home-quick-soft-table-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 speed quick \u00b7 loud soft \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-quick-soft-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-whistle-home-quick-normal-across-na-r1",
+   "block": "contours",
+   "cue": "FLAT \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "contours-flat-whistle-home-quick-normal-across-na-r2",
+   "block": "contours",
+   "cue": "FLAT \u00b7 tone whistle \u00b7 speed quick \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "whistle-home-quick-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-hand-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-hand-na-r2",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-soft-hand-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-soft-hand-na-r2",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-loud-hand-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 loud loud \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-loud-hand-na-r2",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 loud loud \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-table-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-table-na-r2",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-across-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-normal-across-na-r2",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-soft-across-na-r1",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 loud soft \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-click-na-na-na-soft-across-na-r2",
+   "block": "discrete",
+   "cue": "CLICK \u00b7 loud soft \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-hand-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-hand-na-r2",
+   "block": "discrete",
+   "cue": "HISS \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-soft-hand-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-soft-hand-na-r2",
+   "block": "discrete",
+   "cue": "HISS \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-loud-hand-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 loud loud \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-loud-hand-na-r2",
+   "block": "discrete",
+   "cue": "HISS \u00b7 loud loud \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-table-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-table-na-r2",
+   "block": "discrete",
+   "cue": "HISS \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-across-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-normal-across-na-r2",
+   "block": "discrete",
+   "cue": "HISS \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-soft-across-na-r1",
+   "block": "discrete",
+   "cue": "HISS \u00b7 loud soft \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-hiss-na-na-na-soft-across-na-r2",
+   "block": "discrete",
+   "cue": "HISS \u00b7 loud soft \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-hand-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-hand-na-r2",
+   "block": "discrete",
+   "cue": "POP \u00b7 centre \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-soft-hand-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-soft-hand-na-r2",
+   "block": "discrete",
+   "cue": "POP \u00b7 loud soft \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-soft-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-loud-hand-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 loud loud \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-loud-hand-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-loud-hand-na-r2",
+   "block": "discrete",
+   "cue": "POP \u00b7 loud loud \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-loud-hand-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-table-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-table-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-table-na-r2",
+   "block": "discrete",
+   "cue": "POP \u00b7 dist table \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-table-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-across-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-normal-across-na-r2",
+   "block": "discrete",
+   "cue": "POP \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-soft-across-na-r1",
+   "block": "discrete",
+   "cue": "POP \u00b7 loud soft \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-soft-across-na",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "discrete-pop-na-na-na-soft-across-na-r2",
+   "block": "discrete",
+   "cue": "POP \u00b7 loud soft \u00b7 dist across \u00b7 about 0.3 s",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-soft-across-na",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-quick-r1",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-quick-r2",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-slow-r1",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-hand-slow-r2",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-across-normal-r1",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-normal-across-normal-r2",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-soft-hand-normal-r1",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-click-na-na-na-soft-hand-normal-r2",
+   "block": "combos",
+   "cue": "CLICK CLICK \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-quick-r1",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-quick-r2",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-slow-r1",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-hand-slow-r2",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-across-normal-r1",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-normal-across-normal-r2",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-soft-hand-normal-r1",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-click-hiss-na-na-na-soft-hand-normal-r2",
+   "block": "combos",
+   "cue": "CLICK HISS \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-quick-r1",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-quick-r2",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-slow-r1",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-hand-slow-r2",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-across-normal-r1",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-normal-across-normal-r2",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-soft-hand-normal-r1",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-hiss-click-na-na-na-soft-hand-normal-r2",
+   "block": "combos",
+   "cue": "HISS CLICK \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-normal-r1",
+   "block": "combos",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-normal-r2",
+   "block": "combos",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-quick-r1",
+   "block": "combos",
+   "cue": "POP POP \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-quick-r2",
+   "block": "combos",
+   "cue": "POP POP \u00b7 gap quick \u00b7 about 0.75 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-quick",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-slow-r1",
+   "block": "combos",
+   "cue": "POP POP \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-hand-slow-r2",
+   "block": "combos",
+   "cue": "POP POP \u00b7 gap slow \u00b7 about 1.4 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-slow",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-across-normal-r1",
+   "block": "combos",
+   "cue": "POP POP \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-normal-across-normal-r2",
+   "block": "combos",
+   "cue": "POP POP \u00b7 dist across \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-across-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-soft-hand-normal-r1",
+   "block": "combos",
+   "cue": "POP POP \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 1,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "combos-pop-pop-na-na-na-soft-hand-normal-r2",
+   "block": "combos",
+   "cue": "POP POP \u00b7 loud soft \u00b7 about 0.95 s",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-soft-hand-normal",
+   "rep": 2,
+   "bg": null,
+   "kind": "takes"
+  },
+  {
+   "take_id": "backgrounds-media-30-r1",
+   "block": "backgrounds",
+   "cue": "Play a Reel/Short on phone or laptop speakers at 30%; stay silent for 60 s",
+   "expect": [],
+   "cond_id": null,
+   "rep": 1,
+   "bg": null,
+   "kind": "backgrounds"
+  },
+  {
+   "take_id": "backgrounds-media-60-r1",
+   "block": "backgrounds",
+   "cue": "Play a Reel/Short on phone or laptop speakers at 60%; stay silent for 60 s",
+   "expect": [],
+   "cond_id": null,
+   "rep": 1,
+   "bg": null,
+   "kind": "backgrounds"
+  },
+  {
+   "take_id": "backgrounds-media-90-r1",
+   "block": "backgrounds",
+   "cue": "Play a Reel/Short on phone or laptop speakers at 90%; stay silent for 60 s",
+   "expect": [],
+   "cond_id": null,
+   "rep": 1,
+   "bg": null,
+   "kind": "backgrounds"
+  },
+  {
+   "take_id": "backgrounds-tv-r1",
+   "block": "backgrounds",
+   "cue": "Play TV or music across the room; stay silent for 60 s",
+   "expect": [],
+   "cond_id": null,
+   "rep": 1,
+   "bg": null,
+   "kind": "backgrounds"
+  },
+  {
+   "take_id": "backgrounds-fan-r1",
+   "block": "backgrounds",
+   "cue": "Run a fan; stay silent for 60 s",
+   "expect": [],
+   "cond_id": null,
+   "rep": 1,
+   "bg": null,
+   "kind": "backgrounds"
+  },
+  {
+   "take_id": "backgrounds-talk-r1",
+   "block": "backgrounds",
+   "cue": "Play people talking (a podcast); stay silent for 60 s",
+   "expect": [],
+   "cond_id": null,
+   "rep": 1,
+   "bg": null,
+   "kind": "backgrounds"
+  },
+  {
+   "take_id": "backgrounds-typing-kitchen-r1",
+   "block": "backgrounds",
+   "cue": "Typing or kitchen sounds; stay silent for 60 s",
+   "expect": [],
+   "cond_id": null,
+   "rep": 1,
+   "bg": null,
+   "kind": "backgrounds"
+  },
+  {
+   "take_id": "real-media-60-rise-hum-home-normal-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "RISE \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-rise-hum-home-normal-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "RISE \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-fall-hum-home-normal-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "FALL \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-fall-hum-home-normal-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "FALL \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-arch-hum-home-normal-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "ARCH \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-arch-hum-home-normal-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "ARCH \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-dip-hum-home-normal-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "DIP \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-dip-hum-home-normal-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "DIP \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-flat-hum-home-normal-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "FLAT \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-flat-hum-home-normal-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "FLAT \u00b7 centre \u00b7 about 0.6 s \u00b7 with media-60 playing",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-click-na-na-na-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "CLICK \u00b7 centre \u00b7 about 0.3 s \u00b7 with media-60 playing",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-click-na-na-na-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "CLICK \u00b7 centre \u00b7 about 0.3 s \u00b7 with media-60 playing",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-hiss-na-na-na-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "HISS \u00b7 centre \u00b7 about 0.3 s \u00b7 with media-60 playing",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-hiss-na-na-na-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "HISS \u00b7 centre \u00b7 about 0.3 s \u00b7 with media-60 playing",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-pop-na-na-na-normal-hand-na-r1",
+   "block": "real-media-60",
+   "cue": "POP \u00b7 centre \u00b7 about 0.3 s \u00b7 with media-60 playing",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-pop-na-na-na-normal-hand-na-r2",
+   "block": "real-media-60",
+   "cue": "POP \u00b7 centre \u00b7 about 0.3 s \u00b7 with media-60 playing",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-click-click-na-na-na-normal-hand-normal-r1",
+   "block": "real-media-60",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-click-click-na-na-na-normal-hand-normal-r2",
+   "block": "real-media-60",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-click-hiss-na-na-na-normal-hand-normal-r1",
+   "block": "real-media-60",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-click-hiss-na-na-na-normal-hand-normal-r2",
+   "block": "real-media-60",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-hiss-click-na-na-na-normal-hand-normal-r1",
+   "block": "real-media-60",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-hiss-click-na-na-na-normal-hand-normal-r2",
+   "block": "real-media-60",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-pop-pop-na-na-na-normal-hand-normal-r1",
+   "block": "real-media-60",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-media-60-pop-pop-na-na-na-normal-hand-normal-r2",
+   "block": "real-media-60",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s \u00b7 with media-60 playing",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "media-60",
+    "kind": "media",
+    "level": 60
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-rise-hum-home-normal-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "RISE \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-rise-hum-home-normal-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "RISE \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "rise"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-fall-hum-home-normal-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "FALL \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-fall-hum-home-normal-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "FALL \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "fall"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-arch-hum-home-normal-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "ARCH \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-arch-hum-home-normal-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "ARCH \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "arch"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-dip-hum-home-normal-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "DIP \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-dip-hum-home-normal-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "DIP \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "dip"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-flat-hum-home-normal-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "FLAT \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-flat-hum-home-normal-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "FLAT \u00b7 centre \u00b7 about 0.6 s \u00b7 with talk playing",
+   "expect": [
+    "flat"
+   ],
+   "cond_id": "hum-home-normal-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-click-na-na-na-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "CLICK \u00b7 centre \u00b7 about 0.3 s \u00b7 with talk playing",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-click-na-na-na-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "CLICK \u00b7 centre \u00b7 about 0.3 s \u00b7 with talk playing",
+   "expect": [
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-hiss-na-na-na-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "HISS \u00b7 centre \u00b7 about 0.3 s \u00b7 with talk playing",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-hiss-na-na-na-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "HISS \u00b7 centre \u00b7 about 0.3 s \u00b7 with talk playing",
+   "expect": [
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-pop-na-na-na-normal-hand-na-r1",
+   "block": "real-talk",
+   "cue": "POP \u00b7 centre \u00b7 about 0.3 s \u00b7 with talk playing",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-pop-na-na-na-normal-hand-na-r2",
+   "block": "real-talk",
+   "cue": "POP \u00b7 centre \u00b7 about 0.3 s \u00b7 with talk playing",
+   "expect": [
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-na",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-click-click-na-na-na-normal-hand-normal-r1",
+   "block": "real-talk",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-click-click-na-na-na-normal-hand-normal-r2",
+   "block": "real-talk",
+   "cue": "CLICK CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "click",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-click-hiss-na-na-na-normal-hand-normal-r1",
+   "block": "real-talk",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-click-hiss-na-na-na-normal-hand-normal-r2",
+   "block": "real-talk",
+   "cue": "CLICK HISS \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "click",
+    "hiss"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-hiss-click-na-na-na-normal-hand-normal-r1",
+   "block": "real-talk",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-hiss-click-na-na-na-normal-hand-normal-r2",
+   "block": "real-talk",
+   "cue": "HISS CLICK \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "hiss",
+    "click"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-pop-pop-na-na-na-normal-hand-normal-r1",
+   "block": "real-talk",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 1,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  },
+  {
+   "take_id": "real-talk-pop-pop-na-na-na-normal-hand-normal-r2",
+   "block": "real-talk",
+   "cue": "POP POP \u00b7 centre \u00b7 about 0.95 s \u00b7 with talk playing",
+   "expect": [
+    "pop",
+    "pop"
+   ],
+   "cond_id": "na-na-na-normal-hand-normal",
+   "rep": 2,
+   "bg": {
+    "name": "talk",
+    "kind": "talk",
+    "level": null
+   },
+   "kind": "takes"
+  }
+ ]
+}

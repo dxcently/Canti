@@ -101,7 +101,7 @@ def test_desktop_fake_cli_full_layout_and_resume(tmp_path):
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert 'BELOW EXTRACTOR' in result.stdout
-    assert L.validate_session(out, complete=True) == dict(takes=269, backgrounds=7, ratings=8, sittings=1)
+    assert L.validate_session(out, complete=True) == dict(takes=269, backgrounds=7, ratings=8, sittings=1, no_sound=0)
     before = (out / 'labels.jsonl').read_bytes()
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -112,7 +112,7 @@ def test_desktop_fake_cli_full_layout_and_resume(tmp_path):
 def test_desktop_single_block(tmp_path):
     out = D.run_session(args(tmp_path / 'one', ['range']))
     result = L.validate_session(out)
-    assert result == dict(takes=4, backgrounds=0, ratings=1, sittings=1)
+    assert result == dict(takes=4, backgrounds=0, ratings=1, sittings=1, no_sound=0)
     meta = json.loads((out / 'session.json').read_text())
     assert meta['range']['bottom_hz'] == pytest.approx(55, abs=.2)
     assert meta['range']['whistle_home_hz'] == pytest.approx(1000, abs=1)
@@ -600,7 +600,7 @@ def test_desktop_short_profile_second_speaker(tmp_path):
     a = args(tmp_path / 'sis')
     a.profile, a.speaker = 'short', 'sis'
     out = D.run_session(a)
-    assert L.validate_session(out, complete=True) == dict(takes=42, backgrounds=0, ratings=5, sittings=1)
+    assert L.validate_session(out, complete=True) == dict(takes=42, backgrounds=0, ratings=5, sittings=1, no_sound=0)
     meta = json.loads((out / 'session.json').read_text())
     assert (meta['profile'], meta['speaker']) == ('short', 'sis')
     assert {r['block'] for r in L.read_rows(out / 'ratings.jsonl')} == {'range', 'room', 'contours', 'discrete', 'combos'}

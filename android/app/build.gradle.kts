@@ -21,8 +21,13 @@ android {
     }
     buildTypes {
         // Debug builds are debuggable: the adb-only debug feature source (see PROTOCOL.md) is enabled there only.
+        debug {
+            // [rec] the dev-only in-app test recorder + quick record (package ai.vox.companion.rec); off in release.
+            buildConfigField("boolean", "DEV_RECORDER", "true")
+        }
         release {
             isMinifyEnabled = false
+            buildConfigField("boolean", "DEV_RECORDER", "false")
         }
     }
     compileOptions {
@@ -50,6 +55,23 @@ android {
 
 kotlin {
     jvmToolchain(17)
+}
+
+// [rec] The recorder's bundled spec: extractor/prompts/range_v1.json, copied into a generated assets dir so the app
+// bundles the exact spec bytes (asset path `range/range_v1.json`), never a hand copy. JVM tests read the extractor
+// file directly instead of the asset (the asset is not on the test classpath).
+val recAssetsDir = layout.buildDirectory.dir("generated/recAssets")
+val copyRangeSpec = tasks.register<Copy>("copyRangeSpec") {
+    from(file("../../extractor/prompts/range_v1.json"))
+    into(recAssetsDir.map { it.dir("range") })
+}
+tasks.whenTaskAdded {
+    if (name.startsWith("merge") && name.endsWith("Assets")) dependsOn(copyRangeSpec)
+}
+android {
+    sourceSets {
+        named("main") { assets.srcDir(recAssetsDir) }
+    }
 }
 
 dependencies {

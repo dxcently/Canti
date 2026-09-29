@@ -43,10 +43,10 @@ def median_pitch(audio, rate, spec):
 
 def finalize_range(out, spec):
     meta = json.loads((out / 'session.json').read_text())
-    rows = L.latest_rows(out / 'labels.jsonl')
+    rows = L.take_rows(out / 'labels.jsonl')   # the last heard attempt: a missed (no_sound) retry never replaces it
     for take in L.build_plan(spec, ['range']):
         row = rows.get(take['take_id'])
-        if row:
+        if row and not L.is_no_sound(row):
             x, rate = sf.read(out / row['file'], always_2d=True, dtype='float32')
             start = round(row['go_offset_ms'] * rate / 1000)
             meta['range'][take['anchor']] = median_pitch(x[start:, 0], rate, spec)
