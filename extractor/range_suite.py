@@ -873,6 +873,7 @@ def run_session(directory: str | Path, opts: argparse.Namespace, gate_from: dict
         "device": session["device"],
         "mic": meta.get("mic"),
         "synthetic": bool(meta.get("synthetic")),
+        "twin": meta.get("twin"),
         "spec": meta.get("spec"),
         "layout": session["counts"],
         "generated": datetime.now(timezone.utc).isoformat(),
@@ -909,6 +910,58 @@ def run_session(directory: str | Path, opts: argparse.Namespace, gate_from: dict
     return report
 
 
+def twin_mics(desk: dict, phone: dict, desk_r: dict, phone_r: dict) -> dict:
+    """The 'twin mics' section for a twin pair: per take present in both, the recall of each (own gate each)
+    side by side per gesture and per cond dist, the median active-level difference in dB, and the phone's
+    align stats (method counts and lag spread)."""
+    desk_takes = {t["take_id"]: t for t in desk_r["labels"]["per_take"]}
+    phone_takes = {t["take_id"]: t for t in phone_r["labels"]["per_take"]}
+    desk_keep = {t["take_id"]: t for t in desk_r["gates"]["own"]["per_take"]}
+    phone_keep = {t["take_id"]: t for t in phone_r["gates"]["own"]["per_take"]}
+    desk_files = {t["take_id"]: t["file"] for t in desk["takes"]}
+    phone_files = {t["take_id"]: t["file"] for t in phone["takes"]}
+    desk_cond = {t["take_id"]: (t.get("cond") or {}) for t in desk["takes"]}
+    common = sorted(set(desk_takes) & set(phone_takes))
+    rows, level_diffs = [], []
+    per_gesture_d, per_gesture_p = {}, {}
+    per_dist_d, per_dist_p = {}, {}
+    for tid in common:
+        d, p = desk_takes[tid], phone_takes[tid]
+        gesture = " ".join(d["expect"])
+        dist = str(desk_cond.get(tid, {}).get("dist", "na"))
+        rows.append({"take_id": tid, "expect": d["expect"], "cond_id": d["cond_id"],
+                     "desk": {"correct": d["correct"], "total": d["total"], "recall": d["recall"],
+                              "keep": desk_keep.get(tid, {}).get("rate")},
+                     "phone": {"correct": p["correct"], "total": p["total"], "recall": p["recall"],
+                               "keep": phone_keep.get(tid, {}).get("rate")}})
+        add_frac(per_gesture_d, gesture, d["correct"], d["total"])
+        add_frac(per_gesture_p, gesture, p["correct"], p["total"])
+        add_frac(per_dist_d, dist, d["correct"], d["total"])
+        add_frac(per_dist_p, dist, p["correct"], p["total"])
+        da, dr = read_take(desk["dir"] / desk_files[tid])
+        pa, pr = read_take(phone["dir"] / phone_files[tid])
+        lv_d, lv_p = active_rms(da[:, 0], dr), active_rms(pa[:, 0], pr)
+        if lv_d > 0 and lv_p > 0:
+            level_diffs.append(20 * math.log10(lv_p / lv_d))
+    per_gesture = {g: {"desk": with_rates(per_gesture_d).get(g), "phone": with_rates(per_gesture_p).get(g)}
+                   for g in sorted(set(per_gesture_d) | set(per_gesture_p))}
+    per_dist = {k: {"desk": with_rates(per_dist_d).get(k), "phone": with_rates(per_dist_p).get(k)}
+                for k in sorted(set(per_dist_d) | set(per_dist_p))}
+    methods, lags = {"xcorr": 0, "clock": 0}, []
+    for t in phone["takes"]:
+        al = t.get("align") or {}
+        m = al.get("method")
+        if m in methods:
+            methods[m] += 1
+        if isinstance(al.get("lag_ms"), (int, float)):
+            lags.append(al["lag_ms"])
+    align = {"methods": methods, "lag_ms": {"n": len(lags), "min": min(lags) if lags else None,
+                                            "max": max(lags) if lags else None,
+                                            "median": float(np.median(lags)) if lags else None}}
+    return {"n_takes": len(common), "per_take": rows, "per_gesture": per_gesture, "per_dist": per_dist,
+            "level_diff_db": {"median": float(np.median(level_diffs)) if level_diffs else None}, "align": align}
+
+
 def summarize(reports: list[dict]) -> dict:
     """Several sessions' results grouped by speaker, then device: overall and per-gesture recall, the exact-sequence
     rate, the keep-rate with the own gate and with --gate-from's, and recall per cond_id (the cond_ids are the same in
@@ -920,7 +973,7 @@ def summarize(reports: list[dict]) -> dict:
             "sessions": [], "recall": {"correct": 0, "total": 0}, "exact": {"correct": 0, "total": 0},
             "keep": {}, "per_gesture": {}, "per_cond_id": {}, "hiss_takes": []})
         g["sessions"].append({"session": r["session"], "profile": r["profile"], "takes": lab["n_takes"],
-                              "synthetic": r.get("synthetic", False)})
+                              "synthetic": r.get("synthetic", False), "twin": r.get("twin")})
         for t in lab["per_take"]:
             g["recall"]["correct"] += t["correct"]
             g["recall"]["total"] += t["total"]
@@ -948,7 +1001,10 @@ def summarize(reports: list[dict]) -> dict:
 def summary_markdown(summary: dict) -> str:
     rows = []
     for speaker, by_device in sorted(summary.items()):
-        for device, g in sorted(by_device.items()):
+        # desktop and its phone twin are adjacent (desktop, then phone, then any other device).
+        order = sorted(by_device, key=lambda d: (0 if d == "desktop" else 1 if d == "phone" else 2, d))
+        for device in order:
+            g = by_device[device]
             keep = {name: frac(sum(a["correct"] for a in v.values()), sum(a["total"] for a in v.values()))
                     for name, v in g["keep"].items()}
             rows.append([speaker, device, len(g["sessions"]), g["recall"]["total"], pct(g["recall"]["rate"]),
@@ -1064,6 +1120,22 @@ def build_markdown(r: dict) -> str:
         out.append(md_table(["take", "cond_id", "attempts", "heard later"],
                             [[x["take_id"], x["cond_id"], x["attempts"], x["heard_later"]] for x in ns["per_take"]]))
 
+    twin = r.get("twin_section")
+    if twin:
+        out.append(f"\n## twin mics (with {twin.get('twin')})")
+        lg = twin["align"]["lag_ms"]
+        out.append(f"{twin['n_takes']} takes in both; median active-level diff "
+                   f"{num(twin['level_diff_db']['median'], '.1f')} dB; "
+                   f"align xcorr={twin['align']['methods']['xcorr']} clock={twin['align']['methods']['clock']}, "
+                   f"lag {num(lg['min'], '.0f')}..{num(lg['max'], '.0f')} ms (median {num(lg['median'], '.0f')})")
+        out.append(md_table(["gesture", "desk recall %", "phone recall %"],
+                            [[g, pct(v["desk"]["recall"]), pct(v["phone"]["recall"])]
+                             for g, v in twin["per_gesture"].items()]))
+        out.append("")
+        out.append(md_table(["dist", "desk recall %", "phone recall %"],
+                            [[k, pct(v["desk"]["recall"]), pct(v["phone"]["recall"])]
+                             for k, v in twin["per_dist"].items()]))
+
     out.append("\n## 6. ratings")
     out.append(md_table(["block", "n", "mean rating", "seconds", "redos", "notes"],
                         [[x["block"], x["n"], num(x["rating_mean"], ".1f"), x["seconds"], x["redos"],
@@ -1119,6 +1191,21 @@ def main(argv: list[str] | None = None) -> int:
     for d in a.sessions:
         reports.append(run_session(d, a, gate_from))
         print(f"wrote report.json + report.md into {d}")
+    # twin pairs: attach a 'twin mics' section to each report of a matched pair (their 'twin' keys match).
+    by_name = {Path(r["session"]).name: r for r in reports}
+    for r in reports:
+        twin_name = r.get("twin")
+        if not twin_name or r.get("twin_section"):
+            continue
+        other = by_name.get(twin_name)
+        if other is None or other.get("twin") != Path(r["session"]).name:
+            continue
+        sec = twin_mics(load_session(r["session"]), load_session(other["session"]), r, other)
+        r["twin_section"] = dict(sec, twin=twin_name)
+        other["twin_section"] = dict(sec, twin=Path(r["session"]).name)
+        for rep in (r, other):
+            (Path(rep["session"]) / "report.json").write_text(json.dumps(rep, indent=1) + "\n")
+            (Path(rep["session"]) / "report.md").write_text(build_markdown(rep))
     summary = summarize(reports)
     print(summary_markdown(summary))
     if summary_dir:

@@ -219,6 +219,63 @@ heard row (else its last missed one), `no_sound_rows` every missed attempt, and
 `range_suite` counts each missed attempt as a gate miss and lists them under
 `no_sound` in its report.
 
+## Phone as a PC microphone
+
+The PC range recorder can record the phone's microphone live over USB, alone or beside the desk
+(USB) mic, so each take gets both mics. `extractor/phone_stream.py` implements contract P on the
+app's debug socket: `PhoneStreamSource` (a `record.Source`) opens a `pcm_open` stream on a reader
+thread that polls `pcm_read` every 50 ms, and `read()` returns float32 mono blocks. Lost frames (the
+12 s ring overflowed) and capture restarts are zero-filled so the sample clock never jumps, and each
+lost range `[a, b)` is recorded in the source's own frame numbers. The reader keeps
+`(time.monotonic() at reply, frames received so far)` pairs for the clock fit. Connection settings
+are voxlib's (`range_phone.py`) env vars — **VOX_SERIAL=emulator-5580**,
+**ANDROID_ADB_SERVER_PORT=5038**, **VOX_SOCKET_PORT=7789** — the source connects to the forwarded
+debug socket on `127.0.0.1:VOX_SOCKET_PORT`; importing it connects to nothing.
+
+Two modes:
+
+- `--source phone`: the phone is the only mic. The session has device `phone`, mic
+  `phone: <mic> (pc stream)`, recorder `pc-stream`, and the phone's rate; the silence detector runs
+  on the phone stream.
+- `--twin-phone [--twin-out DIR]`, with `--source pw|sd|fake`: the desk mic stays primary and drives
+  the silence detector and GO; a second `Recorder` runs on the phone stream and the takes also go to a
+  **twin** session (a normal single-mic session: same `spec.json`, profile and speaker; device
+  `phone`, recorder `pc-stream`, its own rate). Its default folder is
+  `<repo>/zflip/range/<desk session>-phone` (operator use only); tests use `--twin-out` under
+  `android/.state`. Both `session.json` files carry `twin` (the other session's folder name), and the
+  rating rows are copied to the twin.
+
+Alignment. Every `record.Recorder` block (any source) gets an arrival stamp
+`(time.monotonic(), sample count)`; host time is fitted as `n/rate + offset` with `offset` the
+minimum of `t_arrival - n/rate` over the last 30 s (the least-latency lower envelope, which absorbs
+clock drift). The desk GO is mapped host-time → phone frame, then refined by cross-correlating 10 ms
+energy envelopes within ±150 ms of the gesture; the phone row stores
+`align: {offset_ms, lag_ms, peak, method: "xcorr"|"clock"}` (`offset_ms` is the clock-only
+phone-vs-desk offset, `lag_ms` the xcorr refinement). xcorr is used only when the normalized peak
+clears `phone_stream.X_CORR_THRESHOLD = 0.6` (chosen so a real gesture's envelope matches well above
+noise; below it the clock mapping is kept). The phone take is the same window as the desk take —
+`[GO_p − pre_roll, GO_p + (desk_end − desk_GO))` — so `go_offset_ms` equals `pre_roll` exactly, as
+`validate_session` requires; a background is `[GO_p, GO_p + seconds)`.
+
+Dropouts. If any frame of that window was lost, or the stream restarted inside it, the phone take is
+not written (the recorder prints `phone: dropped - r to redo both`); the twin lacks that take until
+`r` redoes both. `d`/`u` (delete/undo) apply to both sessions, each with its own `del_id`.
+
+Scoring. `range_suite.py` adds a **twin mics** section when two scored sessions' `twin` keys match:
+per take present in both, the recall of each (own gate each) side by side per gesture and per cond
+dist (hand/table/across), the median active-level difference in dB, and the align stats (method
+counts and lag spread). The multi-session summary lists a twin pair on adjacent rows (desktop then
+phone).
+
+```sh
+./extractor/run python range_session.py --source phone --session range-1     # phone-only (real phone)
+./extractor/run python range_session.py --source fake --twin-phone --auto --twin-out ../android/.state/twin  # synthetic
+./extractor/run python -m pytest tests/test_phone_stream.py -q -p no:cacheprovider --basetemp ../android/.state/pytest-phone
+```
+
+The streaming path is tested against a fake debug-socket server on `127.0.0.1` (a free port) serving
+contract P over synthetic audio, with injected loss and restart; no adb, no device, never `zflip/`.
+
 ## Deleting takes
 
 A take (or a background) can be soft-deleted: its WAV(s) move into `trash/<del_id>/<original path>`

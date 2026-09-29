@@ -351,7 +351,7 @@ def disk_guard(path, needed=0):
 
 
 def open_session(out, spec, device, mic, rate, channels, synthetic=False, profile=DEFAULT_PROFILE,
-                 speaker=DEFAULT_SPEAKER):
+                 speaker=DEFAULT_SPEAKER, recorder=None, twin=None):
     profile_blocks(spec, profile)
     safe_name(speaker)
     disk_guard(out)
@@ -375,6 +375,10 @@ def open_session(out, spec, device, mic, rate, channels, synthetic=False, profil
                     profile=profile, speaker=speaker,
                     range=dict(bottom_hz=None, home_hz=None, top_hz=None, whistle_home_hz=None, below_f0_min=False),
                     sittings=[], private='Never commit, upload, or send recordings to a model.')
+        if recorder is not None:
+            meta['recorder'] = recorder
+        if twin is not None:
+            meta['twin'] = twin
         write_json(out / 'spec.json', spec)
     for name in ('labels.jsonl', 'backgrounds.jsonl', 'ratings.jsonl'):
         (out / name).touch(exist_ok=True)
@@ -522,6 +526,8 @@ def validate_session(path, spec=None, complete=False):
         raise ValueError('bad session device/spec')
     if not isinstance(meta['mic'], str) or not isinstance(meta['sittings'], list):
         raise ValueError('bad mic/sittings')
+    if 'twin' in meta and meta['twin'] is not None and not isinstance(meta['twin'], str):
+        raise ValueError('bad twin (a session folder name or null)')
     for k in ('bottom_hz', 'home_hz', 'top_hz', 'whistle_home_hz'):
         v = meta['range'][k]
         if v is not None and (not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0):

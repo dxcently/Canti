@@ -13,6 +13,7 @@ import numpy as np
 import soundfile as sf
 
 import guided_session as G
+import phone_stream as PS
 import record as R
 import range_layout as L
 import voice_cursor_test as V
@@ -179,20 +180,48 @@ def run_session(args):
     profile = getattr(args, 'profile', None) or L.DEFAULT_PROFILE
     speaker = getattr(args, 'speaker', None) or L.DEFAULT_SPEAKER
     L.build_plan(spec, args.block, profile)
+    twin_phone = getattr(args, 'twin_phone', False)
     if args.auto and args.source != 'fake':
         raise ValueError('--auto requires --source fake')
+    if twin_phone and args.source in ('phone', 'auto'):
+        raise ValueError('--twin-phone needs an explicit desk source (pw/sd/fake)')
     session = getattr(args, 'session', None) or L.default_session_name(speaker)
     out = L.private_dir(args.out or L.HERE / 'recordings' / L.safe_name(session))
     fake = args.source == 'fake'
-    rate = args.rate or spec['defaults']['rate']
-    args.rate = rate
-    src = R.FakeSource(rate, rate // 20, getattr(args, 'fake_speed', 100), 7) if fake else R.make_source(args)
-    meta = L.open_session(out, spec, 'desktop', 'fake (SYNTHETIC)' if fake else src.name, rate, 1, fake,
-                          profile=profile, speaker=speaker)
+    phone_only = args.source == 'phone'
+
+    # -- sources -----------------------------------------------------------
+    phone = None
+    twin_out = None
+    if phone_only or twin_phone:
+        phone = PS.PhoneStreamSource()
+        phone.start()
+    if phone_only:
+        rate = phone.rate
+        args.rate = rate
+        src = phone
+        device, mic, recorder, synthetic = 'phone', f"phone: {phone.mic} (pc stream)", 'pc-stream', False
+    else:
+        rate = args.rate or spec['defaults']['rate']
+        args.rate = rate
+        src = R.FakeSource(rate, rate // 20, getattr(args, 'fake_speed', 100), 7) if fake else R.make_source(args)
+        device, mic, recorder, synthetic = 'desktop', 'fake (SYNTHETIC)' if fake else src.name, None, fake
+    if twin_phone:
+        twin_out = L.private_dir(args.twin_out) if args.twin_out else \
+            L.HERE.parent / 'zflip' / 'range' / f'{out.name}-phone'
+
+    meta = L.open_session(out, spec, device, mic, rate, 1, synthetic, profile=profile, speaker=speaker,
+                          recorder=recorder, twin=twin_out.name if twin_out else None)
+    if twin_out:
+        L.open_session(twin_out, spec, 'phone', f"phone: {phone.mic} (pc stream)", phone.rate, 1,
+                       synthetic, profile=profile, speaker=speaker, recorder='pc-stream', twin=out.name)
     chosen = L.profile_blocks(spec, profile)
     sitting = len(meta['sittings'])
     rows = L.latest_rows(out / 'labels.jsonl')
     bgs = L.latest_rows(out / 'backgrounds.jsonl', 'name')
+    twin_rows = L.latest_rows(twin_out / 'labels.jsonl') if twin_out else {}
+    twin_bgs = L.latest_rows(twin_out / 'backgrounds.jsonl', 'name') if twin_out else {}
+    twin_dels: dict[str, str] = {}   # desk del_id -> twin del_id, so d/u apply to both sessions
 
     def rkey(auto):
         return L.getkey(auto, extra='du')
@@ -205,23 +234,43 @@ def run_session(args):
         if take['kind'] == 'backgrounds':
             del_id = L.delete_background(out, take['name'])
             bgs.pop(take['name'], None)
+            twin_id = L.delete_background(twin_out, take['name']) if twin_out else None
+            if twin_out:
+                twin_bgs.pop(take['name'], None)
         else:
             del_id = L.delete_take(out, take['take_id'], 'take')
             rows.pop(take['take_id'], None)
+            twin_id = L.delete_take(twin_out, take['take_id'], 'take') if twin_out else None
+            if twin_out:
+                twin_rows.pop(take['take_id'], None)
+        if twin_id is not None:
+            twin_dels[del_id] = twin_id
         return del_id
 
     def undo(del_id):
         key = L.restore(out, del_id)
+        twin_id = twin_dels.pop(del_id, None)
+        if twin_id is not None:
+            L.restore(twin_out, twin_id)
         rows.clear()
         rows.update(L.take_rows(out / 'labels.jsonl'))
         bgs.clear()
         bgs.update(L.latest_rows(out / 'backgrounds.jsonl', 'name'))
+        if twin_out:
+            twin_rows.clear()
+            twin_rows.update(L.take_rows(twin_out / 'labels.jsonl'))
+            twin_bgs.clear()
+            twin_bgs.update(L.latest_rows(twin_out / 'backgrounds.jsonl', 'name'))
         return key
 
     rec = None
+    phone_rec = None
     try:
         rec = R.Recorder(src, Config(), out / f'run-{sitting:03d}', print_events=False)
         rec.start()
+        if twin_out:
+            phone_rec = R.Recorder(phone, Config(), twin_out / f'run-{sitting:03d}', print_events=False)
+            phone_rec.start()
         for block in spec['blocks']:
             if block['id'] not in chosen or (args.block and block['id'] not in args.block):
                 continue
@@ -230,6 +279,8 @@ def run_session(args):
             if all(t['take_id'] in done for t in items):
                 if block['id'] not in {r['block'] for r in L.read_rows(out / 'ratings.jsonl')}:
                     L.rating(out, block['id'], 0, 0, spec, args.auto)
+                    if twin_out:
+                        L.rating(twin_out, block['id'], 0, 0, spec, args.auto)
                 continue
             print('\n' + block['intro'])
             print('Distances:', spec['defaults']['distances_cm'], 'cm; gaps:', spec['defaults']['gap_s'], 's')
@@ -273,18 +324,60 @@ def run_session(args):
                     if take.get('anchor'):
                         meta['range'] = finalize_range(out, spec)
 
+                # the twin (phone) take: the same window, mapped to the phone's clock and frames.
+                if twin_out:
+                    is_bg = take['kind'] == 'backgrounds'
+                    win = PS.phone_take_window(rec, phone_rec, phone, go,
+                                               go + round(take['seconds'] * rec.rate) if is_bg else
+                                               (start + len(clip)), spec['analysis']['pre_roll_s'], is_bg)
+                    if win is None:
+                        print(f"phone: dropped - r to redo both", flush=True)
+                    else:
+                        pclip, pstart, pgo, align = win
+                        if is_bg:
+                            prow = {k: take[k] for k in ('name', 'kind', 'level', 'seconds')}
+                            prow['kind'] = take['bg_kind']
+                            prow['file'] = f"backgrounds/{take['name']}.wav"
+                            pjournal = 'backgrounds.jsonl'
+                        else:
+                            predo = L.next_redo(L.read_rows(twin_out / 'labels.jsonl'), take['take_id'])
+                            prow = L.label_row(take, predo, pstart * 1000 / phone_rec.rate,
+                                               pgo * 1000 / phone_rec.rate, len(pclip), phone_rec.rate)
+                            prow['align'] = align
+                            pjournal = 'labels.jsonl'
+                        ppath = twin_out / prow['file']
+                        ppath.parent.mkdir(parents=True, exist_ok=True)
+                        ptemp = ppath.with_suffix('.tmp.wav')
+                        sf.write(ptemp, pclip, phone_rec.rate, subtype='PCM_16')
+                        ptemp.replace(ppath)
+                        L.append_row(twin_out / pjournal, prow)
+                        if is_bg:
+                            twin_bgs[take['name']] = prow
+                        else:
+                            twin_rows[take['take_id']] = prow
+
             completed, redos = L.operate(items, done, capture, args.auto, rkey, delete=delete, undo=undo,
                                         count=count_files)
             if not completed:
                 break
             L.rating(out, block['id'], time.monotonic() - began, redos, spec, args.auto)
+            if twin_out:
+                L.rating(twin_out, block['id'], time.monotonic() - began, redos, spec, args.auto)
     finally:
         if rec:
             rec.stop()
+        if phone_rec:
+            phone_rec.stop()
         saved = json.loads((out / 'session.json').read_text())
         saved['sittings'][-1]['ended'] = time.time()
         L.write_json(out / 'session.json', saved)
+        if twin_out:
+            tsaved = json.loads((twin_out / 'session.json').read_text())
+            tsaved['sittings'][-1]['ended'] = time.time()
+            L.write_json(twin_out / 'session.json', tsaved)
     print(out)
+    if twin_out:
+        print(twin_out)
     return out
 
 
@@ -392,7 +485,11 @@ def main():
                    help='a short pseudonymous speaker id (letters, digits, - and _; never a real name)')
     p.add_argument('--out', type=Path)
     p.add_argument('--block', action='append')
-    p.add_argument('--source', choices=['auto', 'pw', 'sd', 'fake'], default='auto')
+    p.add_argument('--source', choices=['auto', 'pw', 'sd', 'fake', 'phone'], default='auto',
+                   help='phone streams the phone mic over the debug socket (contract P)')
+    p.add_argument('--twin-phone', action='store_true',
+                   help='also record the phone mic alongside a desk source (pw/sd/fake) into a twin session')
+    p.add_argument('--twin-out', type=Path, help='the twin session folder (default: zflip/range/<session>-phone)')
     p.add_argument('--device')
     p.add_argument('--rate', type=int, default=None)
     p.add_argument('--auto', action='store_true')
