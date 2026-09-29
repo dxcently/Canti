@@ -17,6 +17,7 @@ Writes sweeps/eval/opgate.<name>.{json,md}. Aggregates only.
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import random
 import sys
@@ -61,19 +62,23 @@ def main():
     ap.add_argument("--bound", choices=("cp95", "point"), default="cp95",
                     help="cp95 = cf_eval's gate (CP95 upper bound with the app design effect); point = the plain wrong/tap rate "
                          "(a matched-risk comparison when val is too small for the bound)")
+    ap.add_argument("--pooled", action="store_true",
+                    help="jl11: also report the wrong/tap point estimate and CP95 over dev_test+test_old pooled (same frozen "
+                         "point, cf_eval.cp_upper with the app design effect)")
     ap.add_argument("--device", default="cuda")
     a = ap.parse_args()
+    real_cp_upper = cf_eval.cp_upper   # jl11: kept so --bound point can still show the true CP95 next to the point estimate
     if a.bound == "point":   # the gate's bound becomes the observed rate (op_eval passes k = rate * n_eff)
         cf_eval.cp_upper = lambda k, n, alpha=0.05: (k / n) if n > 0 else 1.0
     recipes = dict(x.split("=", 1) for x in a.r)
     recipes = {k: v.split(",") for k, v in recipes.items()}
     base = a.baseline or next(iter(recipes))
-    specs = suite.sets_for(a.build, "v1")
+    specs = suite.sets_for(a.build, os.environ.get("JL_FORMAT", "v1"))   # jl10: JL_FORMAT=v2i for the v2i build
     pr = suite.Predictor(a.device)
     gold, Zs = {}, defaultdict(dict)
     for s in [a.fit_set] + a.sets:
         spec = specs[s]
-        rows = suite.rows_for_format(suite.jl(FT / spec["path"]), "v1")
+        rows = suite.rows_for_format(suite.jl(FT / spec["path"]), os.environ.get("JL_FORMAT", "v1"))
         gold[s] = rows
         fsha = suite.sha(FT / spec["path"])
         for rn, cks in recipes.items():
@@ -112,9 +117,36 @@ def main():
             Ps = [{i: cf_eval.softmax(z, T, pt["b"]) for i, z in Z.items()} for Z in Zs[rn][s]]
             e = cf_eval.op_eval(by_id, Ps, pt["t_tap"], pt["t_none"])
             res["sets"][s][rn] = e
-            md.append(f"| {rn} | {s} | | | | {e['tap_rate']:.3f} | {e['wrong_tap_per_tap']:.3f} ({e['wrong_tap_ub95']:.3f}) | "
+            # jl11: with --bound point the monkeypatched cp_upper makes wrong_tap_ub95 == the point estimate, so show the
+            # true CP95 (real Clopper-Pearson with the design effect) next to the point estimate instead.
+            ub_disp = real_cp_upper(e["wrong_tap_per_tap"] * e["n_eff_taps"], e["n_eff_taps"]) if a.bound == "point" else e["wrong_tap_ub95"]
+            md.append(f"| {rn} | {s} | | | | {e['tap_rate']:.3f} | {e['wrong_tap_per_tap']:.3f} ({ub_disp:.3f}) | "
                       f"{e['none_rate']:.3f} ({e['none_precision']:.3f}) | {e['defer_rate']:.3f} | {e['resolved_correct']:.3f} | {e['utility']:.3f} |")
             per_row[s][rn] = [[sum(x) / len(Ps) for x in zip(*[outcome(g, P[g["id"]], pt) for P in Ps])] for g in gold[s]]
+    if a.pooled:   # jl11 (opt-in): pooled wrong/tap point estimate + CP95 over the evaluation sets, same frozen point
+        res["pooled"] = {}
+        pool_gold = {}
+        for s in a.sets:
+            pool_gold.update({g["id"]: g for g in gold[s]})
+        md += ["", f"### Pooled over {'+'.join(a.sets)} (same frozen point; wrong/tap CP95 = cf_eval.cp_upper with the app "
+               "design effect, cf_eval.design_effect)", "",
+               "| recipe | wrong/tap (point) | wrong/tap CP95 | deff | n_eff taps |", "|---|---|---|---|---|"]
+        n_seeds = len(Zs[next(iter(recipes))][a.sets[0]])
+        for rn in recipes:
+            pt = res["points"][rn]["best"]
+            if pt is None:
+                continue
+            T = res["points"][rn]["T_pooled"]
+            Ps = []
+            for seed_i in range(n_seeds):
+                P = {}
+                for s in a.sets:
+                    P.update({i: cf_eval.softmax(zz, T, pt["b"]) for i, zz in Zs[rn][s][seed_i].items()})
+                Ps.append(P)
+            e = cf_eval.op_eval(pool_gold, Ps, pt["t_tap"], pt["t_none"])
+            ub = real_cp_upper(e["wrong_tap_per_tap"] * e["n_eff_taps"], e["n_eff_taps"])
+            res["pooled"][rn] = e
+            md.append(f"| {rn} | {e['wrong_tap_per_tap']:.3f} | {ub:.3f} | {e['deff']:.2f} | {e['n_eff_taps']:.2f} |")
     md += ["", f"Paired against {base} at each recipe's own frozen point (screen-cluster bootstrap B={a.B}): "
            "Δutility/row, Δwrong taps/row, Δtap rate, Δresolved correct [95% CI] p", "",
            "| recipe | set | Δutility | Δwrong taps / row | Δtap rate | Δresolved correct |", "|---|---|---|---|---|---|"]

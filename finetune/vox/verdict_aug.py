@@ -169,16 +169,83 @@ def cmd_swap(a):
     sidecar(b / "aug" / "swap_none.jsonl", a, tr, [*cfiles, *map(Path, a.verified)])
 
 
+# jl10 icon-word NONE rows (the mirror of `icon`): an icon phrase on a screen where no listed option can be that icon.
+# Concept -> (icon phrases, label words that mean the concept may be on screen). A screen qualifies for a concept only
+# if NO option label (any role) contains one of its words, and the screen has no unlabeled / generic icon-role option
+# (an unnamed image could be the icon). Train screens only (val stays clean for selection), emulator only.
+ICON_NONE = {
+    "settings": (["the gear", "the gear icon", "the cog", "the little gear"], {"setting", "settings", "preference", "preferences", "configure", "config", "options", "gear", "cog"}),
+    "search": (["the magnifying glass", "the search icon", "the little magnifier"], {"search", "find", "look", "lookup", "query", "filter"}),
+    "more options": (["the three dots", "the dots menu", "the kebab menu", "the vertical dots"], {"more", "option", "options", "menu", "overflow", "action", "actions"}),
+    "navigation drawer": (["the hamburger menu", "the three lines", "the hamburger"], {"navigation", "drawer", "menu", "navigate", "sidebar"}),
+    "add": (["the plus sign", "the plus button", "the little plus"], {"add", "new", "create", "plus", "compose", "write", "insert"}),
+    "delete": (["the trash can", "the bin icon", "the garbage can"], {"delete", "remove", "trash", "bin", "discard", "clear", "erase"}),
+    "edit": (["the pencil", "the pencil icon"], {"edit", "rename", "modify", "pencil", "change", "write", "compose"}),
+    "share": (["the share icon", "the share arrow"], {"share", "send", "forward", "export"}),
+    "notifications": (["the bell", "the bell icon"], {"notification", "notifications", "alert", "alerts", "bell", "reminder", "reminders"}),
+    "favorite": (["the star", "the heart", "the star icon"], {"favorite", "favourite", "favorites", "favourites", "star", "starred", "like", "bookmark", "bookmarks", "save", "saved", "heart", "rate"}),
+    "microphone": (["the mic", "the microphone"], {"voice", "mic", "microphone", "speak", "record", "audio", "dictate"}),
+    "filter": (["the funnel", "the filter icon"], {"filter", "filters", "sort", "refine"}),
+    "refresh": (["the circular arrow", "the refresh arrow"], {"refresh", "reload", "sync", "update", "retry"}),
+    "camera": (["the camera icon"], {"camera", "photo", "photos", "picture", "scan", "capture", "image"}),
+    "download": (["the down arrow", "the download arrow"], {"download", "downloads", "offline", "save"}),
+    "close": (["the x", "the little x", "the cross"], {"close", "cancel", "dismiss", "clear", "exit", "x", "done"}),
+}
+ICON_NONE_GENERIC = {"unlabeled", "image", "icon", "button", "media image", "channel image", "more", "menu", "options"}
+
+
+def _label_words(opt: str) -> set[str]:
+    m = V1_OPT.match(opt)
+    lab = (m["label"] if m else opt).split(" · ")[0].lower()
+    return set(re.findall(r"[a-z]+", lab))
+
+
+def cmd_iconnone(a):
+    b = FT / a.build
+    rng = random.Random(a.seed)
+    rows = [r for r in jl(b / "zflip" / "train_real_all.jsonl") if is_emu(r)]
+    by_screen = {}
+    for r in rows:
+        by_screen.setdefault(r["screen_id"], r)
+    out, skipped = [], Counter()
+    for sid, r in sorted(by_screen.items()):
+        parsed = [V1_OPT.match(o) for o in r["options"][:-1]]
+        if any(m and m["role"] in ("button", "image", "item") and m["label"].lower() in ICON_NONE_GENERIC for m in parsed) or not all(parsed):
+            skipped["unnamed icon-role option"] += 1
+            continue
+        words = set().union(*(_label_words(o) for o in r["options"][:-1])) if len(r["options"]) > 1 else set()
+        absent = [c for c, (_, al) in ICON_NONE.items() if not (words & al)]
+        if not absent:
+            skipped["every concept may be present"] += 1
+            continue
+        for c in rng.sample(absent, min(a.per_screen, len(absent))):
+            w = rng.choice(ICON_NONE[c][0])
+            ph = rng.choice(ICON_T).format(w=w)
+            ph = ph[0].lower() + ph[1:] if not ph.startswith("I ") else ph
+            ni = len(r["options"]) - 1
+            out.append({**{k: r[k] for k in ("options", "option_keys", "screen_id", "app", "package", "tag", "marks", "extract", "options_source")},
+                        "context": NZ.with_phrase(r["context"], ph), "label": ni, "acceptable": [ni], "kind": "icon_none",
+                        "phrase": ph, "phrase_kind": "appearance", "phrase_source": "template-icon-none", "confidence": "high",
+                        "split": r["split"], "id": f"aug-iconnone-{len(out)}", "meta": {"target": "none", "icon_word": w, "concept": c},
+                        **({"option_format": r["option_format"]} if r.get("option_format") else {})})
+    o = FT / a.build / "aug" / "icon_none.jsonl"
+    wjl(o, out)
+    print(f"screens {len(by_screen)}; skipped {dict(skipped)}; rows {len(out)}; concepts {dict(Counter(x['meta']['concept'] for x in out))}")
+    sidecar(o, a, out, [b / "zflip" / "train_real_all.jsonl"])
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("pool", cmd_pool), ("icon", cmd_icon), ("filler", cmd_filler), ("swap", cmd_swap)):
+    for name, fn in (("pool", cmd_pool), ("icon", cmd_icon), ("filler", cmd_filler), ("swap", cmd_swap), ("iconnone", cmd_iconnone)):
         s = sub.add_parser(name)
         s.add_argument("--build", default="data/real-targets-v2/b2")
         s.add_argument("--seed", type=int, default=0)
         s.set_defaults(func=fn)
         if name == "icon":
             s.add_argument("--per-target", type=int, default=1)
+        if name == "iconnone":
+            s.add_argument("--per-screen", type=int, default=2)
         if name == "filler":
             s.add_argument("--frac", type=float, default=0.5)
         if name == "swap":

@@ -36,7 +36,7 @@ sys.path.insert(0, str(FT))
 from vox.normalize import SPEC_VERSION, phrase_of, transform, with_phrase  # noqa: E402
 
 CHAMPION = "students/verdict/runs/verdict-bi-real-v1d"
-SYN = {"v1": "data/targets-v2", "v2": "data/targets-v3/v2"}   # synthetic tests in each option format
+SYN = {"v1": "data/targets-v2", "v2": "data/targets-v3/v2", "v2i": "data/targets-v2t"}   # synthetic tests in each option format
 # Locked apps whose content a training app also serves (SPLIT.md 2026-09-27b): locked results also reported without them.
 LOCKED_OVERLAP = {"com.looker.droidify"}
 
@@ -50,6 +50,8 @@ def rows_for_format(rows: list[dict], fmt: str) -> list[dict]:
     (v2_approx True / "no_tree"); synthetic-geometry rows are exact by construction."""
     if fmt == "v2":
         return [r for r in rows if r.get("option_format") == "v2" and r.get("v2_approx") in (None, False)]
+    if fmt == "v2i":   # jl10: the v2i text (v2 + indented-list context) as built, approximated screens included (opt-in, jevlike)
+        return [r for r in rows if r.get("option_format") in ("v2i", "v2")]
     return [r for r in rows if r.get("option_format", "v1") == "v1"]
 
 

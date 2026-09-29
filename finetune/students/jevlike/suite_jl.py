@@ -12,6 +12,7 @@ data/real-targets-v2/zflip/preds/suite/ (local only). Aggregates only are printe
 """
 from __future__ import annotations
 
+import os
 import hashlib
 import json
 import sys
@@ -81,7 +82,8 @@ class Predictor(suite.Predictor):
     def logits(self, run, rows):
         if not is_jl(run):
             return super().logits(run, rows)
-        return {r["id"]: z.tolist() for r, z in zip(rows, self.get(run).logits(rows))}
+        cache = os.environ.get("JL_CACHE") == "1"   # jl11 (opt-in): OptionCache (cache_options=True)
+        return {r["id"]: z.tolist() for r, z in zip(rows, self.get(run).logits(rows, cache_options=cache))}
 
 
 _model_id, _run_format = suite.model_id, suite.run_format
@@ -95,7 +97,9 @@ def model_id(run: str) -> str:
 
 
 def run_format(run: str) -> str:
-    return "v1" if is_jl(run) else _run_format(run)
+    # jl10: a .pt stores no option format; JL_FORMAT=v2i (opt-in) scores jevlike checkpoints trained on the v2i text on
+    # the v2i build's rows (approximated text included: it is the text they were trained on). Default v1 as before.
+    return os.environ.get("JL_FORMAT", "v1") if is_jl(run) else _run_format(run)
 
 
 _get_preds = suite.get_preds

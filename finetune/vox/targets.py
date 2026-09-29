@@ -173,10 +173,84 @@ NAME_POS_T = (["the {s} {p}", "the {s} {r} {p}", "the {s}, the one {p}", "tap th
 POS_T = (["the thing {p}", "whatever is {p}", "tap the thing {p}", "the {r} {p}"],
          ["the {r} sitting {p}"])
 
+# --- tree mode (v2 option format) ------------------------------------------------------------------------------------
+# v2 option text: `{label}[ · {context}] ({role}, {position}[, {rank}])`. Children of an indented list carry their
+# parent row's label as context; list items get a column rank "{k} of {n} down" (or row rank "{k} of {n} from left");
+# options that are still identical get ", {k} of {n}". Same rules as android/suite/tree_targets.py decorate()/ordinal().
+
+_NUM_WORDS = ("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+              "seventeen eighteen nineteen twenty").split()
+_NUM_ORD = ("zeroth first second third fourth fifth sixth seventh eighth ninth tenth eleventh twelfth thirteenth "
+            "fourteenth fifteenth sixteenth seventeenth eighteenth nineteenth twentieth").split()
+
+
+def _ordinal(k: int, n: int) -> str:
+    if k == n:
+        return "last"
+    suf = "th" if k % 100 in (11, 12, 13) else {1: "st", 2: "nd", 3: "rd"}.get(k % 10, "th")
+    return f"{k}{suf}"
+
+
+# Parent rows: a family (letter / lower word / capital word) with a number, or a plain folder name.
+TREE_FAMILIES = [("L", "lesson", "Lesson"), ("U", "unit", "Unit"), ("C", "chapter", "Chapter"),
+                 ("W", "week", "Week"), ("S", "section", "Section"), ("D", "day", "Day")]
+TREE_FOLDERS = ["Work", "Groceries", "2024", "Projects", "School", "Personal", "Inbox", "Archive"]
+# Child topics: topic -> an abbreviation people also say.
+TREE_TOPICS = {"vocabulary": "vocab", "grammar": "grammar", "reading": "reading", "writing": "writing",
+               "listening": "listening", "speaking": "speaking", "quiz": "quiz", "notes": "notes",
+               "part": "part", "exercise": "exercise", "practice": "practice", "review": "review",
+               "homework": "homework", "test": "test", "summary": "summary"}
+
+# Query templates ({p} parent saying, {c} child saying); Gen.fill drops a doubled "the".
+PC_T = ["{p} {c}", "{c} in {p}", "the {c} under {p}", "{c} in the {p}", "open the {c} in {p}",
+        "the {c} for {p}", "go to the {c} in {p}", "{c} under {p}"]
+C_T = ["open {c}", "the {c}", "{c}", "go to {c}", "open the {c}", "select {c}"]
+P_T = ["open {p}", "go to {p}", "{p}", "the {p}", "open the {p}", "select {p}"]
+
+
+def _v2_ranks(items: list[dict]) -> list[str | None]:
+    """Column/row rank per tree_targets.decorate: same role + same x-bucket -> "{k} of {n} down"; same role + same
+    y-bucket -> "{k} of {n} from left". items: list of {"role","pos"}; returns an aligned list of rank strings (or None)."""
+    ranks = [None] * len(items)
+    colw = lambda pos: POSITIONS.index(pos) % 3   # noqa: E731
+    roww = lambda pos: POSITIONS.index(pos) // 3  # noqa: E731
+    for i, it in enumerate(items):
+        role = it["role"]
+        col = [j for j, u in enumerate(items) if u["role"] == role and colw(u["pos"]) == colw(it["pos"])]
+        col.sort(key=lambda j: (roww(items[j]["pos"]), colw(items[j]["pos"]), j))
+        row = [j for j, u in enumerate(items) if u["role"] == role and roww(u["pos"]) == roww(it["pos"])]
+        row.sort(key=lambda j: (colw(items[j]["pos"]), roww(items[j]["pos"]), j))
+        if len(col) >= 2 and (len(col) > len(row) or (len(col) == len(row) and role != "tab")):
+            ranks[i] = f"{_ordinal(col.index(i) + 1, len(col))} of {len(col)} down"
+        elif len(row) >= 2:
+            ranks[i] = f"{_ordinal(row.index(i) + 1, len(row))} of {len(row)} from left"
+    return ranks
+
+
+def _v2_options(items: list[dict]) -> list[str]:
+    """items: list of {"label","context","role","pos"} in reading order -> v2 option strings (rank + repeat number)."""
+    ranks = _v2_ranks(items)
+    opts = []
+    for it, rk in zip(items, ranks):
+        ctx = f" · {it['context']}" if it.get("context") else ""
+        rank = f", {rk}" if rk else ""
+        opts.append(f"{it['label']}{ctx} ({it['role']}, {it['pos']}{rank})")
+    groups: dict[str, list[int]] = {}
+    for i, o in enumerate(opts):
+        groups.setdefault(o, []).append(i)
+    out = list(opts)
+    for idxs in groups.values():
+        if len(idxs) < 2:
+            continue
+        for k, i in enumerate(idxs):
+            out[i] = out[i][:-1] + f", {_ordinal(k + 1, len(idxs))} of {len(idxs)})"
+    return out
+
 
 class Gen:
-    def __init__(self, rng: random.Random, held: bool, apps: list[str]) -> None:
+    def __init__(self, rng: random.Random, held: bool, apps: list[str], tree: bool = False, tree_frac: float = 0.35) -> None:
         self.r, self.h, self.apps = rng, 1 if held else 0, apps
+        self.tree, self.tree_frac = tree, tree_frac
 
     def pick(self, pair):
         return self.r.choice(pair[self.h])
@@ -212,6 +286,142 @@ class Gen:
     def pos_words(self, pos: str) -> str:
         return self.pick(POS_WORDS[pos])
 
+    # --- tree mode helpers ---
+    def _tree_parents(self, n_parents: int) -> list[dict]:
+        r = self.r
+        parents = []
+        if r.random() < 0.25:  # a plain folder list (no number equivalence)
+            for name in r.sample(TREE_FOLDERS, n_parents):
+                lo = name.lower()
+                sayings = [lo, f"the {lo} folder", f"the {lo} list", f"the {lo} section"]
+                parents.append({"label": name, "family": None, "num": None, "sayings": sayings})
+        else:
+            letter, word, Word = r.choice(TREE_FAMILIES)
+            for n in r.sample(range(1, 13), n_parents):
+                label = r.choice([f"{letter}{n:02d}", f"{Word} {n}"])
+                sayings = [f"{word} {n}", f"{letter}{n:02d}", f"{word} {_NUM_WORDS[n]}",
+                           f"the {_NUM_ORD[n]} {word}", f"{word} {n:02d}", f"{Word} {n}"]
+                parents.append({"label": label, "family": (letter, word, Word), "num": n, "sayings": sayings})
+        return parents
+
+    def _child(self, topic: str, num: int | None) -> dict:
+        cap = topic.capitalize()
+        abbr = TREE_TOPICS[topic]
+        if num is None:
+            return {"label": cap, "topic": topic, "num": None, "sayings": [topic, abbr, f"the {topic}"]}
+        style = self.r.choice(["numfirst", "numlast"])
+        label = f"{num:02d} {cap}" if style == "numfirst" else f"{cap} {num}"
+        sayings = [f"{topic} {_NUM_WORDS[num]}", f"{abbr} {num}", f"the {_NUM_ORD[num]} {topic}",
+                   f"{topic} {num}", f"{topic} {num:02d}", f"{abbr} {_NUM_WORDS[num]}"]
+        if num == 1:
+            sayings.append(f"the {topic} one")
+        return {"label": label, "topic": topic, "num": num, "sayings": sayings}
+
+    def tree_screen(self) -> list[dict]:
+        """One synthetic indented-list screen: 1-3 parent rows, each with 2-5 children (some shared across parents)."""
+        r = self.r
+        n_parents = r.randint(1, 3)
+        parents = self._tree_parents(n_parents)
+        shared = r.sample(list(TREE_TOPICS), r.randint(1, 2)) if n_parents >= 2 else []
+        used = set(shared)
+        for pi in range(n_parents):
+            kids = [self._child(t, None) for t in shared]
+            want = max(r.randint(2, 5), len(shared) + 1)  # at least one non-shared child per parent
+            avail = [t for t in TREE_TOPICS if t not in used]
+            r.shuffle(avail)
+            for t in avail[:want - len(kids)]:
+                kids.append(self._child(t, None if r.random() < 0.4 else r.randint(1, 5)))
+                used.add(t)
+            parents[pi]["children"] = kids
+        return parents
+
+    def _absent_parent_saying(self, parents: list[dict]) -> str | None:
+        r = self.r
+        fams = [p for p in parents if p["family"] is not None]
+        if fams:
+            letter, word, Word = fams[0]["family"]
+            shown = {p["num"] for p in fams}
+            avail = [n for n in range(1, 13) if n not in shown]
+            if not avail:
+                return None
+            n = r.choice(avail)
+            return r.choice([f"{word} {n}", f"{letter}{n:02d}", f"{word} {_NUM_WORDS[n]}",
+                             f"the {_NUM_ORD[n]} {word}", f"{word} {n:02d}", f"{Word} {n}"])
+        shown = {p["label"] for p in parents}
+        avail = [f for f in TREE_FOLDERS if f not in shown]
+        if not avail:
+            return None
+        lo = r.choice(avail).lower()
+        return r.choice([lo, f"the {lo} folder", f"the {lo} list", f"the {lo} section"])
+
+    def tree_row(self) -> dict | None:
+        r = self.r
+        app = r.choice(self.apps)
+        line = screen_text("scrolling list", r.choice(SCREEN_MEDIA), r.choice(SCREEN_SCROLL), r.choice(SCREEN_KEYBOARD))
+        parents = self.tree_screen()
+        # flatten in reading order; children carry their parent's label as context
+        items, parent_idx, child_idx = [], {}, {}
+        for pi, p in enumerate(parents):
+            parent_idx[pi] = len(items)
+            items.append({"label": p["label"], "context": None, "role": "list item", "pi": pi, "ci": None})
+            for ci, c in enumerate(p["children"]):
+                child_idx[(pi, ci)] = len(items)
+                items.append({"label": c["label"], "context": p["label"], "role": "list item", "pi": pi, "ci": ci})
+        n = len(items)
+        for i, it in enumerate(items):
+            it["pos"] = "top" if (n > 1 and i == 0) else ("bottom" if (n > 1 and i == n - 1) else "center")
+        opts = _v2_options(items)
+        # which child topics appear in exactly one parent (unique -> a child-only query can target them)
+        topic_parents: dict[str, set] = {}
+        for p in parents:
+            seen = set()
+            for c in p["children"]:
+                if c["topic"] not in seen:
+                    topic_parents.setdefault(c["topic"], set()).add(p["label"])
+                    seen.add(c["topic"])
+        kind = r.choices(["tree_pc", "tree_c", "tree_p", "tree_none"], [40, 15, 20, 25])[0]
+        label, target = None, None
+        if kind == "tree_pc":
+            pi = r.randrange(len(parents))
+            p = parents[pi]
+            ci = r.randrange(len(p["children"]))
+            c = p["children"][ci]
+            label, target = child_idx[(pi, ci)], c["label"]
+            utt = self.fill(r.choice(PC_T), p=r.choice(p["sayings"]), c=r.choice(c["sayings"]))
+        elif kind == "tree_c":
+            uniq = [(pi, ci, c) for pi, p in enumerate(parents) for ci, c in enumerate(p["children"])
+                    if len(topic_parents[c["topic"]]) == 1]
+            if not uniq:
+                return None
+            pi, ci, c = r.choice(uniq)
+            label, target = child_idx[(pi, ci)], c["label"]
+            utt = self.fill(r.choice(C_T), c=r.choice(c["sayings"]))
+        elif kind == "tree_p":
+            pi = r.randrange(len(parents))
+            p = parents[pi]
+            label, target = parent_idx[pi], p["label"]
+            utt = self.fill(r.choice(P_T), p=r.choice(p["sayings"]))
+        else:  # tree_none: a parent+child that is not on screen
+            if r.random() < 0.5:
+                ap = self._absent_parent_saying(parents)
+                if ap is None:
+                    return None
+                c = r.choice(r.choice(parents)["children"])
+                utt = self.fill(r.choice(PC_T), p=ap, c=r.choice(c["sayings"]))
+            else:
+                pi = r.randrange(len(parents))
+                p = parents[pi]
+                have = {c["topic"] for c in p["children"]}
+                topic = r.choice([t for t in TREE_TOPICS if t not in have])
+                c = self._child(topic, None if r.random() < 0.5 else r.randint(1, 5))
+                utt = self.fill(r.choice(PC_T), p=r.choice(p["sayings"]), c=r.choice(c["sayings"]))
+            label, target = len(opts), None
+        keys = [f"t{j}" for j in range(len(opts))] + ["none"]
+        opts.append(NONE_OPTION)
+        ctx = f"mode: cursor\napp: {APPS.get(app, app)} ({app})\n{line}\nspoken target: \"{utt}\""
+        return {"context": ctx, "options": opts, "label": label, "option_keys": keys, "kind": kind,
+                "meta": {"target": target}}
+
     def screen(self, app: str) -> tuple[str, list[dict]]:
         r = self.r
         kind = r.choice(APP_SCREENS.get(app, ["other"]))
@@ -237,6 +447,8 @@ class Gen:
 
     def row(self) -> dict | None:
         r = self.r
+        if self.tree and r.random() < self.tree_frac:
+            return self.tree_row()
         app = r.choice(self.apps)
         line, els = self.screen(app)
         kind = r.choices(["name", "name_pos", "position", "unlabeled", "item", "none"], [45, 10, 10, 8, 12, 15])[0]
@@ -281,7 +493,11 @@ class Gen:
         order = sorted(range(len(els)), key=lambda i: (POSITIONS.index(els[i]["pos"]) // 3, POSITIONS.index(els[i]["pos"]) % 3, i))
         if r.random() < 0.3:
             r.shuffle(order)
-        opts = [f"{els[i]['label']} ({els[i]['role']}, {els[i]['pos']})" for i in order]
+        ordered = [els[i] for i in order]
+        if self.tree and r.random() < 0.7:  # flat rows in tree mode get v2 rank (some keep no rank at all)
+            opts = _v2_options([{"label": e["label"], "context": None, "role": e["role"], "pos": e["pos"]} for e in ordered])
+        else:
+            opts = [f"{e['label']} ({e['role']}, {e['pos']})" for e in ordered]
         if len(set(opts)) != len(opts):
             return None
         keys = [f"t{j}" for j in range(len(opts))] + ["none"]
@@ -297,8 +513,9 @@ POLICY_TARGETS = ("The user is in cursor mode and said which thing on the screen
                   "words, and use any position words they say. If nothing on the screen fits, pick none of these.")
 
 
-def write_split(path: Path, n: int, seed: int, held: bool, apps: list[str], name: str) -> None:
-    g = Gen(random.Random(seed), held, apps)
+def write_split(path: Path, n: int, seed: int, held: bool, apps: list[str], name: str,
+                tree: bool = False, tree_frac: float = 0.35) -> None:
+    g = Gen(random.Random(seed), held, apps, tree, tree_frac)
     rows, seen = [], set()
     while len(rows) < n:
         row = g.row()
@@ -317,6 +534,9 @@ def main() -> None:
     p.add_argument("--validation", type=int, default=1000)
     p.add_argument("--test", type=int, default=2000)
     p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--tree", action="store_true", help="opt-in tree screens (v2 option format) for a fraction of rows")
+    p.add_argument("--tree-frac", type=float, default=0.35, help="fraction of rows that get a tree screen (tree mode)")
+    p.add_argument("--tree-probe", type=int, default=300, help="tree_probe.jsonl row count (tree mode only)")
     a = p.parse_args()
     for k, (_, _, _, train, held) in ELEMENTS.items():
         assert not set(train) & set(held) and not set(FUNC[k][0]) & set(FUNC[k][1]), k
@@ -325,11 +545,13 @@ def main() -> None:
     a.output.mkdir(parents=True, exist_ok=True)
     (a.output / "policy.txt").write_text(POLICY_TARGETS + "\n")
     s = a.seed
-    write_split(a.output / "train.jsonl", a.train, s, False, train_apps, "train")
-    write_split(a.output / "validation.jsonl", a.validation, s + 1, False, train_apps, "validation")
-    write_split(a.output / "test_iid.jsonl", a.test, s + 2, False, train_apps, "test_iid")
-    write_split(a.output / "test_unseen_phrasing.jsonl", a.test, s + 3, True, train_apps, "test_unseen_phrasing")
-    write_split(a.output / "test_unseen_apps.jsonl", a.test, s + 4, False, sorted(HELDOUT_APPS), "test_unseen_apps")
+    write_split(a.output / "train.jsonl", a.train, s, False, train_apps, "train", a.tree, a.tree_frac)
+    write_split(a.output / "validation.jsonl", a.validation, s + 1, False, train_apps, "validation", a.tree, a.tree_frac)
+    write_split(a.output / "test_iid.jsonl", a.test, s + 2, False, train_apps, "test_iid", a.tree, a.tree_frac)
+    write_split(a.output / "test_unseen_phrasing.jsonl", a.test, s + 3, True, train_apps, "test_unseen_phrasing", a.tree, a.tree_frac)
+    write_split(a.output / "test_unseen_apps.jsonl", a.test, s + 4, False, sorted(HELDOUT_APPS), "test_unseen_apps", a.tree, a.tree_frac)
+    if a.tree:
+        write_split(a.output / "tree_probe.jsonl", a.tree_probe, s + 100, False, train_apps, "tree_probe", True, 1.0)
 
 
 if __name__ == "__main__":

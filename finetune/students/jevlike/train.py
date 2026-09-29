@@ -320,6 +320,7 @@ def train(a):
     better = {"acc": lambda m, b: m["acc"] > b["acc"], "nll": lambda m, b: m["nll"] < b["nll"],
               "nll_t": lambda m, b: m["nll_t"] < b["nll_t"]}[a.select]
     best, t0, step = None, time.time(), 0
+    no_improve = 0
     out = Path(a.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     for epoch in range(a.epochs):
@@ -358,6 +359,12 @@ def train(a):
                                       **({"val_nll_T": round(m["nll_t"], 4), "val_T": T} if "T" in m else {})}
             state = {n: p.detach().cpu() for n, p in model.named_parameters() if p.requires_grad}
             torch.save({"config": ck_cfg, "state_dict": state}, out)
+            no_improve = 0
+        else:
+            no_improve += 1
+        if a.patience and no_improve >= a.patience:
+            print(json.dumps({"early_stop": epoch + 1}), flush=True)
+            break
     print(json.dumps({"checkpoint": str(out), "best_val_acc": best["acc"], "selected_epoch": best["epoch"], "select": a.select,
                       **({"temperature": best["T"]} if a.fit_temperature else {}),
                       "train_rows_per_s": round(step * a.batch_size / max(1e-9, time.time() - t0), 1),
@@ -423,6 +430,8 @@ def main():
                     help="encode each distinct option once per batch, length-sorted chunks without extra padding (same outputs up to float noise)")
     ap.add_argument("--select", choices=("acc", "nll", "nll_t"), default="acc",
                     help="checkpoint selection on val: acc (default), nll (T = 1) or nll_t (NLL after fitting T on val)")
+    ap.add_argument("--patience", type=int, default=0,
+                    help="early stop after N consecutive epochs without a better selection metric (0 = off, default)")
     ap.add_argument("--fit-temperature", action="store_true", help="fit T on val (common.fit_temperature) and store it in the checkpoint config")
     ap.add_argument("--cache-options", action="store_true", help="--predict: cache option vectors by option text (OptionCache)")
     ap.add_argument("--limit", type=int)

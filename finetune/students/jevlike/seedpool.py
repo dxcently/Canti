@@ -12,6 +12,7 @@ Writes sweeps/eval/seedpool.<name>.{json,md}. Aggregates only.
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import math
 import statistics
@@ -58,7 +59,7 @@ def main():
     ap.add_argument("--B", type=int, default=2000)
     ap.add_argument("--device", default="cuda")
     a = ap.parse_args()
-    specs = suite.sets_for(a.build, "v1")
+    specs = suite.sets_for(a.build, os.environ.get("JL_FORMAT", "v1"))   # jl10: JL_FORMAT=v2i for the v2i build
     train_phr = {vstats.phrase_key(r["phrase"]) for r in suite.jl(FT / a.build / "zflip/train_real_all.jsonl") if r.get("phrase")}
     pr = suite.Predictor(a.device)
     Ts = {r: T_of(r) for r in a.a + a.b}
@@ -70,7 +71,7 @@ def main():
           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for s in a.sets:
         spec = specs[s]
-        rows = suite.rows_for_format(suite.jl(FT / spec["path"]), "v1")
+        rows = suite.rows_for_format(suite.jl(FT / spec["path"]), os.environ.get("JL_FORMAT", "v1"))
         if spec.get("exact_only"):
             rows = [r for r in rows if r.get("options_exact") == "app"]
         fsha = suite.sha(FT / spec["path"])

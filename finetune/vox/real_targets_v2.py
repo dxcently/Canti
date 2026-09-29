@@ -91,9 +91,19 @@ def formatted(s: dict) -> dict:
     if s["screen_id"] in _FMT_CACHE:
         return _FMT_CACHE[s["screen_id"]]
     from vox import option_format as of
-    if s.get("options_v2"):                        # exact capture (the app's own v2 text) or its port re-serialisation
+    of.INDENT_CONTEXT = (OPTION_FORMAT == "v2i")   # jl10: v2i = v2 + the indented-list rule; plain v2 leaves it off
+    if s.get("options_v2") and OPTION_FORMAT == "v2":   # exact capture, plain v2: the app's own text (or its port)
         out = {**s, "options": s["options_v2"], "option_format": "v2",
                "v2_approx": False if s.get("options_exact", "app") == "app" else "port"}
+    elif s.get("options_v2") and OPTION_FORMAT == "v2i":   # jl10: exact capture + indent rule (target list preserved)
+        raw = _raw_index(D / "emulator" / s["exact_set"] / "screens.jsonl").get(s["screen_id"], {})
+        root = of.tree_from_raw(raw.get("raw_tree") or [])
+        size = of.json_list(s.get("screen_size") or [1080, 2400])
+        if s.get("options_exact") == "app":
+            opts = of.v2i_from_targets(raw.get("targets_v2") or [], root, size[0], size[1])
+        else:   # single-format ("port") capture: re-serialised by the port's tt.build
+            opts = of.reserialize_exact(root, size[0], size[1], of.EMU_BARS)
+        out = {**s, "options": opts, "option_format": "v2i", "v2_approx": "port+indent"}
     else:
         nodes, size, root = None, s.get("screen_size"), None
         if s.get("source") == "v2" and s.get("raw_id"):
@@ -110,7 +120,7 @@ def formatted(s: dict) -> dict:
         elif str(s.get("source", "")).startswith("zflip"):
             size = size or (1080, 2640)
         opts, info = of.reserialize(s["options"], s["bounds"], size, nodes, "v2", root=root)
-        out = {**s, "options": opts, "option_format": "v2", "v2_approx": info["v2_approx"]}
+        out = {**s, "options": opts, "option_format": OPTION_FORMAT, "v2_approx": info["v2_approx"]}
     _FMT_CACHE[s["screen_id"]] = out
     return out
 
@@ -676,7 +686,7 @@ def cmd_manifest(a) -> None:
 
 # --- training mix --------------------------------------------------------------------------------------------------------
 
-def drop_gold(r: dict, rng: random.Random) -> dict | None:
+def drop_gold(r: dict, rng: random.Random, kind: str = "none_dropgold") -> dict | None:
     """A hard 'none' row: the phrase names an element that is removed from the list (with every acceptable one)."""
     none_i = len(r["options"]) - 1
     if r["label"] == none_i:
@@ -687,7 +697,79 @@ def drop_gold(r: dict, rng: random.Random) -> dict | None:
         return None
     opts = [r["options"][i] for i in keep] + [NONE_OPTION]
     return {**r, "options": opts, "option_keys": [f"t{i}" for i in range(len(keep))] + ["none"], "label": len(keep),
-            "acceptable": [len(keep)], "kind": "none_dropgold", "id": r["id"] + "-dg", "meta": {**r["meta"], "target": "none"}}
+            "acceptable": [len(keep)], "kind": kind, "id": r["id"] + "-dg", "meta": {**r["meta"], "target": "none"}}
+
+
+_DG_STOP = {"the", "a", "an", "to", "on", "of", "in", "for", "and", "or", "my", "me", "i", "it", "this", "that", "one", "thing",
+            "tap", "open", "go", "click", "press", "hit", "select", "please", "want", "show", "button", "with", "at", "up", "is",
+            "just", "can", "you", "let", "see", "get", "page", "screen", "little", "there"}
+
+
+def _dg_tokens(s: str) -> set[str]:
+    return {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in re.findall(r"[a-z0-9]+", s.lower())} - _DG_STOP
+
+
+def drop_gold_ok(r: dict) -> str | None:
+    """jl10 strict drop-gold filter: None if the row may become a hard none row, else the reason it may not. The row
+    must have exactly one valid answer and no other listed option may be able to take its place once it is removed:
+      emulator row (no Z Flip row is re-labelled by a rule); a target (not none), high confidence, not ambiguous,
+      acceptable == [gold]; phrase kind not position (a slot phrase such as "the one bottom right" can refer to
+      whatever fills that slot next) and not near_none; the gold label is not generic/unlabeled and not repeated in
+      the list (a twin would be the same thing); no remaining option shares a phrase word that also is in the gold's
+      label (that word is the phrase's evidence for the gold, so it would be evidence for the other option too)."""
+    none_i = len(r["options"]) - 1
+    if not (r["screen_id"].startswith("emu") and "-zf-" not in r["id"]):
+        return "not emulator"
+    if r["label"] == none_i:
+        return "gold none"
+    if r.get("confidence") != "high" or r.get("ambiguous") or list(r.get("acceptable") or [r["label"]]) != [r["label"]]:
+        return "not a single sure answer"
+    if r.get("phrase_kind") == "position" or r.get("kind") in ("position", "near_none"):
+        return "position/near-none phrase"
+    lab = r["options"][r["label"]].rsplit(" (", 1)[0].split(" · ")[0].lower()
+    if lab in ("unlabeled",) or lab in _GENERIC:
+        return "generic gold label"
+    labs = [o.rsplit(" (", 1)[0].split(" · ")[0].lower() for o in r["options"][:none_i]]
+    if labs.count(lab) > 1:
+        return "repeated gold label"
+    ev = _dg_tokens(r.get("phrase", "")) & _dg_tokens(lab)
+    if any(ev & _dg_tokens(l) for i, l in enumerate(labs) if i != r["label"]):
+        return "shared evidence"
+    if none_i - 1 < 2:
+        return "fewer than 2 options left"
+    return None
+
+
+def drop_gold_hard_ok(r: dict) -> str | None:
+    """jl11 'hard' drop-gold filter (less strict than drop_gold_ok): a row drop_gold_ok rejects ONLY for "shared
+    evidence" may still become a hard none row when the phrase names the gold strongly enough that no other option is an
+    equal-or-better lexical match for the phrase than the gold was:
+      the phrase has >= 2 content tokens (after _DG_STOP) that occur in the gold label;
+      every remaining option misses at least one of those gold tokens (so no remaining option matches all of them);
+      no remaining option's label contains the whole gold label, or is contained in the whole gold label."""
+    none_i = len(r["options"]) - 1
+    if drop_gold_ok(r) != "shared evidence":
+        return "not shared-evidence-rejected"
+    if none_i - 1 < 2:   # drop_gold keeps the non-gold options only, so it needs >= 2 of them
+        return "fewer than 2 options left"
+    lab = r["options"][r["label"]].rsplit(" (", 1)[0].split(" · ")[0].lower()
+    ev = _dg_tokens(r.get("phrase", "")) & _dg_tokens(lab)
+    if len(ev) < 2:
+        return "fewer than 2 gold tokens"
+    labs = [o.rsplit(" (", 1)[0].split(" · ")[0].lower() for o in r["options"][:none_i]]
+    for i, l in enumerate(labs):
+        if i == r["label"]:
+            continue
+        if ev <= _dg_tokens(l):
+            return "option matches all gold tokens"
+        if lab in l or l in lab:
+            return "label containment"
+    return None
+
+
+_GENERIC = {"unlabeled", "more", "more options", "more actions", "onoff", "on off", "toggle", "switch", "checkbox",
+            "play or pause", "media image", "channel image", "image", "icon", "button", "menu", "options", "overflow menu",
+            "expand", "collapse"}   # tree_targets.GENERIC_LABELS (Targets.kt), copied so the mix needs no android/ import
 
 
 def cmd_mix(a) -> None:
@@ -700,16 +782,65 @@ def cmd_mix(a) -> None:
         dg = [x for x in (drop_gold(r, rng) for r in real if rng.random() < a.dropgold) if x]
         out += dg
         print(f"drop-gold none rows: {len(dg)}")
+    hard_none = 0
+    if a.dropgold_n > 0:   # jl10 (opt-in): exactly N strict drop-gold rows, own rng so the synthetic sample is unchanged
+        why = Counter(drop_gold_ok(r) or "ok" for r in real)
+        elig = [r for r in real if drop_gold_ok(r) is None]
+        drng = random.Random(a.seed + 1009)
+        dg = [drop_gold(r, drng) for r in drng.sample(elig, min(a.dropgold_n, len(elig)))]
+        dg = [x for x in dg if x]
+        out += dg
+        hard_none += len(dg)
+        print(f"strict drop-gold: {len(dg)} rows from {len(elig)} eligible of {len(real)}; filter {dict(why)}")
+    if a.dropgold_hard_n > 0:   # jl11 (opt-in): N 'hard' drop-gold rows from rows drop_gold_ok rejects only for shared evidence
+        why = Counter(drop_gold_hard_ok(r) or "ok" for r in real)
+        elig = [r for r in real if drop_gold_hard_ok(r) is None]
+        hrng = random.Random(a.seed + 3001)
+        dg = [drop_gold(r, hrng, "none_dropgold_hard") for r in hrng.sample(elig, min(a.dropgold_hard_n, len(elig)))]
+        dg = [x for x in dg if x]
+        out += dg
+        hard_none += len(dg)
+        print(f"hard drop-gold: {len(dg)} rows from {len(elig)} eligible of {len(real)}; filter {dict(why)}")
+    for f in a.extra_none:   # jl10 (opt-in): hard none rows built elsewhere (e.g. verdict_aug iconnone), PATH[:N]
+        path, _, n = f.partition(":")
+        xs = jl(Path(path))
+        assert all(x["label"] == len(x["options"]) - 1 for x in xs), f"{path}: not all rows are none rows"
+        xs = random.Random(a.seed + 2003).sample(xs, min(int(n), len(xs))) if n else xs
+        out += xs
+        hard_none += len(xs)
+        print(f"extra none rows: {len(xs)} from {path}")
     syn_f = Path(a.syn_file) if a.syn_file else SYN / "train.jsonl"
     syn = jl(syn_f)
+    if a.syn_format == "v2":   # jl10: stamp v2 onto synthetic rows that lack the field (targets-v2t)
+        for r in syn:
+            if "option_format" not in r:
+                r["option_format"] = "v2"
     fmts = {r.get("option_format", "v1") for r in real} | {r.get("option_format", "v1") for r in syn[:1000]}
-    if len(fmts) != 1:
+    fam = {("v2" if f in ("v2", "v2i") else "v1") for f in fmts}   # v2 and v2i are the same format family
+    if len(fam) != 1:
         raise SystemExit(f"real and synthetic option formats differ ({sorted(fmts)}): pass a --syn-file of the same format")
     rng.shuffle(syn)
-    none_syn = [r for r in syn if r["kind"] == "none"]
-    act_syn = [r for r in syn if r["kind"] != "none"]
+    none_syn = [r for r in syn if r["label"] == len(r["options"]) - 1]   # none = label is the last option (incl. tree_none)
+    act_syn = [r for r in syn if r["label"] != len(r["options"]) - 1]
     n_none = int(a.syn * a.syn_none)
-    pick = act_syn[: a.syn - n_none] + none_syn[:n_none]
+    if a.swap_syn_none and a.keep_tree_none:   # jl11: swap out FLAT synthetic none rows first, never tree_none rows
+        assert hard_none <= n_none, "more hard none rows than synthetic none rows to swap out"
+        window = none_syn[:n_none]
+        tree = [r for r in window if r.get("kind") == "tree_none"]
+        flat = [r for r in window if r.get("kind") != "tree_none"]
+        remove_flat = min(hard_none, len(flat))
+        kept_none = tree + flat[remove_flat:]
+        pick = act_syn[: a.syn - n_none] + kept_none
+        print(f"keep-tree-none swap: kept all {len(tree)} tree_none rows; removed {remove_flat} flat none rows "
+              f"(of {len(flat)} flat, {len(tree)} tree_none in the {n_none}-row none window)")
+        if hard_none > len(flat):
+            print(f"keep-tree-none: {hard_none} hard none rows > {len(flat)} flat none rows, so all {len(tree)} tree_none "
+                  f"rows are kept as extra synthetic none rows (none share rises)")
+    else:
+        pick = act_syn[: a.syn - n_none] + none_syn[:n_none - (hard_none if a.swap_syn_none else 0)]
+        if a.swap_syn_none:   # jl10: the hard none rows replace synthetic none rows one for one (none share unchanged)
+            assert hard_none <= n_none, "more hard none rows than synthetic none rows to swap out"
+            print(f"swap: synthetic none rows {n_none} -> {n_none - hard_none}")
     out += pick
     rng.shuffle(out)
     for r in out:
@@ -718,7 +849,7 @@ def cmd_mix(a) -> None:
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     wjl(Path(a.out), out)
     side = {"args": {k: v for k, v in vars(a).items() if k != "func"}, "real_sha256": file_sha(Path(a.real)),
-            "synthetic_file": rel(syn_f) if syn_f.resolve().is_relative_to(FT) else str(syn_f), "synthetic_sha256": file_sha(syn_f), "out_sha256": file_sha(Path(a.out)), "rows": len(out)}
+            "synthetic_file": rel(syn_f.resolve()) if syn_f.resolve().is_relative_to(FT) else str(syn_f), "synthetic_sha256": file_sha(syn_f), "out_sha256": file_sha(Path(a.out)), "rows": len(out)}
     Path(a.out + ".mix.json").write_text(json.dumps(side, indent=1))
     k = Counter("none" if r["label"] == len(r["options"]) - 1 else "target" for r in out)
     print(f"{len(out)} rows -> {a.out}: real {len(real)} x{a.real_rep}, synthetic {len(pick)}; none share {k['none'] / len(out):.3f}")
@@ -832,14 +963,25 @@ def main() -> None:
     s = sub.add_parser("build"); s.add_argument("--out", default=""); s.add_argument("--overwrite", action="store_true")
     s.add_argument("--val-mode", choices=["screen", "optset"], default="screen"); s.add_argument("--folds", type=int, default=0)
     s.add_argument("--folds-from", default="", help="folds.json of an earlier build: keep its app -> fold map, place only new apps")
-    s.add_argument("--option-format", choices=["v1", "v2"], required=True,
-                   help="option text format of every row (OptionFormat.kt); explicit so no build mixes formats")
+    s.add_argument("--option-format", choices=["v1", "v2", "v2i"], required=True,
+                   help="option text format of every row (OptionFormat.kt); v2i = v2 + the jl10 indented-list rule; "
+                        "explicit so no build mixes formats")
     s = sub.add_parser("manifest"); s.add_argument("--out", default=""); s.add_argument("--note", default="")
     s = sub.add_parser("mix"); s.add_argument("--real", required=True); s.add_argument("--out", required=True)
     s.add_argument("--real-rep", type=int, default=3); s.add_argument("--syn", type=int, default=12000)
     s.add_argument("--syn-none", type=float, default=0.12); s.add_argument("--dropgold", type=float, default=0.0)
+    s.add_argument("--dropgold-n", type=int, default=0, help="jl10: N strict drop-gold none rows (drop_gold_ok filter)")
+    s.add_argument("--dropgold-hard-n", type=int, default=0,
+                   help="jl11: N 'hard' drop-gold none rows from rows drop_gold_ok rejects only for shared evidence")
+    s.add_argument("--extra-none", nargs="*", default=[], help="jl10: extra hard none row files, PATH[:N]")
+    s.add_argument("--swap-syn-none", action="store_true", help="jl10: hard none rows replace synthetic none rows 1:1")
+    s.add_argument("--keep-tree-none", action="store_true",
+                   help="jl11: when swapping, remove flat synthetic none rows first and never tree_none rows")
     s.add_argument("--norm-caps", action="store_true"); s.add_argument("--seed", type=int, default=0)
     s.add_argument("--syn-file", default="", help="synthetic rows (default data/targets-v2/train.jsonl, v1 text)")
+    s.add_argument("--syn-format", choices=["v1", "v2"], default="v1",
+                   help="jl10: stamp option_format onto synthetic rows that lack it (v1 = leave as-is; v2 = stamp v2 so a "
+                        "v2/v2i real mix passes the format check)")
     s = sub.add_parser("zscreens"); s.add_argument("--per-batch", type=int, default=6)
     sub.add_parser("zcollect")
     s = sub.add_parser("score"); s.add_argument("gold"); s.add_argument("preds", nargs="+"); s.add_argument("--out", default=""); s.add_argument("--none-bias", type=float, default=0.0)
