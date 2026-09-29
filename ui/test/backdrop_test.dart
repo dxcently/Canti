@@ -95,13 +95,15 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.625;
     addTearDown(tester.view.reset);
-    final b = FakeBackend(initial: VoxStatus.fromMap({'service': true, 'armed': true, 'paused': false, 'mode': 'cursor', 'sound_source': 'phone'}));
+    final b = FakeBackend(
+        initial: VoxStatus.fromMap({'service': true, 'armed': true, 'paused': false, 'mode': 'cursor', 'sound_source': 'phone'}),
+        calibAuto: false);
     await tester.pumpWidget(VoxUiApp(backend: b));
     await tester.pumpAndSettle();
     tester.state<NavigatorState>(find.byType(Navigator)).push(
-        MaterialPageRoute<bool>(builder: (_) => CalibrationScreen(backend: b, source: 'phone')));
+        MaterialPageRoute<bool>(builder: (_) => CalibStepScreen(backend: b, source: 'phone', step: 'hum')));
     await tester.pumpAndSettle();
-    final mood = moodOf(tester, CalibrationScreen);
+    final mood = moodOf(tester, CalibStepScreen);
     Map<String, Object?> st(String state, [double? db]) => {
           'active': true, 'source': 'phone', 'step': 'hum', 'state': state, 'progress': 0.5,
           'live': {'voiced': db != null, 'level_db': db}, 'step_done': state == 'step_done',
@@ -130,11 +132,13 @@ void main() {
     final t = FakeTrainBackend(source: 'phone');
     useTrainBackend(b, t);
     final flow = TrainFlow(backend: t);
-    await tester.pumpWidget(VoxUiApp(backend: b, home: TrainScreen(train: t, flow: flow)));
+    await tester.pumpWidget(VoxUiApp(
+        backend: b, home: TrainTakeScreen(backend: b, train: t, gesture: 'arch', cell: 'hum-low-slow', flow: flow)));
     await tester.pumpAndSettle();
-    final mood = moodOf(tester, TrainScreen);
+    final mood = moodOf(tester, TrainTakeScreen);
     expect(mood.motif, BackdropMotif.ticks);
-    await flow.startRound('arch');
+    expect(flow.session?.state, 'ready');
+    await flow.record();
     await tester.pumpAndSettle();
     expect(mood.motif, BackdropMotif.bars);
     t.trace([200, 210], levelDb: -24);

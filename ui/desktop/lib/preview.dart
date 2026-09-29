@@ -11,20 +11,20 @@ import 'recorder_preview.dart'; // [rec]
 /// The desktop preview of the voice cursor screens, on the in-memory backend's made-up `calib_status` stream
 /// (a push every 100 ms, as the service sends them). Picked by VOX_PREVIEW:
 ///
-///   calibrate  the setup screen for the phone mic, walked through by [CalibAutopilot] (Begin, then Next once each
-///              step is done, to the result)
+///   calibrate  the tests hub for the phone mic, or a held calibration step ([CalibPreview])
 ///   cursor     the status screen in cursor mode on an uncalibrated phone mic: the first-run prompt and the
 ///              Voice cursor window
 ///   settings   the Voice cursor window alone
 ///   pair       the pair screen (its header, for comparing)
-///   train      the gesture training screen (train_preview.dart; holds: grid, recording, failed, finished)
+///   train      the tests hub live, or a held training take (train_preview.dart; holds: recording, failed,
+///              passed, off, review)
+///   hub        the tests hub with some progress and a take to check
 ///
 /// More knobs (all optional):
-///   VOX_PREVIEW_HOLD=intro|waiting|hum|glide|vowels|pops|clicks|whistle|hiss|room|failed|result   stop there, hold still
-///   VOX_PREVIEW_FAIL=STEP   that step fails once with a made-up reason; the autopilot skips it (or holds: `failed`)
+///   VOX_PREVIEW_HOLD=waiting|hum|glide|vowels|pops|clicks|whistle|hiss|room|failed   calibrate: that step, held still
+///   VOX_PREVIEW_FAIL=STEP   that step fails once with a made-up reason (hold `failed` shows it)
 ///   VOX_PREVIEW_POPS=N       the pops the fake hears (under 2 shows the badge hint)
 ///   VOX_PREVIEW_SAVED=1|v1    cursor/settings: the phone mic has a saved profile (v1: saved before calibration v2)
-///   VOX_PREVIEW_STEPS=missing calibrate: only the saved profile's missing steps (with VOX_PREVIEW_SAVED=v1)
 class Preview {
   Preview._(this.backend, this.home, this._start);
 
@@ -93,13 +93,10 @@ class Preview {
     );
     if (fail != null) b.calibFailOnce[fail] = failReasons[fail] ?? 'Too short: hold the sound a bit longer.';
     if (saved) b.calibSaved['phone'] = savedProfile(v1: savedKind == 'v1', pops: b.calibPops);
-    // VOX_PREVIEW_STEPS=missing: only the saved profile's missing steps (with VOX_PREVIEW_SAVED=v1)
-    final steps = env['VOX_PREVIEW_STEPS'] == 'missing' ? b.calibSaved['phone']?.missingSteps : null;
     switch (kind) {
       case 'calibrate':
-        final flow = CalibFlow(backend: b, source: 'phone', steps: steps);
-        final pilot = CalibAutopilot(flow, b, hold: hold);
-        return Preview._(b, CalibrationScreen(backend: b, source: 'phone', flow: flow), pilot.start);
+        final c = CalibPreview(b, hold, fail);
+        return Preview._(b, c.screen, c.start);
       case 'cursor':
         return Preview._(b, null, () {});
       case 'pair':
@@ -109,6 +106,15 @@ class Preview {
       case 'train': // [train]
         final t = TrainPreview.create(b, hold);
         return Preview._(b, t.screen, t.start);
+      case 'hub': // [train] the round-7 tests hub (calibration + training + review)
+        final t = FakeTrainBackend(source: 'phone')
+          ..fill('rise', cells: ['hum-low-slow', 'hum-low-quick'])
+          ..fill('pop');
+        t.unconfirmed.add({
+          'id': 1, 'gesture': 'arch', 'heard': 'dip', 'pos': 1,
+        });
+        useTrainBackend(b, t);
+        return Preview._(b, HubScreen(backend: b, source: 'phone', train: t), () {});
       case 'recorder': // [rec]
         final t = RecorderPreview.create(b, hold);
         return Preview._(b, t.screen, t.start);
@@ -117,71 +123,52 @@ class Preview {
       case 'shape': // [rec]
         return Preview._(b, ShapePreview.screen(), () {});
     }
-    throw ArgumentError('VOX_PREVIEW=$kind: expected calibrate, cursor, settings, pair, train, recorder, quickrec or shape');
+    throw ArgumentError('VOX_PREVIEW=$kind: expected calibrate, cursor, settings, pair, train, hub, recorder, quickrec or shape');
   }
 }
 
-/// Presses the setup screen's buttons as a person would: Begin after a moment, Next once a step is done, Skip on a
-/// failure; stops at the result, or at [hold] (then freezes the fake's recording so the screen holds still).
-class CalibAutopilot {
-  CalibAutopilot(this.flow, this.backend, {this.hold, this.pause = const Duration(milliseconds: 900)});
+/// VOX_PREVIEW=calibrate: the calibration step screen on the fake engine's made-up recordings. Without a hold, the
+/// tests hub (RUN THE REST walks the steps; a v1 profile shows only its missing steps as not done). With a hold:
+/// that step's screen, frozen part way through (`waiting`: the hum waiting for a steady note; `failed`: the failing
+/// step's reason, see VOX_PREVIEW_FAIL).
+class CalibPreview {
+  CalibPreview(this.backend, this.hold, this.fail);
 
-  final CalibFlow flow;
   final FakeBackend backend;
   final String? hold;
-  final Duration pause;
-  bool _stopped = false;
-  bool _acting = false;
+  final String? fail;
+  StreamSubscription<CalibStatus>? _sub;
   int _waits = 0;
 
+  Widget get screen {
+    final step = switch (hold) {
+      null => null,
+      'waiting' => 'hum',
+      'failed' => fail ?? 'glide',
+      final s when calibSteps.contains(s) => s,
+      _ => 'hum',
+    };
+    return step == null
+        ? HubScreen(backend: backend, source: 'phone')
+        : CalibStepScreen(backend: backend, source: 'phone', step: step);
+  }
+
   void start() {
-    if (hold == 'intro') return;
-    flow.addListener(_check);
-    Timer(pause, flow.begin);
-  }
-
-  void _stop({bool freeze = false}) {
-    _stopped = true;
-    if (freeze) backend.calibFreeze();
-    flow.removeListener(_check);
-  }
-
-  void _act(Future<void> Function() f) {
-    if (_acting) return;
-    _acting = true;
-    Timer(pause, () async {
-      try {
-        if (!_stopped) await f();
-      } finally {
-        _acting = false;
+    if (hold == null || hold == 'failed') return;
+    _sub = backend.calibStatus().listen((s) {
+      if (hold == 'waiting' ? (s.waitingForSteady && ++_waits >= 4) : (s.step == hold && s.state == 'recording' && _heldEnough(s))) {
+        backend.calibFreeze();
+        _sub?.cancel();
       }
     });
   }
 
-  void _check() {
-    if (_stopped) return;
-    final page = flow.page;
-    final s = flow.pageStatus;
-    if (page == CalibPage.result) return _stop();
-    if (hold == 'waiting' && page == CalibPage.hum && s != null && s.waitingForSteady && ++_waits >= 4) {
-      return _stop(freeze: true);
-    }
-    if (hold == page.name && s != null && s.state == 'recording' && _heldEnough(page, s)) {
-      return _stop(freeze: true);
-    }
-    if (flow.pageFailure != null) {
-      if (hold == 'failed') return _stop();
-      return _act(flow.skip);
-    }
-    if (flow.pageDone && !flow.busy) _act(flow.next);
-  }
-
   // Far enough into a step that its live readout has something to show.
-  static bool _heldEnough(CalibPage page, CalibStatus s) => switch (page) {
-        CalibPage.pops => s.popsN >= 2,
-        CalibPage.clicks => s.clicksN >= 2,
-        CalibPage.hiss => s.hissN >= 1,
-        CalibPage.vowels => s.progress >= 0.4 && s.live.vowel != null,
+  static bool _heldEnough(CalibStatus s) => switch (s.step) {
+        'pops' => s.popsN >= 2,
+        'clicks' => s.clicksN >= 2,
+        'hiss' => s.hissN >= 1,
+        'vowels' => s.progress >= 0.4 && s.live.vowel != null,
         _ => s.progress >= 0.55,
       };
 }

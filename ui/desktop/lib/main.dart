@@ -13,7 +13,7 @@ import 'preview.dart';
 ///   VOX_THEME=light|dark   force a theme (default: the desktop's setting)
 ///   VOX_FRAME_STATS=N      collect frame timings for N seconds, print a summary to stdout and exit (use a
 ///                          `--profile` build: debug-mode timings mean nothing)
-///   VOX_PREVIEW=calibrate|cursor|settings|pair|train   the voice cursor and gesture training screens on made-up data (see preview.dart)
+///   VOX_PREVIEW=calibrate|cursor|settings|pair|train|hub   the voice cursor, calibration and gesture training screens on made-up data (see preview.dart)
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final env = Platform.environment;

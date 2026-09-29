@@ -65,6 +65,21 @@ class Px {
         letterSpacing: 0,
       );
 
+  /// Font A's size in logical px: exactly 16 art px, twice the body (the 2x step).
+  double get sentenceSize => 16 * px * text;
+
+  /// Instruction and next-step sentences (font A): Departure Mono at exactly twice the body size, so a sentence on the
+  /// calibration and training screens reads at arm's length. [line] is the line height in art px.
+  TextStyle sentence(Color c, {int line = 19}) => TextStyle(
+        fontFamily: Fonts.sentence,
+        fontFamilyFallback: Fonts.sentenceFallback,
+        fontSize: sentenceSize,
+        height: line * px * text / sentenceSize,
+        leadingDistribution: TextLeadingDistribution.even,
+        color: c,
+        letterSpacing: 0,
+      );
+
   static Px of(BuildContext context) =>
       PxScope.maybeOf(context) ?? Px(MediaQuery.devicePixelRatioOf(context), MediaQuery.textScalerOf(context));
 
@@ -82,6 +97,10 @@ abstract final class Fonts {
   static const labelFallback = ['packages/vox_ui/PressStart2P'];
   static const body = 'Tiny5';
   static const bodyFallback = ['packages/vox_ui/Tiny5'];
+
+  /// Font A (Departure Mono): the sentences and numbers on the calibration and training screens.
+  static const sentence = 'DepartureMono';
+  static const sentenceFallback = ['packages/vox_ui/DepartureMono'];
 }
 
 /// Provides one [Px] to the tree (set up once by the app, from the real text scale).

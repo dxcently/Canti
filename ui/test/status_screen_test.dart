@@ -383,7 +383,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('head_calibrate')));
     await tester.pumpAndSettle();
-    expect(find.byType(CalibrationScreen), findsOneWidget);
+    expect(find.byType(HubScreen), findsOneWidget);
   });
 
   group('ChannelBackend', () {

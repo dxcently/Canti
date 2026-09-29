@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'backend.dart';
 import 'fake_backend.dart';
+import 'shape_plot.dart';
 import 'train_fake.dart';
 
 // Gesture training (android/PROTOCOL.md "Gesture training", GestureTraining.kt): the user records their own version of
@@ -159,12 +160,15 @@ class TrainHeard {
 /// The mic right now, while a take records (phone / USB mic only).
 @immutable
 class TrainLive {
-  const TrainLive({this.traceHz = const [], this.levelDb, this.pitchHz});
+  const TrainLive({this.traceHz = const [], this.levelDb, this.pitchHz, this.checks = const []});
 
   /// One pitch per 20 ms tick, oldest first; null = unvoiced.
   final List<double?> traceHz;
   final double? levelDb;
   final double? pitchHz;
+
+  /// The provisional grade of the take so far.
+  final List<ShapeCheck> checks;
 
   static TrainLive fromMap(Object? o) {
     final m = _m(o);
@@ -172,6 +176,29 @@ class TrainLive {
       traceHz: [for (final x in _l(m['trace_hz'])) _d(x)],
       levelDb: _d(m['level_db']),
       pitchHz: _d(m['pitch_hz']),
+      checks: [for (final c in _l(m['checks'])) ShapeCheck.fromMap(c)],
+    );
+  }
+}
+
+/// Where a take sits in the plan (1-based): `i` of `n` over the whole 52-cell plan, `gesture_i` of `gesture_n` within
+/// the gesture.
+@immutable
+class TrainPos {
+  const TrainPos({this.i = 1, this.n = 52, this.gestureI = 1, this.gestureN = 8});
+
+  final int i;
+  final int n;
+  final int gestureI;
+  final int gestureN;
+
+  static TrainPos fromMap(Object? o) {
+    final m = _m(o);
+    return TrainPos(
+      i: _i(m['i']) ?? 1,
+      n: _i(m['n']) ?? 52,
+      gestureI: _i(m['gesture_i']) ?? 1,
+      gestureN: _i(m['gesture_n']) ?? 8,
     );
   }
 }
@@ -190,6 +217,7 @@ class TrainSession {
     this.count = 0,
     this.nextPrompt,
     this.reason,
+    this.reasons = const [],
     this.canKeep = false,
     this.heard,
     this.heardN = 0,
@@ -198,6 +226,11 @@ class TrainSession {
     this.passed = const [],
     this.skipped = const [],
     this.kept = const [],
+    this.expect,
+    this.resultChecks = const [],
+    this.pos = const TrainPos(),
+    this.canPrev = false,
+    this.canNext = false,
   });
 
   final String gesture;
@@ -212,6 +245,9 @@ class TrainSession {
   final int count;
   final String? nextPrompt;
   final String? reason;
+
+  /// The failure's codes (`nothing`, `count`, `label`, `pitch`, `shape`, `speed`, `tone`, `loud`, `blocked`, `store`).
+  final List<String> reasons;
   final bool canKeep;
   final TrainHeard? heard;
   final int heardN;
@@ -220,6 +256,19 @@ class TrainSession {
   final List<String> passed;
   final List<String> skipped;
   final List<String> kept;
+
+  /// The wanted shape for the current cell (the ShapePlot's `ExpectedShape.fromMap` input).
+  final ExpectedShape? expect;
+
+  /// The final grade of the take (`result.checks`), once judged.
+  final List<ShapeCheck> resultChecks;
+
+  /// Where the cell sits in the plan.
+  final TrainPos pos;
+
+  /// The header ◀ ▶ arrows: whether the previous / next cell exists.
+  final bool canPrev;
+  final bool canNext;
 
   static TrainSession? fromMap(Object? o) {
     if (o is! Map) return null;
@@ -235,6 +284,7 @@ class TrainSession {
       count: _i(m['count']) ?? 0,
       nextPrompt: _s(m['next_prompt']),
       reason: _s(m['reason']),
+      reasons: _strs(m['reasons']),
       canKeep: m['can_keep'] == true,
       heard: TrainHeard.fromMap(m['heard']),
       heardN: _i(m['heard_n']) ?? 0,
@@ -243,6 +293,53 @@ class TrainSession {
       passed: _strs(m['passed']),
       skipped: _strs(m['skipped']),
       kept: _strs(m['kept']),
+      expect: m['expect'] is Map ? ExpectedShape.fromMap(m['expect']) : null,
+      resultChecks: [for (final c in _l(_m(m['result'])['checks'])) ShapeCheck.fromMap(c)],
+      pos: TrainPos.fromMap(m['pos']),
+      canPrev: m['can_prev'] == true,
+      canNext: m['can_next'] == true,
+    );
+  }
+}
+
+/// A stored take whose extractor label differed from the wanted gesture (`label_mismatch`), held out of matching until
+/// the user confirms it on the review screen via `train_confirm`. Kotlin sends `{id (a number), gesture, heard (the
+/// heard label), pos, pitch16, f0_hz, dur_ms}` — the take's own contour and f0, so the review can plot it.
+@immutable
+class TrainUnconfirmed {
+  const TrainUnconfirmed(
+      {required this.id, required this.gesture, this.heard, this.pos = 0, this.pitch16 = const [], this.f0Hz, this.durMs});
+
+  /// The take's `meta.id` (unique in the store); -1 when missing (train_confirm refuses it).
+  final int id;
+  final String gesture;
+
+  /// What the extractor labelled it (`arch`), or null.
+  final String? heard;
+
+  /// The example's index in its class.
+  final int pos;
+
+  /// The take's own contour, 16 points in semitones from the start (empty for pop, click, hiss).
+  final List<double> pitch16;
+
+  /// The take's median f0 in Hz, or null (unpitched / no fingerprint).
+  final int? f0Hz;
+
+  /// How long the take was, in ms (stretches the pitch16 over the plot).
+  final int? durMs;
+
+  static TrainUnconfirmed fromMap(Object? o) {
+    final m = _m(o);
+    final h = m['heard'];
+    return TrainUnconfirmed(
+      id: _i(m['id']) ?? -1,
+      gesture: _s(m['gesture']) ?? '?',
+      heard: h is String ? h : _s(_m(h)['label']),
+      pos: _i(m['pos']) ?? 0,
+      pitch16: [for (final x in _l(m['pitch16'])) if (x is num) x.toDouble()],
+      f0Hz: _i(m['f0_hz']),
+      durMs: _i(m['dur_ms']),
     );
   }
 }
@@ -264,6 +361,8 @@ class TrainStatus {
     this.gestures = const [],
     this.session,
     this.sources = const {},
+    this.scale,
+    this.unconfirmed = const [],
     this.error,
   });
 
@@ -292,6 +391,13 @@ class TrainStatus {
 
   /// Per source: (done, total).
   final Map<String, (int, int)> sources;
+
+  /// The current source's saved calibration (the voice range, or the whistle range while the current cell is a
+  /// whistle), or null when not calibrated.
+  final PitchScale? scale;
+
+  /// Stored takes whose extractor label differed, awaiting review.
+  final List<TrainUnconfirmed> unconfirmed;
 
   /// The command was refused: why.
   final String? error;
@@ -324,6 +430,8 @@ class TrainStatus {
         for (final e in _m(m['sources']).entries)
           '${e.key}': (_i(_m(e.value)['done']) ?? 0, _i(_m(e.value)['total']) ?? 0),
       },
+      scale: PitchScale.fromMap(m['scale']),
+      unconfirmed: [for (final u in _l(m['unconfirmed'])) TrainUnconfirmed.fromMap(u)],
       error: _s(m['error']),
     );
   }
@@ -349,6 +457,13 @@ abstract class TrainBackend {
   Future<TrainStatus> cancel();
   Future<TrainStatus> delete(String gesture, {String? cell, String? source});
 
+  /// Switches the current take to [cell] at any time (an in-flight take is dropped, a stored one stays). With no round
+  /// open (the hub's rows) it opens one.
+  Future<TrainStatus> goto(String gesture, String cell, {String? source});
+
+  /// Confirms a `label_mismatch` take ([keep]: true → confirmed) or deletes it (false).
+  Future<TrainStatus> confirm(int id, {required bool keep, String? source});
+
   /// The service's `train_status` pushes (on every change, about 10 Hz while a take records) and every answer.
   Stream<TrainStatus> pushes();
 }
@@ -370,7 +485,8 @@ void useTrainBackend(FakeBackend backend, FakeTrainBackend fake) => _fakes[backe
 
 /// [TrainBackend] over the `ai.vox/train` method channel (android UiBridge.kt): `train_status {source?}`,
 /// `train_start {gesture, cell?}`, `train_record`, `train_retry`, `train_skip`, `train_keep`, `train_next {record?}`,
-/// `train_cancel`, `train_delete {gesture, cell?, source?}` answer the status map (with `error` when refused); Kotlin
+/// `train_cancel`, `train_delete {gesture, cell?, source?}`, `train_goto {gesture, cell, source?}`,
+/// `train_confirm {id (a number), keep, source?}` answer the status map (with `error` when refused); Kotlin
 /// calls `train_status {map}` on the same channel on every change.
 class ChannelTrainBackend implements TrainBackend {
   ChannelTrainBackend({MethodChannel? methods}) : _methods = methods ?? const MethodChannel(channelName) {
@@ -411,6 +527,12 @@ class ChannelTrainBackend implements TrainBackend {
   @override
   Future<TrainStatus> delete(String gesture, {String? cell, String? source}) =>
       _call('train_delete', {'gesture': gesture, 'cell': ?cell, 'source': ?source});
+  @override
+  Future<TrainStatus> goto(String gesture, String cell, {String? source}) =>
+      _call('train_goto', {'gesture': gesture, 'cell': cell, 'source': ?source});
+  @override
+  Future<TrainStatus> confirm(int id, {required bool keep, String? source}) =>
+      _call('train_confirm', {'id': id, 'keep': keep, 'source': ?source});
   @override
   Stream<TrainStatus> pushes() => _out.stream;
 }
@@ -467,6 +589,8 @@ class TrainFlow extends ChangeNotifier {
   Future<void> keep() => _run('keep', backend.keep);
   Future<void> next() => _run('next', () => backend.next());
   Future<void> stop() => _run('stop', backend.cancel);
+  Future<void> goto(String gesture, String cell) => _run('goto', () => backend.goto(gesture, cell));
+  Future<void> confirm(int id, {required bool keep}) => _run('confirm', () => backend.confirm(id, keep: keep));
 
   /// First press arms it, the second deletes the card's takes.
   Future<void> delete(String gesture) async {

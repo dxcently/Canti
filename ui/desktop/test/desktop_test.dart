@@ -37,31 +37,42 @@ void main() {
     expect(f, findsWidgets);
   }
 
-  testWidgets('the calibrate preview walks through every step to the result', (tester) async {
-    final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_FAIL': 'glide', 'VOX_PREVIEW_POPS': '1'});
-    await waitFor(tester, find.byKey(const Key('calib_save')), ticks: 1200);
-    expect(find.byKey(const Key('calib_pops_hint')), findsOneWidget);
-    expect(p.backend.calibCalls.map((c) => c.$1),
-        ['calib_start', 'calib_step', 'calib_skip', 'calib_step', 'calib_step', 'calib_step', 'calib_step', 'calib_step'],
-        reason: 'after a skip the service moves on by itself: vowels is not asked for');
+  testWidgets('the calibrate preview is the hub; RUN THE REST walks the steps, moving on by itself', (tester) async {
+    final p = await preview(tester, {'VOX_PREVIEW': 'calibrate'});
+    await tester.pump();
+    expect(find.byType(HubScreen), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dock_main')));
+    await waitFor(tester, find.byKey(const Key('calib_step_glide')), ticks: 200);
+    expect([for (final (m, a) in p.backend.calibCalls) if (m == 'calib_step') a['step']], ['hum', 'glide']);
+    await tester.tap(find.byKey(const Key('dock_right'))); // STEPS
+    await tester.pump(const Duration(seconds: 1));
     p.backend.dispose();
   });
 
-  testWidgets('the calibrate preview can record only a v1 profile\'s missing steps', (tester) async {
-    final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_SAVED': 'v1', 'VOX_PREVIEW_STEPS': 'missing'});
-    await waitFor(tester, find.byKey(const Key('calib_save')), ticks: 1200);
-    expect([for (final (m, a) in p.backend.calibCalls) if (m != 'calib_get') '$m ${a.values.join(' ')}'.trim()],
-        ['calib_start phone [clicks, whistle, hiss, room]', 'calib_step whistle', 'calib_step hiss', 'calib_step room']);
+  testWidgets('the calibrate preview with a v1 profile shows only its missing steps as not done', (tester) async {
+    final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_SAVED': 'v1'});
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('CALIBRATE 4/8'), findsOneWidget);
     p.backend.dispose();
   });
 
   testWidgets('the calibrate preview holds a step still', (tester) async {
     final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_HOLD': 'vowels'});
-    await waitFor(tester, find.byKey(const Key('calib_vowel')), ticks: 1200);
+    await waitFor(tester, find.textContaining(RegExp(r'^(ee|ah|oo)$')), ticks: 1200);
     final n = p.backend.calibCalls.length;
     await tester.pump(const Duration(seconds: 5));
-    expect(find.byKey(const Key('calib_vowel')), findsOneWidget);
+    expect(find.byKey(const Key('calib_readout')), findsOneWidget);
     expect(p.backend.calibCalls.length, n);
+    await tester.pumpWidget(const SizedBox());
+    p.backend.dispose();
+  });
+
+  testWidgets('the calibrate preview holds a failed step with its reason', (tester) async {
+    final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_HOLD': 'failed', 'VOX_PREVIEW_FAIL': 'pops'});
+    await waitFor(tester, find.byKey(const Key('calib_reason')), ticks: 1200);
+    expect(find.text('TRY AGAIN'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
     p.backend.dispose();
   });
 
@@ -74,37 +85,45 @@ void main() {
 
   // [train]
   for (final (hold, key) in const [
-    ('grid', 'train_card_window'),
-    ('recording', 'train_trace'),
-    ('failed', 'train_keep'),
-    ('finished', 'train_done'),
+    ('recording', 'take_state'),
+    ('failed', 'miss_view'),
+    ('passed', 'take_state'),
+    ('off', 'off_banner'),
+    ('review', 'review_sentence'),
   ]) {
     testWidgets('the train preview holds $hold', (tester) async {
       final p = await preview(tester, {'VOX_PREVIEW': 'train', 'VOX_PREVIEW_HOLD': hold});
       await waitFor(tester, find.byKey(Key(key)));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(tester.takeException(), isNull);
+      if (hold == 'passed') expect(find.textContaining('Stored.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
       p.backend.dispose();
     });
   }
 
   testWidgets('the live train preview records a take by itself and fails the first (heard a dip)', (tester) async {
     final p = await preview(tester, {'VOX_PREVIEW': 'train'});
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.ensureVisible(find.byKey(const Key('hub_train_arch')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('train_card_arch')));
+    await tester.tap(find.byKey(const Key('hub_train_arch')));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100)); // the route comes in over a few frames
+    }
+    expect(find.byType(TrainTakeScreen), findsOneWidget);
+    expect(find.text('START'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dock_main'))); // START
     await tester.pump();
-    await tester.ensureVisible(find.byKey(const Key('train_record_missing')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('train_record_missing')));
-    await waitFor(tester, find.byKey(const Key('train_reason')), ticks: 60);
-    expect(find.textContaining('Heard a dip'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('train_retry')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('train_retry')));
-    await waitFor(tester, find.text('Good: stored.'), ticks: 60);
-    await tester.ensureVisible(find.byKey(const Key('train_stop')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('train_stop')));
-    await tester.pump();
+    expect(find.text('STOP'), findsOneWidget);
+    await waitFor(tester, find.byKey(const Key('miss_view')), ticks: 60);
+    await tester.tap(find.byKey(const Key('dock_main'))); // TRY AGAIN
+    await waitFor(tester, find.textContaining('Stored.'), ticks: 60);
+    await tester.tap(find.byKey(const Key('dock_right'))); // STEPS
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byType(HubScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
     p.backend.dispose();
   });
 

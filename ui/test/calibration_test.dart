@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vox_ui/src/theme/kit.dart' show PipMeter, PixelIconButton;
+import 'package:vox_ui/src/theme/kit.dart' show PixelIconButton;
 import 'package:vox_ui/vox_ui.dart';
 
 /// Cursor mode through the phone mic.
@@ -37,18 +37,6 @@ List<String> calls(FakeBackend b) => [
 Future<void> settle() => Future<void>.delayed(Duration.zero);
 
 String textOf(WidgetTester tester, String key) => tester.widget<Text>(find.byKey(Key(key))).data!;
-
-Future<FakeBackend> pumpCalib(WidgetTester tester, FakeBackend b, {String source = 'phone'}) async {
-  tester.view.physicalSize = const Size(1080, 2400);
-  tester.view.devicePixelRatio = 2.625;
-  addTearDown(tester.view.reset);
-  await tester.pumpWidget(VoxUiApp(backend: b));
-  await tester.pumpAndSettle();
-  final nav = tester.state<NavigatorState>(find.byType(Navigator));
-  nav.push(MaterialPageRoute<bool>(builder: (_) => CalibrationScreen(backend: b, source: source)));
-  await tester.pumpAndSettle();
-  return b;
-}
 
 Future<void> tapKey(WidgetTester tester, String key) async {
   await tester.ensureVisible(find.byKey(Key(key)));
@@ -145,475 +133,6 @@ void main() {
     });
   });
 
-  group('CalibFlow', () {
-    late FakeBackend b;
-    late CalibFlow f;
-    setUp(() {
-      b = FakeBackend(initial: phoneCursor());
-      f = CalibFlow(backend: b, source: 'phone')..attach();
-    });
-    tearDown(() {
-      f.dispose();
-      b.dispose();
-    });
-
-    Future<void> push(Map<String, Object?> m) async {
-      b.emitCalib(m);
-      await settle();
-    }
-
-    test('steps progress: start (the service starts the hum), step_done, next ... result', () async {
-      await f.begin();
-      expect(calls(b), ['calib_start phone']); // no calib_step for the hum: calib_start starts it
-      expect(f.page, CalibPage.hum);
-      await push(st('hum', 'waiting', progress: 0));
-      expect(f.pageStatus!.waitingForSteady, isTrue);
-      expect(f.pageDone, isFalse);
-      await f.next(); // not done yet: nothing
-      expect(calls(b), ['calib_start phone']);
-      await push(st('hum', 'step_done', progress: 1));
-      expect(f.pageDone, isTrue);
-      await f.next();
-      expect(f.page, CalibPage.glide);
-      // A stale step_done for the step just commanded is ignored until the service shows it running.
-      await push(st('glide', 'step_done'));
-      expect(f.pageDone, isFalse);
-      await push(st('glide', 'recording'));
-      await push(st('glide', 'step_done'));
-      await f.next();
-      await push(st('vowels', 'recording'));
-      await push(st('vowels', 'step_done'));
-      await f.next();
-      await push(st('pops', 'recording', popsN: 2));
-      expect(f.pageStatus!.popsN, 2);
-      await push(st('pops', 'step_done', popsN: 3));
-      for (final s in ['clicks', 'whistle', 'hiss', 'room']) {
-        await f.next();
-        expect(f.page, CalibPage.ofStep(s));
-        await push(st(s, 'recording'));
-        await push(st(s, s == 'room' ? 'done' : 'step_done', result: s == 'room' ? result3 : null));
-      }
-      await f.next();
-      expect(f.page, CalibPage.result);
-      expect(f.result!.homeHz, 142);
-      expect(calls(b), [
-        'calib_start phone', 'calib_step glide', 'calib_step vowels', 'calib_step pops', 'calib_step clicks',
-        'calib_step whistle', 'calib_step hiss', 'calib_step room',
-      ]);
-      expect(f.furthest, CalibPage.result);
-      expect([f.pageIndex, f.pages.length], [9, 10]);
-      f.goTo(1);
-      expect(f.page, CalibPage.hum); // the pager shows it; nothing is recorded
-      expect(calls(b).length, 8);
-    });
-
-    test('redo from the result goes back to the result', () async {
-      await f.begin();
-      for (final s in calibSteps) {
-        if (s != 'hum') await f.next();
-        await push(st(s, 'recording'));
-        await push(st(s, s == 'room' ? 'done' : 'step_done', result: s == 'room' ? result3 : null));
-      }
-      await f.next();
-      expect(f.page, CalibPage.result);
-      await f.redo('glide');
-      expect(calls(b).last, 'calib_redo glide');
-      expect([f.page, f.redoing, f.pageDone], [CalibPage.glide, isTrue, isFalse]);
-      await push(st('glide', 'recording'));
-      await push(st('glide', 'done', result: result3));
-      await f.next();
-      expect(f.page, CalibPage.result);
-      expect(f.redoing, isFalse);
-    });
-
-    test('a failed step waits with the reason: Retry reruns it, Skip keeps its defaults', () async {
-      await f.begin();
-      await push(st('hum', 'recording'));
-      await push(st('hum', 'failed', reason: 'too short or too rough: hum again, 3 s'));
-      expect(f.pageFailure, 'too short or too rough: hum again, 3 s');
-      expect(f.pageDone, isFalse);
-      // Nothing is sent by itself, however long it waits, and next does nothing.
-      await f.next();
-      expect(calls(b), ['calib_start phone']);
-      await f.retry();
-      expect(calls(b).last, 'calib_retry');
-      expect(f.pageFailure, isNull);
-      await push(st('hum', 'recording'));
-      await push(st('hum', 'failed', reason: 'still rough'));
-      expect(f.pageFailure, 'still rough');
-      await f.skip();
-      expect(calls(b).last, 'calib_skip');
-      expect(f.skipped, {'hum'});
-      expect(f.page, CalibPage.glide); // the service moved on: shown, not commanded
-      expect(calls(b).where((c) => c.startsWith('calib_step')), isEmpty);
-      await push(st('glide', 'waiting', skipped: ['hum']));
-      expect(f.pageStatus!.step, 'glide');
-    });
-
-    test('skip before a failure: waiting, a counted step before anything is heard, the room', () async {
-      Map<String, Object?> clicks(int n) => {'pops_n': 0, 'pops_need': 3, 'clicks_n': n, 'clicks_need': 3, 'hiss_n': 0, 'hiss_need': 2};
-      await f.begin();
-      await push(st('hum', 'waiting', progress: 0));
-      expect(f.canSkip, isTrue);
-      await push(st('hum', 'recording'));
-      expect(f.canSkip, isFalse); // a hum under way: only a failure can skip it
-      await push(st('hum', 'step_done'));
-      expect(f.canSkip, isFalse);
-      await push(st('clicks', 'recording', heard: clicks(1))); // followed: the hum page is done
-      expect(f.page, CalibPage.clicks);
-      expect(f.canSkip, isFalse); // a click was heard
-      await push(st('clicks', 'recording', heard: clicks(0)));
-      expect(f.canSkip, isTrue);
-      await f.skip();
-      expect(calls(b), ['calib_start phone', 'calib_skip']);
-      // The service starts the next unfinished step after the clicks (the whistle) by itself: nothing more is sent.
-      expect(f.page, CalibPage.whistle);
-      await push(st('room', 'recording'));
-      expect(f.page, CalibPage.whistle); // not followed: the whistle page is not done
-      f.goTo(f.pages.indexOf(CalibPage.whistle));
-      expect(f.canSkip, isFalse); // the room's status is not this page's
-    });
-
-    test('only the missing steps: calib_start with them; after step_done calib_step remaining[0]; done: the result',
-        () async {
-      final g = CalibFlow(backend: b, source: 'phone', steps: const ['room', 'clicks', 'whistle', 'hiss'])..attach();
-      expect(g.steps, ['clicks', 'whistle', 'hiss', 'room']); // in the service's order
-      expect(g.pages, [CalibPage.intro, CalibPage.clicks, CalibPage.whistle, CalibPage.hiss, CalibPage.room, CalibPage.result]);
-      expect(g.partial, isTrue);
-      const run = ['clicks', 'whistle', 'hiss', 'room'];
-      await g.begin();
-      expect(calls(b), ['calib_start phone,clicks+whistle+hiss+room']); // the service starts on the clicks
-      expect(g.page, CalibPage.clicks);
-      await push(st('clicks', 'recording', steps: run, remaining: run));
-      await push(st('clicks', 'step_done', steps: run, remaining: const ['whistle', 'hiss', 'room']));
-      expect(g.nextIsResult, isFalse);
-      await g.next();
-      expect(calls(b).last, 'calib_step whistle');
-      await push(st('whistle', 'recording', steps: run, remaining: const ['whistle', 'hiss', 'room']));
-      await push(st('whistle', 'failed', reason: 'the whistle overlaps your voice range', steps: run,
-          remaining: const ['whistle', 'hiss', 'room']));
-      expect(g.pageFailure, contains('overlaps'));
-      await g.skip();
-      expect(calls(b).last, 'calib_skip'); // the service goes on to the hiss by itself
-      expect(g.page, CalibPage.hiss);
-      await push(st('hiss', 'recording', steps: run, remaining: const ['hiss', 'room'], skipped: const ['whistle']));
-      await push(st('hiss', 'step_done', steps: run, remaining: const ['room'], skipped: const ['whistle']));
-      await g.next();
-      expect(calls(b).last, 'calib_step room');
-      await push(st('room', 'recording', steps: run, remaining: const ['room'], skipped: const ['whistle']));
-      expect(g.canSkip, isTrue); // the room can be skipped at any time
-      await g.skip(); // nothing after it and nothing open: the run is done
-      expect(g.page, CalibPage.result);
-      expect(calls(b), [
-        'calib_start phone,clicks+whistle+hiss+room', 'calib_step whistle', 'calib_skip', 'calib_step room', 'calib_skip',
-      ]);
-      g.dispose();
-    });
-
-    test('the whole run starts with calib_start alone (no steps), on the hum', () async {
-      await f.begin();
-      expect(calls(b), ['calib_start phone']);
-      expect(f.page, CalibPage.hum);
-    });
-
-    test('skip never wraps: with an earlier step still open (step_done), the screen asks for it', () async {
-      const run = ['hum', 'room'];
-      final g = CalibFlow(backend: b, source: 'phone', steps: run)..attach();
-      await g.begin();
-      await push(st('hum', 'step_done', steps: run, remaining: const ['room']));
-      await push(st('room', 'recording', steps: run, remaining: const ['room'])); // followed: the hum page is done
-      expect(g.page, CalibPage.room);
-      // The service reports the hum open again (say it was re-recorded elsewhere): skipping the room can't wrap.
-      await push(st('room', 'recording', steps: run, remaining: run));
-      expect(g.nextIsResult, isFalse);
-      await g.skip();
-      expect(calls(b), ['calib_start phone,hum+room', 'calib_skip', 'calib_step hum']);
-      expect(g.page, CalibPage.hum);
-      g.dispose();
-    });
-
-    test('status skipped is this run\'s: a skipped step recorded again stays open until it finishes', () async {
-      await f.begin();
-      await push(st('hum', 'waiting', progress: 0));
-      await f.skip();
-      expect([f.page, f.skipped], [CalibPage.glide, {'hum'}]);
-      await push(st('glide', 'step_done', skipped: const ['hum']));
-      await f.redo('hum'); // from the glide page: not a redo from the result
-      expect([calls(b).last, f.page, f.redoing, f.pageDone], ['calib_redo hum', CalibPage.hum, isFalse, isFalse]);
-      await push(st('hum', 'waiting', skipped: const ['hum'])); // still in skipped until it is measured
-      expect(f.pageDone, isFalse);
-      await push(st('hum', 'step_done'));
-      expect([f.pageDone, f.skipped.contains('hum')], [isTrue, isFalse]);
-    });
-
-    test('the service moving on by itself is followed', () async {
-      await f.begin();
-      await push(st('hum', 'step_done'));
-      await push(st('glide', 'waiting'));
-      expect(f.page, CalibPage.glide);
-      await push(st('glide', 'step_done'));
-      await f.next(); // vowels: not started by the service yet, so commanded
-      expect(calls(b).last, 'calib_step vowels');
-    });
-
-    test('save and cancel', () async {
-      await f.cancel(); // never started: nothing sent
-      expect(calls(b), isEmpty);
-      final g = CalibFlow(backend: b, source: 'phone')..attach();
-      await g.begin();
-      await g.save();
-      expect([g.saved, g.finished], [isTrue, isTrue]);
-      expect(calls(b).last, 'calib_save');
-      await g.cancel(); // already over
-      expect(calls(b).last, 'calib_save');
-      final h = CalibFlow(backend: b, source: 'phone')..attach();
-      await h.begin();
-      await h.cancel();
-      expect(calls(b).last, 'calib_cancel');
-      g.dispose();
-      h.dispose();
-    });
-
-    test('a refused start (not the current source, or the Pico) shows the error and stays on the intro', () async {
-      final p = CalibFlow(backend: b, source: 'pico')..attach();
-      await p.begin();
-      expect(p.error, contains('Pico'));
-      expect([p.page, p.started], [CalibPage.intro, isFalse]);
-      p.dispose();
-    });
-
-    test('pushes for another source are ignored; a service stop is an error', () async {
-      await f.begin();
-      await push(st('glide', 'recording', source: 'usb'));
-      expect(f.status, isNull);
-      await push(st(null, 'done', active: false));
-      expect(f.error, contains('stopped'));
-    });
-
-    test('calib_get: null is not calibrated', () async {
-      expect(await b.calibGet('phone'), isNull);
-    });
-  });
-
-  group('screen', () {
-    testWidgets('the whole setup on the fake engine: waiting, live pitch, vowels, pops, result, save', (tester) async {
-      final b = await pumpCalib(tester, FakeBackend(initial: phoneCursor(), calibAuto: true));
-      expect(textOf(tester, 'calib_source'), 'phone mic');
-      expect(find.text('phone mic · about 40 s'), findsOneWidget);
-      await tapKey(tester, 'calib_begin');
-      expect(textOf(tester, 'calib_where'), 'phone mic · step 1 of 8');
-      expect(find.text('Waiting for a steady note...'), findsOneWidget);
-      await waitFor(tester, find.text('Listening...'));
-      expect(textOf(tester, 'calib_pitch'), contains('Hz'));
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      await tapKey(tester, 'calib_next');
-      expect(textOf(tester, 'calib_where'), 'phone mic · step 2 of 8');
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      await tapKey(tester, 'calib_next');
-      await waitFor(tester, find.byKey(const Key('calib_vowel')));
-      await waitFor(tester, find.text('Listening...'));
-      expect(textOf(tester, 'calib_vowel'), startsWith('ee'));
-      expect(find.byKey(const Key('calib_sub')), findsOneWidget);
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      await tapKey(tester, 'calib_next');
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      expect(textOf(tester, 'calib_heard'), '3/3');
-      await tapKey(tester, 'calib_next');
-      // clicks: counted like the pops, out of 3
-      expect(textOf(tester, 'calib_prompt'), 'Click your tongue 3 times, about a second apart');
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      expect(textOf(tester, 'calib_heard'), '3/3');
-      await tapKey(tester, 'calib_next');
-      // whistle: waits for a steady whistle, then a pitch far above the voice
-      await waitFor(tester, find.text('Waiting for a steady whistle...'));
-      await waitFor(tester, find.text('Listening...'));
-      expect(textOf(tester, 'calib_pitch'), contains('Hz'));
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      await tapKey(tester, 'calib_next');
-      // hiss: out of 2
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      expect(textOf(tester, 'calib_heard'), '2/2');
-      await tapKey(tester, 'calib_next');
-      // room: the level only
-      expect(textOf(tester, 'calib_where'), 'phone mic · step 8 of 8');
-      await waitFor(tester, find.text('Listening to the room...'));
-      expect(find.byKey(const Key('calib_pitch')), findsNothing);
-      await waitFor(tester, find.text('See result'));
-      await tapKey(tester, 'calib_next');
-      expect(textOf(tester, 'calib_home'), '142 Hz (C#3)');
-      expect(textOf(tester, 'calib_range'), '96-318 Hz');
-      expect(textOf(tester, 'calib_acc_ah'), '81%');
-      expect(textOf(tester, 'calib_pops'), '3/3');
-      expect(textOf(tester, 'calib_clicks'), '3/3');
-      expect(textOf(tester, 'calib_whistle'), '880-2350 Hz');
-      expect(textOf(tester, 'calib_hiss'), '2/2');
-      expect(textOf(tester, 'calib_room'), '-63 dBFS');
-      expect(textOf(tester, 'calib_gate'), '11 dB, calibration');
-      expect(textOf(tester, 'calib_gate_note'), 'Ignores sounds under 11 dB over the room (from your calibration).');
-      expect(textOf(tester, 'calib_skipped'), 'none');
-      expect(find.byKey(const Key('calib_missing')), findsNothing);
-      expect(find.byKey(const Key('calib_pops_hint')), findsNothing);
-      await tapKey(tester, 'calib_save');
-      expect(find.byType(CalibrationScreen), findsNothing);
-      expect(b.calibSaved['phone']!.homeHz, 142);
-      expect(b.calibSaved['phone']!.needsRecalibration, isFalse);
-      expect(calls(b), [
-        'calib_start phone', 'calib_step glide', 'calib_step vowels', 'calib_step pops', 'calib_step clicks',
-        'calib_step whistle', 'calib_step hiss', 'calib_step room', 'calib_save',
-      ]);
-    });
-
-    testWidgets('live readout: waiting for a steady note, then pitch and progress', (tester) async {
-      final b = await pumpCalib(tester, FakeBackend(initial: phoneCursor()));
-      await tapKey(tester, 'calib_begin');
-      b.emitCalib(st('hum', 'waiting', progress: 0));
-      await tester.pumpAndSettle();
-      expect(find.text('Waiting for a steady note...'), findsOneWidget);
-      expect(textOf(tester, 'calib_pitch'), '-');
-      b.emitCalib(st('hum', 'recording', progress: 0.6, live: {'voiced': true, 'pitch_hz': 142.4, 'level_db': -22.4}));
-      await tester.pumpAndSettle();
-      expect(find.text('Listening...'), findsOneWidget);
-      expect(textOf(tester, 'calib_pitch'), '142 Hz (C#3)');
-      expect(textOf(tester, 'calib_level'), '-22 dB');
-      expect(tester.widget<PipMeter>(find.byType(PipMeter)).value, 6);
-      b.emitCalib(st('vowels', 'recording', live: {'voiced': true, 'pitch_hz': 180.0, 'vowel': 'ee', 'vowel_conf': 0.82}));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('calib_vowel')), findsNothing); // still on the hum page
-    });
-
-    testWidgets('a failed step: the reason, Retry and Skip; the summary lists the skipped step', (tester) async {
-      final b = FakeBackend(initial: phoneCursor(), calibAuto: true)
-        ..calibFailOnce['glide'] = 'Range too small (3.1 st): glide wider.';
-      await pumpCalib(tester, b);
-      await tapKey(tester, 'calib_begin');
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      await tapKey(tester, 'calib_next');
-      await waitFor(tester, find.byKey(const Key('calib_reason')));
-      expect(textOf(tester, 'calib_reason'), 'Range too small (3.1 st): glide wider.');
-      expect(find.byKey(const Key('calib_retry')), findsOneWidget);
-      expect(find.byKey(const Key('calib_skip')), findsOneWidget);
-      expect(find.byKey(const Key('calib_next')), findsNothing);
-      // It waits: nothing is skipped or restarted by itself.
-      final before = calls(b).length;
-      await tester.pump(const Duration(seconds: 10));
-      expect(find.byKey(const Key('calib_reason')), findsOneWidget);
-      expect(calls(b).length, before);
-      await tapKey(tester, 'calib_skip');
-      expect(textOf(tester, 'calib_where'), 'phone mic · step 3 of 8');
-      await nextToResult(tester);
-      expect(textOf(tester, 'calib_range'), 'skipped');
-      expect(textOf(tester, 'calib_skipped'), 'glide');
-      expect(calls(b), [
-        'calib_start phone', 'calib_step glide', 'calib_skip', 'calib_step pops', 'calib_step clicks',
-        'calib_step whistle', 'calib_step hiss', 'calib_step room',
-      ]);
-    });
-
-    testWidgets('Retry records the failed step again', (tester) async {
-      final b = FakeBackend(initial: phoneCursor(), calibAuto: true)..calibFailOnce['hum'] = 'Too short or too rough.';
-      await pumpCalib(tester, b);
-      await tapKey(tester, 'calib_begin');
-      await waitFor(tester, find.byKey(const Key('calib_retry')));
-      await tapKey(tester, 'calib_retry');
-      expect(calls(b).last, 'calib_retry');
-      expect(find.byKey(const Key('calib_reason')), findsNothing);
-      await waitFor(tester, find.byKey(const Key('calib_next')));
-      expect(find.text('Done.'), findsOneWidget);
-    });
-
-    testWidgets('fewer than 2 pops: the hint names the badge, never a keyboard; Redo pops', (tester) async {
-      final b = FakeBackend(initial: phoneCursor(), calibAuto: true, calibPops: 1);
-      await pumpCalib(tester, b);
-      await tapKey(tester, 'calib_begin');
-      await nextToResult(tester);
-      expect(textOf(tester, 'calib_pops'), '1/3');
-      final hint = textOf(tester, 'calib_pops_hint');
-      expect(hint, contains('badge'));
-      expect(hint.toLowerCase(), isNot(contains('key')));
-      await tapKey(tester, 'calib_redo_pops');
-      expect(calls(b).last, 'calib_redo pops');
-      await waitFor(tester, find.text('See result'));
-      await tapKey(tester, 'calib_next');
-      expect(find.byKey(const Key('calib_save')), findsOneWidget);
-    });
-
-    testWidgets('clicks: Skip until a click is heard; the room: a long reason wraps, Skip keeps the defaults',
-        (tester) async {
-      const long = 'a sound in the room was as loud as your quietest calibrated sound (14 dB over the floor, yours '
-          '13 dB): make the room quieter and retry, or skip';
-      final b = FakeBackend(initial: phoneCursor(), calibAuto: true)..calibFailOnce['room'] = long;
-      await pumpCalib(tester, b);
-      await tapKey(tester, 'calib_begin');
-      while (!textOf(tester, 'calib_where').endsWith('step 5 of 8')) {
-        await waitFor(tester, find.byKey(const Key('calib_next')));
-        await tapKey(tester, 'calib_next');
-      }
-      await waitFor(tester, find.text('Listening...'));
-      expect(textOf(tester, 'calib_heard'), '0/3');
-      expect(find.byKey(const Key('calib_skip')), findsOneWidget); // nothing heard yet: skippable
-      await waitFor(tester, find.text('1/3'));
-      expect(find.byKey(const Key('calib_skip')), findsNothing);
-      while (!textOf(tester, 'calib_where').endsWith('step 8 of 8')) {
-        await waitFor(tester, find.byKey(const Key('calib_next')));
-        await tapKey(tester, 'calib_next');
-      }
-      expect(find.byKey(const Key('calib_skip')), findsOneWidget); // the room: any time
-      await waitFor(tester, find.byKey(const Key('calib_reason')));
-      expect(textOf(tester, 'calib_reason'), long);
-      expect(tester.takeException(), isNull); // wrapped, no overflow
-      await tapKey(tester, 'calib_skip');
-      expect(find.byKey(const Key('calib_save')), findsOneWidget);
-      expect(textOf(tester, 'calib_room'), 'skipped');
-      expect(textOf(tester, 'calib_skipped'), 'room');
-      expect(calls(b).last, 'calib_skip');
-    });
-
-    testWidgets('Back cancels; accessibility guidelines hold', (tester) async {
-      final handle = tester.ensureSemantics();
-      final b = await pumpCalib(tester, FakeBackend(initial: phoneCursor(), calibAuto: true));
-      await tapKey(tester, 'calib_begin');
-      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(textContrastGuideline));
-      await tapKey(tester, 'calib_back');
-      expect(find.byType(CalibrationScreen), findsNothing);
-      expect(calls(b).last, 'calib_cancel');
-      handle.dispose();
-    });
-
-    testWidgets('a refused start surfaces the reason in a snackbar, not only at the top', (tester) async {
-      await pumpCalib(tester, FakeBackend(initial: phoneCursor()), source: 'pico');
-      await tapKey(tester, 'calib_begin');
-      await tester.pumpAndSettle();
-      expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.textContaining('Pico'), findsWidgets); // the snackbar names the refusal
-      expect(find.byKey(const Key('calib_begin')), findsOneWidget); // back on the intro
-    });
-
-    testWidgets('Begin again after a refusal starts the run (the old refusal does not undo it)', (tester) async {
-      final b = await pumpCalib(tester, FakeBackend(initial: phoneCursor()), source: 'usb');
-      await tapKey(tester, 'calib_begin');
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('calib_begin')), findsOneWidget); // refused: usb is not the sound source
-      b.current = b.current.copyWith(soundSource: 'usb'); // the user switched the source
-      await tapKey(tester, 'calib_begin');
-      await tester.pumpAndSettle();
-      expect(calls(b).where((c) => c.startsWith('calib_start')), hasLength(2));
-      expect(find.byKey(const Key('calib_begin')), findsNothing); // on the first step, not flipped back
-      await tapKey(tester, 'calib_back');
-      expect(calls(b).last, 'calib_cancel'); // and leaving still ends the run
-    });
-
-    testWidgets('a run the service ended (the app was left in the background) says so', (tester) async {
-      final b = await pumpCalib(tester, FakeBackend(initial: phoneCursor()));
-      await tapKey(tester, 'calib_begin');
-      await tester.pumpAndSettle();
-      b.emitCalib({'active': false, 'source': 'phone', 'error': 'The calibration stopped: Canti was left in the background.'});
-      await tester.pumpAndSettle();
-      expect(textOf(tester, 'calib_error'), contains('left in the background'));
-    });
-  });
-
   group('status screen', () {
     Future<FakeBackend> pumpStatus(WidgetTester tester, FakeBackend b) async {
       tester.view.physicalSize = const Size(1080, 2400);
@@ -625,11 +144,11 @@ void main() {
       return b;
     }
 
-    testWidgets('cursor mode on the phone mic, not calibrated: the prompt opens the setup', (tester) async {
+    testWidgets('cursor mode on the phone mic, not calibrated: the prompt opens the hub', (tester) async {
       await pumpStatus(tester, FakeBackend(initial: phoneCursor({'calibrated': false})));
       await tapKey(tester, 'calib_prompt_start');
-      expect(find.byType(CalibrationScreen), findsOneWidget);
-      expect(textOf(tester, 'calib_source'), 'phone mic');
+      expect(find.byType(HubScreen), findsOneWidget);
+      expect(find.text('CALIBRATE 0/8'), findsOneWidget);
     });
 
     testWidgets('no prompt when calibrated, in gesture mode, or on the Pico; "Not now" hides it', (tester) async {
@@ -648,7 +167,7 @@ void main() {
 
     testWidgets('the service can open the setup (route calibrate)', (tester) async {
       await pumpStatus(tester, FakeBackend(initial: phoneCursor())..pendingRoute = 'calibrate');
-      expect(find.byType(CalibrationScreen), findsOneWidget);
+      expect(find.byType(HubScreen), findsOneWidget);
     });
 
     testWidgets('voice cursor section: the two settings as %, per-source state, recalibrate', (tester) async {
@@ -674,10 +193,10 @@ void main() {
       expect(find.text('Recalibrate'), findsOneWidget);
       expect(tester.widget<PixelIconButton>(find.byKey(const Key('cursor_speed_up'))).onPressed, isNull);
       await tapKey(tester, 'recalibrate');
-      expect(find.byType(CalibrationScreen), findsOneWidget);
+      expect(find.byType(HubScreen), findsOneWidget);
     });
 
-    testWidgets('a v1 profile: the nudge records only the 4 new steps and keeps the rest', (tester) async {
+    testWidgets('a v1 profile: the nudge opens the hub with only the 4 new steps left', (tester) async {
       final b = FakeBackend(initial: phoneCursor({'calibrated': true}), calibAuto: true);
       b.calibSaved['phone'] = CalibResult.fromMap({
         ...result3, 'source': 'phone', 'version': 2, 'missing_steps': ['clicks', 'whistle', 'hiss', 'room'],
@@ -689,26 +208,13 @@ void main() {
       expect([textOf(tester, 'calib_clicks'), textOf(tester, 'calib_missing')], ['not yet', 'clicks, whistle, hiss, room']);
       expect(find.text('Recalibrate all'), findsOneWidget);
       await tapKey(tester, 'calib_record_missing');
-      expect(textOf(tester, 'calib_steps'), 'clicks, whistle, hiss, room');
-      expect(textOf(tester, 'calib_intro'), contains('4 new steps'));
-      expect(textOf(tester, 'calib_where'), 'phone mic · about 20 s');
-      await tapKey(tester, 'calib_begin');
-      expect(textOf(tester, 'calib_where'), 'phone mic · step 1 of 4');
-      await nextToResult(tester);
-      expect(textOf(tester, 'calib_home'), '142 Hz (C#3)'); // kept from the saved profile
-      expect(textOf(tester, 'calib_clicks'), '3/3');
-      expect(find.byKey(const Key('calib_missing')), findsNothing);
-      expect(find.byKey(const Key('calib_redo_hum')), findsNothing);
-      expect(find.byKey(const Key('calib_redo_room')), findsOneWidget);
-      await tapKey(tester, 'calib_save');
-      expect(calls(b), [
-        'calib_start phone,clicks+whistle+hiss+room', 'calib_step whistle', 'calib_step hiss', 'calib_step room',
-        'calib_save',
-      ]);
-      expect(b.calibSaved['phone']!.needsRecalibration, isFalse);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('calib_nudge')), findsNothing);
-      expect(textOf(tester, 'calib_state_phone'), 'calibrated, in use');
+      expect(find.byType(HubScreen), findsOneWidget);
+      // the saved steps show as done, the 4 new ones as not done
+      for (final s in calibSteps) {
+        final missing = const ['clicks', 'whistle', 'hiss', 'room'].contains(s);
+        final notDone = find.descendant(of: find.byKey(Key('hub_calib_$s')), matching: find.text('not done'));
+        expect(notDone, missing ? findsOneWidget : findsNothing, reason: s);
+      }
     });
 
     testWidgets('level gate: on / off, and its strictness in 1 dB steps', (tester) async {

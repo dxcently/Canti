@@ -262,7 +262,7 @@ class _VoiceCursorWindowState extends State<VoiceCursorWindow> {
             CalibPanel(rows: calibSummaryRows(current.toMap())),
             if (current.popsWeak) ...[
               gap,
-              const SignalNote(signal: Signal.waiting, text: CalibrationScreen.popsHint),
+              const SignalNote(signal: Signal.waiting, text: calibPopsHint),
             ],
           ] else if (known) ...[
             gap,

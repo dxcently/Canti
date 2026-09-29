@@ -17,23 +17,6 @@ Future<void> tapKey(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
 }
 
-Future<FakeTrainBackend> pumpTrain(WidgetTester tester, FakeTrainBackend t) async {
-  tester.view.physicalSize = const Size(1080, 2400);
-  tester.view.devicePixelRatio = 2.625;
-  addTearDown(tester.view.reset);
-  final b = FakeBackend(initial: phone());
-  useTrainBackend(b, t);
-  await tester.pumpWidget(VoxUiApp(backend: b, home: TrainScreen(train: t)));
-  await tester.pumpAndSettle();
-  return t;
-}
-
-/// Opens [gesture]'s card and records its missing takes: the first take is recording.
-Future<void> startRound(WidgetTester tester, String gesture) async {
-  await tapKey(tester, 'train_card_$gesture');
-  await tapKey(tester, 'train_record_missing');
-}
-
 void main() {
   group('models', () {
     test('train_status parses the service contract', () {
@@ -60,6 +43,9 @@ void main() {
           'passed': ['a', 'b'], 'skipped': <String>[], 'kept': ['b'],
         },
         'sources': {'phone': {'done': 9, 'total': 52}, 'pico': {'done': 0, 'total': 52}},
+        'unconfirmed': [
+          {'id': 42, 'gesture': 'rise', 'heard': 'arch', 'pos': 3},
+        ],
       });
       expect(s.trainable, isTrue);
       expect(s.gesture('arch')!.complete, isTrue);
@@ -71,6 +57,9 @@ void main() {
       expect(x.heard!.pitch16, [0, -1.5, -3]);
       expect(x.live.traceHz, [null, 210.5, 220.0]);
       expect(x.kept, ['b']);
+      expect(x.reasons, ['label']);
+      // the takes to check: Kotlin's numeric id and the heard label as a plain string
+      expect([for (final u in s.unconfirmed) (u.id, u.gesture, u.heard, u.pos)], [(42, 'rise', 'arch', 3)]);
       // the service off
       expect(TrainStatus.fromMap({'service': false, 'active': false, 'error': 'off'}).service, isFalse);
     });
@@ -96,6 +85,8 @@ void main() {
       await t.next(record: false);
       await expectLater(t.keep(), throwsA(isA<TrainCommandError>()));
       await t.delete('pop', cell: 'soft-1', source: 'usb');
+      await t.goto('arch', 'hum-high-quick');
+      await t.confirm(17, keep: false);
       await t.cancel();
       expect(seen, [
         'train_status {}',
@@ -107,6 +98,8 @@ void main() {
         'train_next {record: false}',
         'train_keep',
         'train_delete {gesture: pop, cell: soft-1, source: usb}',
+        'train_goto {gesture: arch, cell: hum-high-quick}',
+        'train_confirm {id: 17, keep: false}',
         'train_cancel',
       ]);
       // Kotlin's train_status call on the same channel
@@ -117,193 +110,8 @@ void main() {
       );
       await Future<void>.delayed(Duration.zero);
       expect(pushed.last.done, 7);
-      expect(pushed.length, 11); // every answer, then the push
+      expect(pushed.length, 13); // every answer, then the push
       await sub.cancel();
-    });
-  });
-
-  group('screen', () {
-    testWidgets('the grid: a card per gesture with its progress; a full card; per-source totals', (tester) async {
-      final t = FakeTrainBackend()
-        ..fill('rise', cells: ['hum-low-slow', 'hum-low-quick', 'hum-high-slow', 'hum-high-quick', 'whistle-low-slow'])
-        ..fill('pop')
-        ..fill('click', src: 'pico', cells: ['soft-1']);
-      await pumpTrain(tester, t);
-      for (final g in trainGestures) {
-        expect(find.byKey(Key('train_card_$g')), findsOneWidget);
-      }
-      expect(textOf(tester, 'train_count_rise'), '5/8');
-      expect(textOf(tester, 'train_count_pop'), '4/4');
-      expect(textOf(tester, 'train_count_hiss'), '0/4');
-      expect(textOf(tester, 'train_where'), contains('9/52'));
-      expect(find.text('9/52'), findsOneWidget); // the phone row
-      expect(find.text('1/52'), findsOneWidget); // the pico row
-      await tapKey(tester, 'train_card_rise');
-      expect(find.byKey(const Key('train_card_window')), findsOneWidget);
-      expect(find.text('Record missing (3)'), findsOneWidget);
-      expect(find.text('Whistle a QUICK rise, starting HIGH'), findsOneWidget);
-      // a full card has nothing to record, only Delete / redo
-      await tapKey(tester, 'train_card_pop');
-      expect(find.byKey(const Key('train_record_missing')), findsNothing);
-      expect(find.byKey(const Key('train_delete')), findsOneWidget);
-    });
-
-    testWidgets('a round: one prompt at a time, the live trace, what was heard, Record next', (tester) async {
-      final t = await pumpTrain(tester, FakeTrainBackend());
-      await startRound(tester, 'arch');
-      expect(t.calls, containsAllInOrder(['train_start arch', 'train_record']));
-      expect(textOf(tester, 'train_prompt'), 'Hum a SLOW arch, starting LOW');
-      expect(textOf(tester, 'train_take'), contains('take 1 of 8'));
-      expect(textOf(tester, 'train_state'), startsWith('Listening'));
-      expect(textOf(tester, 'train_next_prompt'), 'Next: Hum a QUICK arch, starting LOW');
-      t.trace([null, 180, 190, 200, 210, 200, 190]);
-      await tester.pump();
-      expect(textOf(tester, 'train_trace_caption'), contains('Live pitch'));
-      t.finishTake();
-      await tester.pumpAndSettle();
-      expect(textOf(tester, 'train_state'), 'Good: stored.');
-      expect(textOf(tester, 'train_heard'), 'arch (goes up then down)');
-      expect(textOf(tester, 'train_heard_tone'), 'hum, 190 Hz');
-      expect(textOf(tester, 'train_heard_len'), '1.4 s');
-      expect(t.stores['phone']!['arch']!.keys, ['hum-low-slow']);
-      await tapKey(tester, 'train_next');
-      expect(textOf(tester, 'train_prompt'), 'Hum a QUICK arch, starting LOW');
-      expect(textOf(tester, 'train_state'), startsWith('Listening'));
-    });
-
-    testWidgets('a wrong shape stops with the reason: Retry, Skip or Keep anyway; nothing moves on by itself', (tester) async {
-      final t = await pumpTrain(tester, FakeTrainBackend());
-      await startRound(tester, 'arch');
-      t.finishTake(const FakeTake(label: 'dip'));
-      await tester.pumpAndSettle();
-      expect(textOf(tester, 'train_reason'), 'Heard a dip (down then up): an arch goes up then down.');
-      expect(find.byKey(const Key('train_retry')), findsOneWidget);
-      expect(find.byKey(const Key('train_skip')), findsOneWidget);
-      expect(find.byKey(const Key('train_keep')), findsOneWidget);
-      expect(find.byKey(const Key('train_next')), findsNothing);
-      expect(textOf(tester, 'train_heard'), 'dip (goes down then up)');
-      // Retry records the same cell again
-      await tapKey(tester, 'train_retry');
-      expect(textOf(tester, 'train_prompt'), 'Hum a SLOW arch, starting LOW');
-      expect(textOf(tester, 'train_state'), startsWith('Listening'));
-      // wrong tone: no Keep anyway
-      t.finishTake(const FakeTake(f0Hz: 900));
-      await tester.pumpAndSettle();
-      expect(textOf(tester, 'train_reason'), contains('hum it with your lips closed'));
-      expect(find.byKey(const Key('train_keep')), findsNothing);
-      await tapKey(tester, 'train_retry');
-      t.finishTake(const FakeTake(label: 'rise'));
-      await tester.pumpAndSettle();
-      await tapKey(tester, 'train_keep');
-      expect(textOf(tester, 'train_state'), 'Kept anyway and stored.');
-      expect(t.stores['phone']!['arch']!['hum-low-slow'], isTrue);
-      // Skip after a failure waits on the next prompt (Record), it does not record by itself
-      await tapKey(tester, 'train_next');
-      t.finishTake(const FakeTake(labels: ['rise', 'fall']));
-      await tester.pumpAndSettle();
-      expect(textOf(tester, 'train_reason'), 'Heard 2 sounds (rise then fall): make it one unbroken sound.');
-      await tapKey(tester, 'train_skip');
-      expect(textOf(tester, 'train_prompt'), 'Hum a SLOW arch, starting HIGH');
-      expect(textOf(tester, 'train_state'), 'Press Record, then make the sound.');
-      expect(find.byKey(const Key('train_record')), findsOneWidget);
-    });
-
-    testWidgets('a take that cannot start (paused) says why and waits', (tester) async {
-      final t = await pumpTrain(tester, FakeTrainBackend(blocked: 'Canti is paused.'));
-      expect(textOf(tester, 'train_blocked'), contains('Canti is paused.'));
-      await startRound(tester, 'pop');
-      expect(textOf(tester, 'train_reason'), 'Canti is paused.');
-      t.blocked = null;
-      await tapKey(tester, 'train_retry');
-      expect(textOf(tester, 'train_prompt'), 'Pop your lips SOFTLY (1 of 2)');
-      expect(textOf(tester, 'train_state'), startsWith('Listening'));
-    });
-
-    testWidgets('the "Not ready" note gets the one button that fixes its cause', (tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 2.625;
-      addTearDown(tester.view.reset);
-      final b = FakeBackend(initial: phone({'paused': true}));
-      final t = FakeTrainBackend(blocked: 'Canti is paused.')..blockedAction = 'resume';
-      useTrainBackend(b, t);
-      await tester.pumpWidget(VoxUiApp(backend: b, home: TrainScreen(train: t, backend: b)));
-      await tester.pumpAndSettle();
-      expect(textOf(tester, 'train_blocked'), contains('Canti is paused.'));
-      expect(find.byKey(const Key('train_fix_resume')), findsOneWidget);
-      await tapKey(tester, 'train_fix_resume');
-      expect(b.current.paused, isFalse);
-      expect(b.current.armed, isTrue);
-    });
-
-    testWidgets('cursor mode\'s "Not ready" note offers the gesture-mode switch', (tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 2.625;
-      addTearDown(tester.view.reset);
-      final b = FakeBackend(initial: phone({'mode': 'cursor'}));
-      final t = FakeTrainBackend(blocked: 'Canti is in cursor mode: switch to gesture mode to train gestures.')
-        ..blockedAction = 'gesture_mode';
-      useTrainBackend(b, t);
-      await tester.pumpWidget(VoxUiApp(backend: b, home: TrainScreen(train: t, backend: b)));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('train_fix_mode')), findsOneWidget);
-      await tapKey(tester, 'train_fix_mode');
-      expect(b.current.mode, 'gesture');
-    });
-
-    testWidgets('the last take finishes the round; Back to cards shows the full card; Delete / redo asks first',
-        (tester) async {
-      final t = FakeTrainBackend()..fill('hiss', cells: ['soft-1', 'soft-2', 'loud-1']);
-      await pumpTrain(tester, t);
-      await startRound(tester, 'hiss');
-      expect(textOf(tester, 'train_prompt'), 'Hiss LOUDLY, about half a second (2 of 2)');
-      t.finishTake();
-      await tester.pumpAndSettle();
-      expect(find.text('Finish'), findsOneWidget);
-      await tapKey(tester, 'train_next');
-      expect(textOf(tester, 'train_state'), 'Round done: 1 stored. Hiss: 4 of 4 takes. The matcher uses them.');
-      expect(textOf(tester, 'train_count_hiss'), '4/4');
-      await tapKey(tester, 'train_done');
-      expect(find.byKey(const Key('train_session')), findsNothing);
-      expect(textOf(tester, 'train_count_hiss'), '4/4');
-      expect(find.byKey(const Key('train_card_window')), findsOneWidget); // the card stays open
-      await tapKey(tester, 'train_delete');
-      expect(textOf(tester, 'train_delete_confirm'), contains('Delete all 4 hiss takes'));
-      expect(t.stores['phone']!['hiss']!.length, 4);
-      await tapKey(tester, 'train_delete');
-      expect(t.calls.last, 'train_delete hiss');
-      expect(textOf(tester, 'train_count_hiss'), '0/4');
-      expect(find.text('Record'), findsOneWidget);
-    });
-
-    testWidgets('Stop and Back end the round; stored takes stay', (tester) async {
-      final t = await pumpTrain(tester, FakeTrainBackend());
-      await startRound(tester, 'flat');
-      expect(textOf(tester, 'train_prompt'), 'Hum a SHORT flat note, LOW');
-      t.finishTake();
-      await tester.pumpAndSettle();
-      await tapKey(tester, 'train_stop');
-      expect(t.calls.last, 'train_cancel');
-      expect(textOf(tester, 'train_count_flat'), '1/8');
-      await tapKey(tester, 'train_record_missing'); // the card stays open
-      expect(textOf(tester, 'train_prompt'), 'Hum a LONG flat note, LOW');
-      expect(textOf(tester, 'train_take'), contains('take 1 of 7'));
-    });
-
-    testWidgets('accessibility guidelines hold on the grid and in a round', (tester) async {
-      final handle = tester.ensureSemantics();
-      final t = FakeTrainBackend()..fill('rise');
-      await pumpTrain(tester, t);
-      await tapKey(tester, 'train_card_arch');
-      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(textContrastGuideline));
-      await tapKey(tester, 'train_record_missing');
-      t.finishTake(const FakeTake(label: 'dip'));
-      await tester.pumpAndSettle();
-      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(textContrastGuideline));
-      handle.dispose();
     });
   });
 
@@ -322,10 +130,10 @@ void main() {
       expect(find.byKey(const Key('train_entry')), findsOneWidget);
       expect(textOf(tester, 'train_entry_note'), 'phone mic: 8 of 52 takes recorded.');
       await tapKey(tester, 'train_open');
-      expect(find.byType(TrainScreen), findsOneWidget);
-      expect(textOf(tester, 'train_count_rise'), '8/8');
-      await tapKey(tester, 'train_back');
-      expect(find.byType(TrainScreen), findsNothing);
+      expect(find.byType(HubScreen), findsOneWidget);
+      expect(find.text('TRAIN GESTURES 8/52'), findsOneWidget);
+      await tapKey(tester, 'hub_back');
+      expect(find.byType(HubScreen), findsNothing);
     });
   });
 }

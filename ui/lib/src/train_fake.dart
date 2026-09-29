@@ -8,7 +8,7 @@ import 'train.dart';
 
 /// What a simulated take "heard". Defaults to the prompted gesture, in the prompted tone and speed.
 class FakeTake {
-  const FakeTake({this.label, this.labels, this.durMs, this.f0Hz, this.unpitched = false});
+  const FakeTake({this.label, this.labels, this.durMs, this.f0Hz, this.unpitched = false, this.mismatch = false});
 
   /// The extractor's label (default: the prompted gesture).
   final String? label;
@@ -18,6 +18,10 @@ class FakeTake {
   final int? durMs;
   final int? f0Hz;
   final bool unpitched;
+
+  /// The tolerant grade passes it although the extractor labelled it [label]: it is stored with `label_mismatch` and
+  /// waits in `unconfirmed` for the review (train_confirm).
+  final bool mismatch;
 }
 
 const _contours = ['rise', 'fall', 'arch', 'dip', 'flat'];
@@ -144,6 +148,9 @@ class FakeTrainBackend implements TrainBackend {
   /// The one action that fixes [blocked] (`resume` or `gesture_mode`), or null.
   String? blockedAction;
 
+  /// The current source's saved calibration scale (top-level `scale`); null = not calibrated (PITCH stays pending).
+  Map<String, Object?>? scale;
+
   /// When set, a recording take ends by itself after this long (with a live trace every 20 ms).
   Duration? autoTake;
 
@@ -155,6 +162,16 @@ class FakeTrainBackend implements TrainBackend {
 
   /// source -> gesture -> cell id -> kept anyway.
   final Map<String, Map<String, Map<String, bool>>> stores = {};
+
+  /// Takes stored with a label mismatch, awaiting review, as Kotlin lists them: `{id (int), gesture, heard (the heard
+  /// label), pos}`, plus the fake's own `cell` (not sent).
+  final unconfirmed = <Map<String, Object?>>[];
+  int _nextId = 1;
+
+  /// A pass moves on by itself after this long (Kotlin's AUTO_ADVANCE_MS), unless a command came first.
+  Duration autoAdvance = const Duration(milliseconds: 1200);
+  Timer? _advanceTimer;
+
   _Session? _s;
   Timer? _timer;
   final _out = StreamController<TrainStatus>.broadcast();
@@ -255,11 +272,30 @@ class FakeTrainBackend implements TrainBackend {
         }
       }
     }
+    if (t.mismatch && labels.length == 1 && label != g) {
+      // the tolerant grade passed it: stored, held for the review
+      reasons.removeWhere((r) => r.$1 == 'label');
+      if (reasons.isEmpty) {
+        unconfirmed.add({
+          'id': _nextId++, 'gesture': g, 'heard': label,
+          'pos': _store(c.source)[g]?.length ?? 0, 'cell': cell.id,
+          'pitch16': c.heard!['pitch16'], 'f0_hz': c.heard!['f0_hz'], 'dur_ms': c.heard!['dur_ms'],
+        });
+      }
+    }
     c.reasons = reasons;
     c.canKeep = reasons.isNotEmpty && reasons.every((r) => r.$1 == 'label') && (!contour || f0 != null);
     if (reasons.isEmpty) {
       _storeTake(c, kept: false);
       c.state = 'passed';
+      _advanceTimer?.cancel();
+      _advanceTimer = Timer(autoAdvance, () {
+        _advanceTimer = null;
+        if (identical(_s, c) && c.state == 'passed') {
+          _advance(c, record: true);
+          _push();
+        }
+      });
     } else {
       c.state = 'failed';
     }
@@ -338,6 +374,11 @@ class FakeTrainBackend implements TrainBackend {
 
   Future<TrainStatus> _cmd(String name, void Function() f, {String? src}) async {
     calls.add(name);
+    // any command other than a status read cancels a pending auto-advance
+    if (name != 'train_status') {
+      _advanceTimer?.cancel();
+      _advanceTimer = null;
+    }
     String? err;
     try {
       f();
@@ -429,11 +470,58 @@ class FakeTrainBackend implements TrainBackend {
   @override
   Stream<TrainStatus> pushes() => _out.stream;
 
+  @override
+  Future<TrainStatus> goto(String gesture, String cell, {String? source}) =>
+      _cmd('train_goto $gesture $cell', () {
+        final cells = _plan[gesture] ?? (throw TrainCommandError('gesture must be one of $trainGestures'));
+        final c = cells.where((x) => x.id == cell).firstOrNull ??
+            (throw TrainCommandError('no such cell: $cell'));
+        if (blocked != null) throw TrainCommandError(blocked!);
+        _timer?.cancel();
+        // as Kotlin: the round is the gesture's undone cells (a new gesture re-opens it); a done cell joins it (a redo)
+        var s = _s;
+        if (s == null || s.gesture != gesture) {
+          final done = _store(source ?? this.source)[gesture] ?? const {};
+          s = _s = _Session(source ?? this.source, gesture, [for (final x in cells) if (!done.containsKey(x.id)) x]);
+        }
+        var i = s.queue.indexWhere((x) => x.id == cell);
+        if (i < 0) {
+          s.queue.add(c);
+          i = s.queue.length - 1;
+        }
+        s
+          ..index = i
+          ..state = 'ready'
+          ..heard = null
+          ..reasons = const []
+          ..canKeep = false
+          ..trace.clear();
+      }, src: source);
+
+  @override
+  Future<TrainStatus> confirm(int id, {required bool keep, String? source}) =>
+      _cmd('train_confirm $id $keep', () {
+        final src = source ?? this.source;
+        if (!keep) {
+          // a delete: the unconfirmed entry goes away and its cell is marked unrecorded again
+          final entry = unconfirmed.firstWhere((u) => u['id'] == id, orElse: () => const {});
+          if (entry.isNotEmpty) {
+            final g = entry['gesture'] as String?;
+            unconfirmed.removeWhere((u) => u['id'] == id);
+            if (g != null) _store(src).putIfAbsent(g, () => {}).remove(entry['cell']);
+          }
+        } else {
+          final i = unconfirmed.indexWhere((u) => u['id'] == id);
+          if (i >= 0) unconfirmed.removeAt(i);
+        }
+      }, src: source);
+
   /// The status map, as the phone sends it.
   Map<String, Object?> statusMap(String? src) {
     final s = src ?? source;
     final st = _store(s);
     final c = _s;
+    final cell = c?.cell;
     return {
       'active': c != null,
       'source': s,
@@ -442,6 +530,14 @@ class FakeTrainBackend implements TrainBackend {
       'live_trace': liveTrace,
       'blocked': blocked,
       'blocked_action': blockedAction,
+      'scale': scale,
+      'unconfirmed': [
+        for (final u in unconfirmed)
+          {
+            'id': u['id'], 'gesture': u['gesture'], 'heard': u['heard'], 'pos': u['pos'],
+            'pitch16': u['pitch16'], 'f0_hz': u['f0_hz'], 'dur_ms': u['dur_ms'],
+          },
+      ],
       'done': st.values.fold<int>(0, (a, g) => a + g.length),
       'total': _total,
       'gestures': [
@@ -482,7 +578,17 @@ class FakeTrainBackend implements TrainBackend {
               'left_ms': c.state == 'recording'
                   ? math.max(0, 8000 - (DateTime.now().millisecondsSinceEpoch - c.startedMs))
                   : null,
-              'live': {'trace_hz': c.trace, 'level_db': c.levelDb, 'pitch_hz': c.trace.isEmpty ? null : c.trace.last},
+              'live': {
+                'trace_hz': c.trace,
+                'level_db': c.levelDb,
+                'pitch_hz': c.trace.isEmpty ? null : c.trace.last,
+                'checks': _liveChecks(c),
+              },
+              'result': {'checks': _resultChecks(c)},
+              'expect': cell == null ? null : _expectFor(cell),
+              'pos': cell == null ? null : _posOf(c.gesture, cell.id),
+              'can_prev': cell != null && _posOf(c.gesture, cell.id).$1 > 1,
+              'can_next': cell != null && _posOf(c.gesture, cell.id).$1 < _total,
               'passed': c.passed,
               'skipped': c.skipped,
               'kept': c.kept,
@@ -494,8 +600,117 @@ class FakeTrainBackend implements TrainBackend {
     };
   }
 
+  /// The wanted shape for a cell (`expect`), as the service sends it.
+  Map<String, Object?> _expectFor(_Cell cell) {
+    final g = cell.gesture;
+    if (_contours.contains(g)) {
+      return {
+        'sequence': [g],
+        'start': cell.tags['pitch'] == 'high' ? 'high' : 'low',
+        'span_st': 4,
+        'tol_st': 1.5,
+        'dur_s': (cell.tags['speed'] == 'quick' || cell.tags['length'] == 'short') ? 0.6 : 1.5,
+        'gap_s': null,
+      };
+    }
+    return {'sequence': [g], 'start': 'none', 'span_st': 4, 'tol_st': 1.5, 'dur_s': 0.6, 'gap_s': null};
+  }
+
+  /// The cell's 1-based position: (i, n over the plan, gesture_i, gesture_n).
+  (int, int, int, int) _posOf(String gesture, String cellId) {
+    var i = 0;
+    for (final g in trainGestures) {
+      final cells = _plan[g]!;
+      for (var k = 0; k < cells.length; k++) {
+        i++;
+        if (g == gesture && cells[k].id == cellId) return (i, _total, k + 1, cells.length);
+      }
+    }
+    return (1, _total, 1, 1);
+  }
+
+  /// The provisional grade while a take records, as ShapeGrade.live: PITCH pending without a scale (else after 8
+  /// voiced ticks), SHAPE after 60 % of the wanted length voiced, LENGTH always pending live, SOUND once voiced.
+  List<Map<String, Object?>> _liveChecks(_Session c) {
+    final cell = c.cell;
+    if (cell == null || c.state != 'recording') return const [];
+    final g = cell.gesture;
+    if (!_contours.contains(g)) return const [];
+    final voiced = [for (final x in c.trace) ?x];
+    final want = _expectFor(cell);
+    final durTicks = ((want['dur_s'] as num) / 0.02).round();
+    final st = voiced.length < 2 ? 0.0 : 12 * math.log(voiced.last / voiced.first) / math.ln2;
+    return [
+      {
+        'id': 'PITCH', 'label': 'PITCH',
+        'state': scale == null || voiced.length < 8 ? 'pending' : 'ok',
+        if (voiced.isNotEmpty) 'value': voiced.first, 'want': want['start'],
+      },
+      {
+        'id': 'SHAPE', 'label': 'SHAPE',
+        'state': voiced.length < durTicks * 0.6 ? 'pending' : (st.abs() >= 0.7 || g == 'flat' || g == 'arch' || g == 'dip' ? 'ok' : 'near'),
+        'value': voiced.length < 2 ? null : st, 'want': g,
+      },
+      {'id': 'LENGTH', 'label': 'LENGTH', 'state': 'pending', 'value': null, 'want': cell.tags['speed'] ?? cell.tags['length']},
+      {
+        'id': 'SOUND', 'label': 'SOUND',
+        'state': voiced.isEmpty ? 'pending' : ((voiced.last >= 600) == (cell.tags['tone'] == 'whistle') ? 'ok' : 'miss'),
+        if (voiced.isNotEmpty) 'value': voiced.last.round(), 'want': cell.tags['tone'],
+      },
+    ];
+  }
+
+  /// The final grade of a judged take, from its reason codes, shaped as ShapeGrade's (upper-case ids, numbers).
+  List<Map<String, Object?>> _resultChecks(_Session c) {
+    final cell = c.cell;
+    if (cell == null || c.heard == null) return const [];
+    final g = cell.gesture;
+    final contour = _contours.contains(g);
+    final reasons = {for (final r in c.reasons) r.$1};
+    final heard = c.heard!;
+    final p16 = [for (final x in (heard['pitch16'] as List? ?? const [])) (x as num).toDouble()];
+    final moved = p16.length < 2
+        ? null
+        : switch (g) {
+            'rise' || 'fall' => p16.last - p16.first,
+            'arch' => p16.reduce(math.max) - math.max(p16.first, p16.last),
+            'dip' => math.min(p16.first, p16.last) - p16.reduce(math.min),
+            _ => p16.reduce(math.max) - p16.reduce(math.min),
+          };
+    return [
+      if (contour)
+        {
+          'id': 'PITCH', 'label': 'PITCH', 'state': scale == null ? 'pending' : 'ok',
+          'value': scale == null ? heard['start_hz'] : -2.5, 'want': cell.tags['pitch'],
+        },
+      {
+        'id': 'SHAPE', 'label': 'SHAPE',
+        'state': reasons.contains('label') ? 'miss' : 'ok',
+        'value': contour ? moved : heard['label'],
+        'want': g,
+      },
+      if (contour) ...[
+        {
+          'id': 'LENGTH', 'label': 'LENGTH',
+          'state': reasons.contains('speed') ? 'miss' : 'ok',
+          'value': heard['dur_ms'],
+          'want': cell.tags['speed'] ?? cell.tags['length'],
+        },
+        {
+          'id': 'SOUND', 'label': 'SOUND',
+          'state': reasons.contains('tone') ? 'miss' : 'ok',
+          'value': heard['f0_hz'],
+          'want': cell.tags['tone'],
+        },
+      ] else
+        {'id': 'SOUND', 'label': 'SOUND', 'state': 'ok', 'value': null, 'want': 'unpitched'},
+      {'id': 'LOUD', 'label': 'LOUD', 'state': 'ok', 'value': heard['loudness'], 'want': null},
+    ];
+  }
+
   void dispose() {
     _timer?.cancel();
+    _advanceTimer?.cancel();
     _out.close();
   }
 }

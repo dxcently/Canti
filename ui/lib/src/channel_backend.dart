@@ -112,8 +112,8 @@ class ChannelBackend implements VoxBackend {
       }));
 
   @override
-  Future<void> calibStart(String source, {List<String>? steps}) =>
-      _calib('calib_start', {'source': source, 'steps': ?steps});
+  Future<void> calibStart(String source, {List<String>? steps, bool? resume}) =>
+      _calib('calib_start', {'source': source, 'steps': ?steps, 'resume': ?resume});
 
   @override
   Future<void> calibStep(String step) => _calib('calib_step', {'step': step});
@@ -142,6 +142,13 @@ class ChannelBackend implements VoxBackend {
   /// Kotlin's `calib_status` calls, plus each command's answer (the status after it).
   @override
   Stream<CalibStatus> calibStatus() => _calibOut.stream;
+
+  @override
+  Future<CalibStatus> calibStatusMap() async {
+    final r = await _methods.invokeMethod<Object?>('calib_status');
+    _calibPush(r);
+    return CalibStatus.fromMap(r is Map ? r.cast<Object?, Object?>() : const {});
+  }
 
   void _calibPush(Object? m) {
     if (m is Map && m.containsKey('active')) _calibOut.add(CalibStatus.fromMap(m.cast<Object?, Object?>()));
