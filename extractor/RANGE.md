@@ -219,6 +219,50 @@ heard row (else its last missed one), `no_sound_rows` every missed attempt, and
 `range_suite` counts each missed attempt as a gate miss and lists them under
 `no_sound` in its report.
 
+## Deleting takes
+
+A take (or a background) can be soft-deleted: its WAV(s) move into `trash/<del_id>/<original path>`
+and a `delete` op row is appended to its journal (contract T). `range_layout.effective_rows` computes the
+effective take/background rows, the deletes in force and the restorable `del_id`s; `take_rows`,
+`no_sound_rows` and `latest_rows` all read through it, so a deleted take is not done (recorders prompt it
+again and `validate_session(complete=True)` requires it again) and its re-record counts again. The
+journals stay append-only: every op row carries `op` and a `take_id` (or `name`, for a background) key,
+null for a purge, so no reader crashes on a missing key.
+
+- Scope `take` excludes every earlier row of the take (heard and missed). Scope `attempt` with an int N
+  excludes that missed (`no_sound`) attempt's `.a<N>` file. Scope `attempt` with null means the current
+  heard attempt and excludes the earlier heard rows (they all name the plain path, the moved file).
+- `restore` (undo) moves the files back and appends a `restore` row; it is refused if a destination path
+  exists again (the take was re-recorded), if the delete was purged, or if it was already restored.
+- `purge` removes `trash/<del_id>/`; the delete stays in force forever and can no longer be restored.
+- Redo numbering is `next_redo`: 1 + the max redo over all take rows, excluded ones included, so an
+  `.a<N>` name is never reused. Files move first, then the row is appended (restore likewise), so a crash
+  leaves either a file in `trash/` with no row or a row whose files are missing; `validate_session`
+  tolerates missing files of excluded rows and ignores `trash/` entirely. Ratings are never touched.
+
+During recording, `d` deletes the last saved take of the sitting (asks `Delete <take_id> (<n> attempt
+files)? y/N`, a single key), prints `Deleted. u = undo`, and the deleted take becomes the next prompt;
+`u` right after restores the most recent delete of the sitting.
+
+On an existing session (no audio source is opened):
+
+```sh
+./extractor/run python range_session.py list-takes --session <name> [--block B]
+./extractor/run python range_session.py delete <take_id> [--attempt N | --heard | --all] [--yes]
+./extractor/run python range_session.py restore <del_id>
+./extractor/run python range_session.py clear-trash [--yes]
+```
+
+`--delete` defaults to `--all` (scope `take`) and confirms y/N unless `--yes`; `--clear-trash` asks for a
+typed `yes` unless `--yes`. `list-takes` prints each take's id, status (`done`/`missing`/`no_sound`),
+attempts and deletes in force. `validate_session` returns `deleted` (the number of deletes in force).
+
+The pull (`android/suite/range_phone.py pull`) copies `trash/` too (validation ignores it) and carries the
+op rows (the journals are copied whole). It refuses to replace a local copy whose `labels.jsonl` or
+`backgrounds.jsonl` has rows the phone's journal doesn't start with — the phone journal must extend the
+local one — with `<name>: changed on the PC since the last pull (a delete?); delete on the phone too, or
+pass --force`; `--force` replaces it anyway.
+
 ## Checks-runner API and timing
 
 `range_layout` has no NumPy or Android dependency:
