@@ -6,7 +6,6 @@ import 'package:flutter/services.dart' show PlatformException;
 
 import 'backend.dart';
 import 'calibration.dart';
-import 'calibration_screen.dart' show calibPopsHint;
 import 'channel_backend.dart' show CalibCommandError;
 import 'shape_plot.dart';
 import 'theme/canti_theme.dart';
@@ -107,7 +106,7 @@ void closeRoute(BuildContext context) {
   if (nav.canPop()) nav.pop();
 }
 
-/// The flat 52-cell plan (gesture, cell id) in TrainPlan order, from the status's cards.
+/// The flat 48-cell plan (gesture, cell id) in TrainPlan order, from the status's cards.
 List<(String, String)> planCells(TrainStatus? s) => [
       for (final g in s?.gestures ?? const <TrainGesture>[])
         for (final c in g.cells) (g.name, c.id),
@@ -153,7 +152,7 @@ Future<void> fixBlocker(VoxBackend backend, String action) async {
 
 // --- the hub -----------------------------------------------------------------------------------------------------------
 
-/// The hub: `CALIBRATE n/8` (a row per step with its result), `TRAIN GESTURES n/52` (a row per gesture, done/total)
+/// The hub: `CALIBRATE n/7` (a row per step with its result), `TRAIN GESTURES n/48` (a row per gesture, done/total)
 /// and, when `train_status.unconfirmed` is non-empty, the takes to check. Tapping a row opens that step / gesture; the
 /// dock's main button runs the first undone one. The off banner (Canti can't hear) sits on top when training is
 /// blocked.
@@ -251,7 +250,6 @@ class _HubScreenState extends State<HubScreen> {
           ? '${hzToSt(r!.rangeHiHz!, r.rangeLoHz!).round()} st'
           : 'ok',
       'vowels' => 'ok',
-      'pops' => r?.popsHeard == null ? 'ok' : '${r!.popsHeard} of 3',
       'clicks' => r?.clicksHeard == null ? 'ok' : '${r!.clicksHeard} of 3',
       'whistle' => r?.whistleLoHz != null && r?.whistleHiHz != null
           ? '${hzToSt(r!.whistleHiHz!, r.whistleLoHz!).round()} st'
@@ -315,7 +313,7 @@ class _HubScreenState extends State<HubScreen> {
             ],
             PixelWindow(
               key: const Key('hub_calib'),
-              title: 'Calibrate $calibDone/8',
+              title: 'Calibrate $calibDone/${calibSteps.length}',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -337,7 +335,7 @@ class _HubScreenState extends State<HubScreen> {
             SizedBox(height: p(4)),
             PixelWindow(
               key: const Key('hub_train'),
-              title: 'Train gestures ${ts?.done ?? 0}/${ts?.total ?? 52}',
+              title: 'Train gestures ${ts?.done ?? 0}/${ts?.total ?? 48}',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1024,10 +1022,6 @@ class _CalibStepScreenState extends State<CalibStepScreen> {
                     signal: Signal.idle,
                     text: rowDone ? 'Saved. REDO records it again.' : 'Tap START, then make the sound.',
                     textKey: const Key('calib_state')),
-              if (finished && step == 'pops' && s.popsN < 2) ...[
-                SizedBox(height: p(3)),
-                const SignalNote(signal: Signal.waiting, text: calibPopsHint, textKey: Key('calib_pops_hint')),
-              ],
             ],
           ),
         );
@@ -1072,8 +1066,7 @@ const _calibPrompts = {
   'hum': "Hum 'mm' relaxed for 3 s: the note that comes out without thinking",
   'glide': 'Glide from your lowest comfortable note to your highest and back (5 s)',
   'vowels': "Hold 'ee', then 'ah', then 'oo', 2 s each at a middle pitch",
-  'pops': 'Pop your lips 3 times, about a second apart',
-  'clicks': 'Click your tongue 3 times, about a second apart',
+  'clicks': 'Tongue clicks or lip pops, both count',
   'whistle': 'Whistle from your lowest note to your highest and back (5 s)',
   'hiss': "Two short 'tss' hisses, about a second apart",
   'room': 'Stay quiet for 3 s: Canti listens to the room',
@@ -1086,7 +1079,7 @@ const _calibExpect = {
   'whistle': ExpectedShape(sequence: ['arch'], start: 'low', durS: 5),
 };
 
-/// The live readout for a step without a shape (vowels, pops, clicks, hiss, room), in the plot's slot.
+/// The live readout for a step without a shape (vowels, clicks, hiss, room), in the plot's slot.
 class _CalibReadout extends StatelessWidget {
   const _CalibReadout({required this.status, required this.step});
 
@@ -1376,9 +1369,9 @@ class _TrainTakeScreenState extends State<TrainTakeScreen> {
           bodyKey: const Key('take_body'),
           scroll: miss,
           pager: StepPager(
-            // the take's place in the whole plan (52), as the arrows move over it
+            // the take's place in the whole plan (48), as the arrows move over it
             index: at >= 0 ? at : math.max(0, (s?.pos.i ?? 1) - 1),
-            count: plan.isEmpty ? (s?.pos.n ?? 52) : plan.length,
+            count: plan.isEmpty ? (s?.pos.n ?? 48) : plan.length,
             canPrev: !busy && blocked == null && at > 0,
             canNext: !busy && blocked == null && at >= 0 && at < plan.length - 1,
             onPrev: () => _act(() => _go(plan[at - 1].$1, plan[at - 1].$2)),

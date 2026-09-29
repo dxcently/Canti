@@ -32,7 +32,6 @@ class FakeBackend implements VoxBackend {
     this.deviceTimeout = const Duration(milliseconds: 1500),
     bool? calibAuto,
     this.calibTick = const Duration(milliseconds: 100),
-    this.calibPops = 3,
   })  : current = initial,
         calibAuto = calibAuto ?? demo;
 
@@ -42,11 +41,10 @@ class FakeBackend implements VoxBackend {
   final Duration deviceTimeout;
 
   /// Calibration: with [calibAuto] (default: [demo]) each step plays a made-up recording, a `calib_status` push every
-  /// [calibTick] (a wait for a steady note, live pitch, progress, `step_done`), and the fake hears [calibPops] of the
-  /// 3 pops. Without it, tests push statuses with [emitCalib].
+  /// [calibTick] (a wait for a steady note, live pitch, progress, `step_done`). Without it, tests push statuses with
+  /// [emitCalib].
   final bool calibAuto;
   final Duration calibTick;
-  int calibPops;
 
   /// The state [status] answers with; tests may replace it (the screen sees it on its next fetch).
   VoxStatus current;
@@ -409,22 +407,21 @@ class FakeBackend implements VoxBackend {
   Map<String, Object?> _cDraft = {};
 
   static const _cWait = {'hum': 8, 'glide': 6, 'whistle': 6};
-  static const _cLen = {'hum': 30, 'glide': 50, 'vowels': 66, 'pops': 40, 'clicks': 40, 'whistle': 50, 'hiss': 30, 'room': 30};
+  static const _cLen = {'hum': 30, 'glide': 50, 'vowels': 66, 'clicks': 40, 'whistle': 50, 'hiss': 30, 'room': 30};
   static const _cPrompt = {
     'hum': "Hum 'mm' relaxed for 3 s: the note that comes out without thinking",
     'glide': 'Glide from your lowest comfortable note to your highest and back (5 s)',
     'vowels': "Hold 'ee', then 'ah', then 'oo', 2 s each at a middle pitch",
-    'pops': 'Pop your lips 3 times, about a second apart',
-    'clicks': 'Click your tongue 3 times, about a second apart',
+    'clicks': 'Tongue clicks or lip pops, both count',
     'whistle': 'Whistle from your lowest note to your highest and back (5 s)',
     'hiss': "Two short 'tss' hisses, about a second apart",
     'room': 'Stay quiet for 3 s: Canti listens to the room',
   };
 
   /// When the counted steps' sounds are heard (ticks into the step).
-  static const _cAt = {'pops': [8, 20, 32], 'clicks': [6, 18, 30], 'hiss': [6, 18]};
+  static const _cAt = {'clicks': [6, 18, 30], 'hiss': [6, 18]};
 
-  int _cCount(String step) => switch (step) { 'pops' => calibPops, 'clicks' => calibClicks, 'hiss' => calibHiss, _ => 0 };
+  int _cCount(String step) => switch (step) { 'clicks' => calibClicks, 'hiss' => calibHiss, _ => 0 };
 
   void _cPlay(String step) {
     _cTimer?.cancel();
@@ -524,8 +521,6 @@ class FakeBackend implements VoxBackend {
         d['range_hi_hz'] = v(318.0);
       case 'vowels':
         d['vowels'] = {for (final (k, a) in const [('ee', 0.93), ('ah', 0.81), ('oo', 0.88)]) k: {'acc': v(a)}};
-      case 'pops':
-        d['pops_heard'] = v(calibPops);
       case 'clicks':
         d['clicks_heard'] = v(calibClicks);
       case 'whistle':
@@ -541,12 +536,12 @@ class FakeBackend implements VoxBackend {
     skipped ? k.add(step) : k.remove(step);
     d['skipped'] = [for (final s in calibSteps) if (k.contains(s)) s];
     // the gate comes from the calibration once the clicks were measured, else the default
-    final n = [d['pops_heard'], d['clicks_heard'], d['hiss_heard']].whereType<int>().fold(0, (a, b) => a + b);
+    final n = [d['clicks_heard'], d['hiss_heard']].whereType<int>().fold(0, (a, b) => a + b);
     d['level_gate'] = d['clicks_heard'] != null
         ? {'min_snr_db': 11.0, 'min_level_dbfs': -52.0, 'from': 'calibration', 'n': n, 'weakest_snr_db': 17.0,
             'weakest_level_dbfs': -46.0}
         : {'min_snr_db': 6.0, 'min_level_dbfs': -60.0, 'from': 'default', 'n': 0};
-    d['relabel_rule'] = d['pops_heard'] != null && d['clicks_heard'] != null;
+    d['relabel_rule'] = d['clicks_heard'] != null;
   }
 
   static List<String> _steps(Object? v) => v is List ? [for (final x in v) if (x is String) x] : const [];
@@ -559,7 +554,6 @@ class FakeBackend implements VoxBackend {
           'hum' => d['home_hz'] != null,
           'glide' => d['range_lo_hz'] != null,
           'vowels' => (d['vowels'] as Map?)?.values.any((x) => (x as Map?)?['acc'] != null) ?? false,
-          'pops' => d['pops_heard'] != null,
           'clicks' => d['clicks_heard'] != null,
           'whistle' => d['whistle_lo_hz'] != null,
           'hiss' => d['hiss_heard'] != null,
@@ -610,7 +604,7 @@ class FakeBackend implements VoxBackend {
         case 'room':
           sub = 'stay quiet';
           live = {'voiced': false, 'pitch_hz': null, 'level_db': -63 + 2 * math.sin(_cI / 2)};
-        case 'pops' || 'clicks' || 'hiss':
+        case 'clicks' || 'hiss':
           final at = _cAt[step]!.take(_cCount(step));
           heard[step] = at.where((t) => j >= t).length;
           live = {'voiced': false, 'pitch_hz': null, 'level_db': at.any((t) => j - t >= 0 && j - t < 2) ? -9.0 : -52.0};
@@ -639,8 +633,6 @@ class FakeBackend implements VoxBackend {
         'checks': _cChecks(step, f, waiting, done, failed),
       },
       'heard': {
-        'pops_n': heard['pops'] ?? 0,
-        'pops_need': 3,
         'clicks_n': heard['clicks'] ?? 0,
         'clicks_need': 3,
         'hiss_n': heard['hiss'] ?? 0,
@@ -706,7 +698,7 @@ class FakeBackend implements VoxBackend {
   static const _loop = [
     ['rise', 'swipe up'],
     ['fall', 'swipe down'],
-    ['pop', 'tap'],
+    ['click', 'tap'],
     ['hiss', 'back'],
   ];
 

@@ -12,8 +12,8 @@ import 'train_fake.dart';
 // every gesture, with variations, into the enrollment store of the current mic source. What the service sends
 // (`train_status`), the backend over the `ai.vox/train` channel, and [TrainFlow], the screen's state.
 
-/// The eight gestures, in card order.
-const trainGestures = ['rise', 'fall', 'arch', 'dip', 'flat', 'pop', 'click', 'hiss'];
+/// The seven gestures, in card order.
+const trainGestures = ['rise', 'fall', 'arch', 'dip', 'flat', 'click', 'hiss'];
 
 /// The mic sources, each with its own store.
 const trainSources = ['phone', 'usb', 'pico'];
@@ -129,7 +129,7 @@ class TrainHeard {
   final String? tone;
   final String? loudness;
 
-  /// The extractor's contour, 16 points in semitones from the start (empty for pop, click, hiss).
+  /// The extractor's contour, 16 points in semitones from the start (empty for click, hiss).
   final List<double> pitch16;
 
   /// What that label is ("goes up then down").
@@ -181,11 +181,11 @@ class TrainLive {
   }
 }
 
-/// Where a take sits in the plan (1-based): `i` of `n` over the whole 52-cell plan, `gesture_i` of `gesture_n` within
+/// Where a take sits in the plan (1-based): `i` of `n` over the whole 48-cell plan, `gesture_i` of `gesture_n` within
 /// the gesture.
 @immutable
 class TrainPos {
-  const TrainPos({this.i = 1, this.n = 52, this.gestureI = 1, this.gestureN = 8});
+  const TrainPos({this.i = 1, this.n = 48, this.gestureI = 1, this.gestureN = 7});
 
   final int i;
   final int n;
@@ -196,9 +196,9 @@ class TrainPos {
     final m = _m(o);
     return TrainPos(
       i: _i(m['i']) ?? 1,
-      n: _i(m['n']) ?? 52,
+      n: _i(m['n']) ?? 48,
       gestureI: _i(m['gesture_i']) ?? 1,
-      gestureN: _i(m['gesture_n']) ?? 8,
+      gestureN: _i(m['gesture_n']) ?? 7,
     );
   }
 }
@@ -320,7 +320,7 @@ class TrainUnconfirmed {
   /// The example's index in its class.
   final int pos;
 
-  /// The take's own contour, 16 points in semitones from the start (empty for pop, click, hiss).
+  /// The take's own contour, 16 points in semitones from the start (empty for click, hiss).
   final List<double> pitch16;
 
   /// The take's median f0 in Hz, or null (unpitched / no fingerprint).

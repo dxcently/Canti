@@ -41,15 +41,15 @@ void main() {
     ..scale = scale
     ..fill('rise')
     ..fill('fall', cells: ['hum-low-slow', 'hum-low-quick', 'hum-high-slow'])
-    ..fill('pop');
+    ..fill('click');
 
   Map<String, Object?> calibLive(String step, String state, {List<double?> trace = const [], Object? checks,
-          int popsN = 0, double? level = -24, String? vowel}) =>
+          double? level = -24, String? vowel}) =>
       {
         'active': true, 'source': 'phone', 'step': step, 'state': state, 'progress': 0.55,
         'prompt': null, 'scale': scale,
         'live': {'trace_hz': trace, 'level_db': level, 'pitch_hz': trace.lastOrNull, 'vowel': ?vowel, 'checks': ?checks},
-        'heard': {'pops_n': popsN, 'pops_need': 3},
+        'heard': <String, int>{},
         'step_done': state == 'step_done',
       };
 
@@ -60,7 +60,7 @@ void main() {
         'source': 'phone', 'version': 2, 'home_hz': 147.0, 'voicing_threshold': 0.42, 'range_lo_hz': 104.0,
         'range_hi_hz': 262.0, 'vowels': {'ee': {'acc': 0.9}, 'ah': {'acc': 0.8}, 'oo': {'acc': 0.85}},
       })!;
-      b.calibProgress['phone'] = {'done_steps': ['hum', 'glide', 'vowels'], 'current': 'pops', 'updated_ms': 1};
+      b.calibProgress['phone'] = {'done_steps': ['hum', 'glide', 'vowels'], 'current': 'clicks', 'updated_ms': 1};
       t.unconfirmed.add({'id': 12, 'gesture': 'rise', 'heard': 'arch', 'pos': 4});
       return HubScreen(backend: b, source: 'phone', train: t);
     },
@@ -92,9 +92,9 @@ void main() {
           ])));
       return w;
     },
-    'calib-pops': (tester, b, t) async {
-      final w = CalibStepScreen(backend: b, source: 'phone', step: 'pops');
-      Future<void>.delayed(Duration.zero, () => b.emitCalib(calibLive('pops', 'recording', popsN: 2, level: -18)));
+    'calib-clicks': (tester, b, t) async {
+      final w = CalibStepScreen(backend: b, source: 'phone', step: 'clicks');
+      Future<void>.delayed(Duration.zero, () => b.emitCalib(calibLive('clicks', 'recording', level: -18)));
       return w;
     },
     'calib-done': (tester, b, t) async {

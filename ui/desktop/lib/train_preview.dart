@@ -26,7 +26,7 @@ class TrainPreview {
       ..scale = const {'low_hz': 110.0, 'home_hz': 147.0, 'high_hz': 262.0}
       ..fill('rise', cells: ['hum-low-slow', 'hum-low-quick', 'hum-high-slow', 'hum-high-quick', 'whistle-low-slow',
           'whistle-low-quick', 'whistle-high-slow'])
-      ..fill('pop')
+      ..fill('hiss')
       ..fill('click', cells: ['soft-1', 'soft-2'])
       ..fill('rise', src: 'pico');
     if (hold == null) t.outcomes.add(const FakeTake(label: 'dip'));

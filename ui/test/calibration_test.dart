@@ -13,19 +13,19 @@ VoxStatus phoneCursor([Map<String, Object?> m = const {}]) => VoxStatus.fromMap(
 /// A `calib_status` map as the engine sends it.
 Map<String, Object?> st(String? step, String state,
         {double progress = 0.5, String? reason, List<String> skipped = const [], Map<String, Object?>? result,
-        Map<String, Object?> live = const {}, int popsN = 0, String source = 'phone', bool active = true,
+        Map<String, Object?> live = const {}, String source = 'phone', bool active = true,
         Map<String, Object?>? heard, List<String>? steps, List<String>? remaining}) =>
     {
       'active': active, 'source': source, 'step': step, 'state': state, 'prompt': null, 'sub': null,
       'progress': progress, 'waiting_for_steady': state == 'waiting', 'live': live,
-      'heard': heard ?? {'pops_n': popsN, 'pops_need': 3}, 'step_done': state == 'step_done' || state == 'done',
+      'heard': heard, 'step_done': state == 'step_done' || state == 'done',
       'reason': reason, 'skipped': skipped, 'result': result, 'error': null, 'calibrated': false,
       'steps': ?steps, 'remaining': ?remaining,
     };
 
 const result3 = {
   'home_hz': 142.0, 'range_lo_hz': 96.0, 'range_hi_hz': 318.0, 'voicing_threshold': 0.42,
-  'vowels': {'ee': {'acc': 0.93}, 'ah': {'acc': 0.81}, 'oo': {'acc': 0.88}}, 'pops_heard': 3, 'skipped': <String>[],
+  'vowels': {'ee': {'acc': 0.93}, 'ah': {'acc': 0.81}, 'oo': {'acc': 0.88}}, 'skipped': <String>[],
 };
 
 List<String> calls(FakeBackend b) => [
@@ -53,7 +53,7 @@ void main() {
       expect([s.active, s.source, s.step, s.state, s.progress, s.waitingForSteady, s.stepDone, s.failed],
           [true, 'phone', 'vowels', 'recording', 1.0, false, false, false]);
       expect([s.live.voiced, s.live.pitchHz, s.live.levelDb, s.live.vowel, s.live.vowelConf], [true, 181.2, -21.0, 'ah', 0.8]);
-      expect([s.popsNeed, s.calibrated], [3, false]);
+      expect([s.clicksNeed, s.calibrated], [3, false]);
       final f = CalibStatus.fromMap(st('glide', 'failed', reason: 'range too small', skipped: ['hum']));
       expect([f.failed, f.reason, f.skipped, f.stepDone], [true, 'range too small', ['hum'], false]);
       expect(CalibStatus.fromMap(st('hum', 'waiting')).waitingForSteady, isTrue);
@@ -62,10 +62,10 @@ void main() {
     test('a profile with a skipped step has null fields', () {
       final r = CalibResult.fromMap({
         ...result3, 'source': 'phone', 'version': 1, 'saved_at_ms': 1700000000000, 'range_lo_hz': null,
-        'range_hi_hz': null, 'skipped': ['glide'], 'extractor': {}, 'pops_heard': 1,
+        'range_hi_hz': null, 'skipped': ['glide'], 'extractor': {},
       })!;
-      expect([r.source, r.savedAtMs, r.rangeLoHz, r.skipped, r.vowelAcc['ah'], r.popsWeak],
-          ['phone', 1700000000000, null, ['glide'], 0.81, isTrue]);
+      expect([r.source, r.savedAtMs, r.rangeLoHz, r.skipped, r.vowelAcc['ah']],
+          ['phone', 1700000000000, null, ['glide'], 0.81]);
       expect(CalibResult.fromMap(null), isNull);
       final rows = {for (final (_, label, value, _) in calibSummaryRows(r.toMap())) label: value};
       expect(rows['Range'], 'skipped');
@@ -110,8 +110,8 @@ void main() {
       });
       expect([idle.active, idle.needsRecalibration, idle.missingSteps.length], [false, isTrue, 4]);
       final h = CalibStatus.fromMap(st('clicks', 'recording',
-          heard: {'pops_n': 0, 'pops_need': 3, 'clicks_n': 1, 'clicks_need': 3, 'hiss_n': 2, 'hiss_need': 2}));
-      expect([h.heard('clicks'), h.heard('hiss'), h.heard('pops'), h.heard('room')], [(1, 3), (2, 2), (0, 3), null]);
+          heard: {'clicks_n': 1, 'clicks_need': 3, 'hiss_n': 2, 'hiss_need': 2}));
+      expect([h.heard('clicks'), h.heard('hiss'), h.heard('room')], [(1, 3), (2, 2), null]);
     });
 
     test('level gate settings: on by default, offset -10..10 dB, + is stricter', () {
@@ -148,7 +148,17 @@ void main() {
       await pumpStatus(tester, FakeBackend(initial: phoneCursor({'calibrated': false})));
       await tapKey(tester, 'calib_prompt_start');
       expect(find.byType(HubScreen), findsOneWidget);
-      expect(find.text('CALIBRATE 0/8'), findsOneWidget);
+      expect(find.text('CALIBRATE 0/7'), findsOneWidget);
+    });
+
+    testWidgets('calibration shows 7 steps and no Pops', (tester) async {
+      await pumpStatus(tester, FakeBackend(initial: phoneCursor({'calibrated': false})));
+      await tapKey(tester, 'calib_prompt_start');
+      expect(find.text('CALIBRATE 0/7'), findsOneWidget);
+      for (final s in const ['hum', 'glide', 'vowels', 'clicks', 'whistle', 'hiss', 'room']) {
+        expect(find.byKey(Key('hub_calib_$s')), findsOneWidget, reason: s);
+      }
+      expect(find.byKey(const Key('hub_calib_pops')), findsNothing);
     });
 
     testWidgets('no prompt when calibrated, in gesture mode, or on the Pico; "Not now" hides it', (tester) async {
@@ -310,7 +320,7 @@ void main() {
       await b.calibStart('phone');
       await b.calibStart('phone', steps: const ['clicks', 'room']);
       await b.calibStep('glide');
-      await b.calibRedo('pops');
+      await b.calibRedo('clicks');
       await b.calibRetry();
       await b.calibSkip();
       await b.calibSave();
@@ -323,7 +333,7 @@ void main() {
       expect((await b.levelGateSettings()).enabled, isFalse);
       expect([for (final c in got) '${c.method} ${c.arguments}'], [
         'calib_start {source: phone}', 'calib_start {source: phone, steps: [clicks, room]}', 'calib_step {step: glide}',
-        'calib_redo {step: pops}', 'calib_retry null',
+        'calib_redo {step: clicks}', 'calib_retry null',
         'calib_skip null', 'calib_save null', 'calib_cancel null', 'calib_get {source: phone}', 'calib_get {source: usb}',
         'setCursorSettings {cursor_speed: 1.2}', 'cursorSettings null',
         'setLevelGateSettings {level_gate: false, level_gate_offset_db: 3}', 'levelGateSettings null',

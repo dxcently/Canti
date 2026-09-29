@@ -31,7 +31,6 @@ const _shape = {
   'arch': 'goes up then down',
   'dip': 'goes down then up',
   'flat': 'stays level',
-  'pop': 'a short lip pop',
   'click': 'a tongue click',
   'hiss': 'a hiss',
 };
@@ -81,13 +80,11 @@ List<_Cell> _cells(String g) {
       for (final take in [1, 2]) {
         final adv = loud == 'soft' ? 'SOFTLY' : 'LOUDLY';
         final prompt = switch (g) {
-          'pop' => 'Pop your lips $adv ($take of 2)',
           'click' => 'Click your tongue $adv ($take of 2)',
           _ => 'Hiss $adv, about half a second ($take of 2)',
         };
         final hint =
             switch (g) {
-              'pop' => 'A short lip pop, like "p" with no voice.',
               'click' => 'A tongue click, like "tsk" or a cluck.',
               _ => 'A short "sss" or "shh", under a second.',
             } +

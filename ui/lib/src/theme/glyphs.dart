@@ -13,7 +13,7 @@ class Glyph {
   int get height => rows.length;
 }
 
-/// The eight sounds of the vocabulary: contours (rise, fall, arch, dip, flat) and discrete sounds (pop, click, hiss).
+/// The seven sounds of the vocabulary: contours (rise, fall, arch, dip, flat) and discrete sounds (click, hiss).
 abstract final class GestureGlyphs {
   static const rise = Glyph([
     '............',

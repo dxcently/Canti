@@ -260,10 +260,6 @@ class _VoiceCursorWindowState extends State<VoiceCursorWindow> {
             PixelSnap(child: Text('${sourceLabel(widget.source)} · saved', style: p.body(t.ink))),
             SizedBox(height: p(2)),
             CalibPanel(rows: calibSummaryRows(current.toMap())),
-            if (current.popsWeak) ...[
-              gap,
-              const SignalNote(signal: Signal.waiting, text: calibPopsHint),
-            ],
           ] else if (known) ...[
             gap,
             SignalNote(

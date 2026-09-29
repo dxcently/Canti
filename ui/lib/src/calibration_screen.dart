@@ -16,11 +16,7 @@ Future<bool> openCalibration(BuildContext context, VoxBackend backend, String so
   return true;
 }
 
-/// The hint when fewer than 2 of the 3 pops were heard.
-const calibPopsHint = 'Canti heard fewer than 2 of your 3 pops, so it may miss them. Redo the pops a bit louder '
-    'and closer to the mic. Until then, click from Canti\'s badge: tap it and use its menu.';
-
-/// The stat rows of a calibration (a result or a saved profile): home note, range, each vowel, pops, clicks, the
+/// The stat rows of a calibration (a result or a saved profile): home note, range, each vowel, clicks, the
 /// whistle range, hiss, the room's floor, the level gate, voicing, the skipped steps and the missing ones. A skipped
 /// step's values are null: "skipped"; a missing one's: "not yet".
 List<(Glyph, String, String, Key?)> calibSummaryRows(Map<String, Object?> m) {
@@ -37,7 +33,6 @@ List<(Glyph, String, String, Key?)> calibSummaryRows(Map<String, Object?> m) {
     (Icons7.sound, 'Home', or('hum', hzLabel(r.homeHz)), const Key('calib_home')),
     (Icons7.cursor, 'Range', or('glide', hz(r.rangeLoHz, r.rangeHiHz)), const Key('calib_range')),
     for (final v in const ['ee', 'ah', 'oo']) (Icons7.decider, v, or('vowels', pct(r.vowelAcc[v])), Key('calib_acc_$v')),
-    (Icons7.target, 'Pops', or('pops', n(r.popsHeard, 3)), const Key('calib_pops')),
     (Icons7.target, 'Clicks', or('clicks', n(r.clicksHeard, 3)), const Key('calib_clicks')),
     (Icons7.cursor, 'Whistle', or('whistle', hz(r.whistleLoHz, r.whistleHiHz)), const Key('calib_whistle')),
     (Icons7.target, 'Hiss', or('hiss', n(r.hissHeard, 2)), const Key('calib_hiss')),

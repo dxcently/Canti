@@ -286,11 +286,11 @@ void main() {
       expect(calibCalls(b), ['calib_step vowels']);
       await tester.tap(pagerIcon('Next page'));
       await flush(tester);
-      expect(calibCalls(b).last, 'calib_step pops');
-      // the service's current step is what the screen shows (here: it went to pops)
-      b.emitCalib({'active': true, 'source': 'phone', 'step': 'pops', 'state': 'waiting'});
+      expect(calibCalls(b).last, 'calib_step clicks');
+      // the service's current step is what the screen shows (here: it went to clicks)
+      b.emitCalib({'active': true, 'source': 'phone', 'step': 'clicks', 'state': 'waiting'});
       await flush(tester);
-      expect(find.byKey(const Key('calib_step_pops')), findsOneWidget);
+      expect(find.byKey(const Key('calib_step_clicks')), findsOneWidget);
       await tester.tap(pagerIcon('Previous page'));
       await flush(tester);
       expect(calibCalls(b).last, 'calib_step vowels');
@@ -443,7 +443,7 @@ void main() {
     testWidgets('leaving mid-run never resets it: back in, RUN THE REST lands on the saved step', (tester) async {
       final b = FakeBackend(initial: phone(), calibAuto: true);
       await pumpHub(tester, b);
-      expect(find.text('CALIBRATE 0/8'), findsOneWidget);
+      expect(find.text('CALIBRATE 0/7'), findsOneWidget);
       await tapKey(tester, 'dock_main', settle: false); // RUN THE REST: hum
       await flush(tester);
       expect(find.byType(CalibStepScreen), findsOneWidget);
@@ -456,7 +456,7 @@ void main() {
       await tapKey(tester, 'dock_right', settle: false); // STEPS
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(HubScreen), findsOneWidget);
-      expect(find.text('CALIBRATE 1/8'), findsOneWidget);
+      expect(find.text('CALIBRATE 1/7'), findsOneWidget);
       expect(textOf(tester, 'hub_resume'), contains('Glide'));
       await tapKey(tester, 'dock_main', settle: false);
       await flush(tester);
@@ -569,7 +569,7 @@ void main() {
           home: ReviewScreen(
               backend: b,
               train: FakeTrainBackend(source: 'phone'),
-              take: const TrainUnconfirmed(id: 7, gesture: 'pop', heard: 'click', pos: 1))));
+              take: const TrainUnconfirmed(id: 7, gesture: 'click', heard: 'click', pos: 1))));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       final plots = tester.widgetList<ShapePlot>(find.byType(ShapePlot)).toList();
