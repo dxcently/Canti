@@ -117,6 +117,15 @@ class VoxService : AccessibilityService() {
     /** Dictation mode (VoiceTyping.kt): utterance after utterance typed into the focused box. */
     private lateinit var dictation: Dictation
     private var asrProblem: String? = null
+    // [strip] the live transcript strip (TranscriptStrip.kt): one ticket at a time.
+    private class StripTicket(val gen: Long, val kind: StripKind, val userOpened: Boolean, val openedAt: Long) {
+        var retried = false
+        var words = ""
+        var boundN: Long? = null
+        var boundNav = false   // [strip] the bound decision is a navigation phrase (vs an unparsed phrase)
+    }
+    private var strip: StripTicket? = null
+    private lateinit var stripModel: StripModel
 
     // Personalization: the active profile's enrolled classes on the current sound source and the matcher built from them.
     private var enroll = EnrollmentStore(Profile.DEFAULT_NAME)
@@ -137,6 +146,7 @@ class VoxService : AccessibilityService() {
     private var choiceN = 0L
     private var choiceTimeout: Runnable? = null
     private val CHOICE_MS = 8000L
+    private val RETRY_MS = 4000L   // [strip] the retry window after a miss
     private val CHOICE_HINT = "say a number or more words · rise/fall · click taps · hiss cancels"
 
     private val shotExecutor = Executors.newSingleThreadExecutor()
@@ -220,6 +230,9 @@ class VoxService : AccessibilityService() {
             override fun resumeMic(why: String) { mic?.resumeMic(why) }
         }
         listenWindow = ListenWindow(scheduler, micYield)
+        stripModel = StripModel(scheduler)
+        stripModel.onChange = { f -> if (f == null) { strip = null; overlay.hideStrip() } else overlay.showStrip(f) }   // [strip] hidden = the ticket ends
+        overlay.stripThemeChanged()
         // Dictation holds the mic itself for the whole session; its windows (one recognizer per utterance) have none.
         dictation = Dictation(scheduler, micYield, ListenWindow(scheduler, null), { asr },
             object : Dictation.Typer {
@@ -228,10 +241,14 @@ class VoxService : AccessibilityService() {
             },
             logText = { settings.logTypedText }, log = { f -> EventLog.ev("dictate", *f) },
             speechHoldMs = { settings.dictateSpeechHoldMs },
+            onWords = { if (strip?.kind == StripKind.DICTATE) stripModel.partial(it) },
+            onTyped = { if (strip?.kind == StripKind.DICTATE) stripModel.typed(it) },
+            onQuiet = { deadline -> if (strip?.kind == StripKind.DICTATE) stripModel.quiet(deadline) },
             onStop = { why, status ->
                 if (status != null) asrProblem = status
                 toast(if (why == "stop phrase" || why == "silence") "dictation off" else "dictation off: $why")
                 updateBadge("")
+                if (strip?.kind == StripKind.DICTATE) clearStrip()   // [strip] dictation stopped: the strip hides
             })
         val power = getSystemService(PowerManager::class.java)
         holdScroll = HoldScroller(scheduler, foreground = ::currentApp, screenOn = { power.isInteractive },
@@ -610,6 +627,7 @@ class VoxService : AccessibilityService() {
                 // A phrase from the device (or the debug socket) answers the window: the phone's recognizer stops.
                 sequencer.flush()
                 listenWindow.cancel("phrase message")
+                strip?.let { it.words = m.phrase; stripModel.final(m.phrase) }   // [strip] the phrase message owns the transcript
                 onHeard(Heard(listOf(m.phrase)), "message", window = true)
             }
         }
@@ -825,6 +843,7 @@ class VoxService : AccessibilityService() {
         armed = false
         generation++
         followups.clear()   // [followup]
+        clearStrip()   // [strip]
         sequencer.cancel()
         holdScroll.stop("disarm ($why)"); dropBufferedHold()
         overlay.stop(); executor.cancelDrag(); cancelChoice("disarm")
@@ -841,6 +860,7 @@ class VoxService : AccessibilityService() {
         if (p) {
             generation++
             followups.clear()   // [followup]
+            clearStrip()   // [strip]
             sequencer.cancel()
             holdScroll.stop("pause"); dropBufferedHold()
             overlay.stop(); executor.cancelDrag(); cancelChoice("pause")
@@ -992,6 +1012,7 @@ class VoxService : AccessibilityService() {
         if (asr.name == want) return
         if (::listenWindow.isInitialized) listenWindow.cancel("asr_engine changed")
         if (::dictation.isInitialized) dictation.stop("asr_engine changed")
+        if (::stripModel.isInitialized) clearStrip()   // [strip]
         asr.cancel()
         asr = when (want) {
             "android" -> AndroidPhraseRecognizer(this, { settings.asrAllowOnline }, { settings.asrLanguage })
@@ -1022,7 +1043,14 @@ class VoxService : AccessibilityService() {
         EventLog.ev("listening", "state" to "open", "window_ms" to settings.listenWindowMs, "mode" to deviceMode, "engine" to engine.name,
             "recognizer" to (engine as? AndroidPhraseRecognizer)?.plan()?.kind?.name?.lowercase())
         val gen = generation
-        listenWindow.open(engine, settings.listenWindowMs) { d -> listenDone(d, gen) }
+        // [strip] a user-opened phrase window: LISTEN, or NAME in cursor mode (a long hiss names a target).
+        if (settings.transcriptStrip) {
+            val kind = if (deviceMode == "cursor") StripKind.NAME else StripKind.LISTEN
+            strip = StripTicket(gen, kind, true, SystemClock.elapsedRealtime())
+            stripModel.start(kind, settings.listenWindowMs)
+            stripEvent("show", "none", false)
+        }
+        listenWindow.open(engine, settings.listenWindowMs, onWords = { if (strip?.gen == gen) stripModel.partial(it) }) { d -> listenDone(d, gen) }
         updateBadge("LISTENING")
         // Warm the app list ("open <app>") while the user speaks, after the recognizer has started.
         main.postDelayed({ if (listenWindow.isOpen) launchableApps() }, 700)
@@ -1039,10 +1067,19 @@ class VoxService : AccessibilityService() {
         if (d.status != null) {
             asrProblem = d.status
             toast("Canti: ${d.status}")
+            if (strip?.gen == gen) { stripEvent("hidden", "failed", false); clearStrip() }   // [strip] a setup problem is not a miss
         } else if (h != null && asr is AndroidPhraseRecognizer) asrProblem = null
         updateBadge("")
-        if (h == null) return
+        // [strip] a cancelled window ends quietly; a phrase message owns the strip, and a pick (choice ended) keeps it for the DO row
+        if (d.why.startsWith("cancelled:")) { if (strip?.gen == gen && d.why != "cancelled: phrase message" && d.why != "cancelled: choice ended") clearStrip(); return }
+        if (h == null) {
+            // [strip] nothing heard (no speech / no match / timeout with nothing): a miss the strip shows as a dim "...".
+            if (strip?.gen == gen) { stripModel.final("..."); notify("", "no_words") { StripReasons.noWords() } }
+            return
+        }
         if (gen != generation || !armed || paused) { EventLog.ev("ignored", "reason" to "disarmed while listening", "phrase" to if (hide) "(typing: not logged)" else h.best); return }
+        strip?.let { if (it.gen == gen) it.words = h.best ?: "" }   // [strip] the heard text drives the reason mapping
+        if (strip?.gen == gen) stripModel.final(h.best ?: "")
         onHeard(h, "asr:${d.engine}", window = true)   // every recognizer run answers a listen window a pop pop opened
     }
 
@@ -1097,12 +1134,20 @@ class VoxService : AccessibilityService() {
                 EventLog.ev("exec", "n" to n, "action" to Executor.TYPE_TEXT, "ok" to r.ok, "how" to r.how, "chars" to r.chars,
                     "text" to text.takeIf { settings.logTypedText })
                 trace("exec", JSONObject().put("action", Executor.TYPE_TEXT).put("ok", r.ok).put("how", r.how).put("chars", r.chars))
-                if (!r.ok) toast(if (r.how == TextInsert.EMPTY) "say what to type: \"type hello\"" else r.how)
+                if (!r.ok) notify(if (r.how == TextInsert.EMPTY) "say what to type: \"type hello\"" else r.how, "failed") { StripRow.Miss(r.how, false) to emptySet() }
+                else notify("") { StripRow.Done("typed") to emptySet() }   // [strip] never the typed text in the row
                 updateBadge("type")
             }
             TypeGrammar.Cmd.StartDictation -> {
                 val why = dictation.start(source)
                 trace("exec", JSONObject().put("action", "dictate").put("ok", why == null).put("how", why ?: "started"))
+                // [strip] dictation: DICTATING with END, its timer the silence clock (Dictation.onQuiet).
+                if (why == null && settings.transcriptStrip) {
+                    strip = StripTicket(generation, StripKind.DICTATE, false, SystemClock.elapsedRealtime())
+                    stripModel.start(StripKind.DICTATE, Dictation.SILENCE_MS)
+                    stripModel.result(StripRow.End(), emptySet())
+                    stripEvent("show", "none", false)
+                }
                 toast(why ?: "dictating: stops on silence, a sound, or \"stop dictation\"")
                 updateBadge("dictate")
             }
@@ -1130,14 +1175,16 @@ class VoxService : AccessibilityService() {
                 EventLog.ev("exec", "n" to n, "action" to "volume", "stream" to c.stream.key, "op" to c.op.describe(), "ok" to r.ok, "how" to r.how,
                     "watch" to r.watch)
                 trace("exec", JSONObject().put("action", "volume").put("stream", c.stream.key).put("op", c.op.describe()).put("ok", r.ok).put("how", r.how))
-                if (!r.ok) toast("couldn't change the volume")
+                if (!r.ok) notify("couldn't change the volume", "failed") { StripRow.Miss("couldn't change the volume", false) to emptySet() }
+                else notify("") { StripRow.Done("volume ${c.op.describe()}") to emptySet() }
                 updateBadge("volume")
             }
             is SpeechCommand.Swipe -> swipeNamed(c, screenTargets)
             is SpeechCommand.Ignore -> {
                 // filler, chatter, a retraction: nothing to do; two commands at once: say so (never a guess)
                 trace("result", "ignored")
-                if (c.why.startsWith("two commands")) toast("one command at a time")
+                if (c.why.startsWith("two commands")) notify("one command at a time", "one_at_a_time") { StripReasons.why("one command at a time") }
+                else if (strip != null) clearStrip()   // [strip] filler/chatter hides quietly, no retry
                 updateBadge("")
             }
             is SpeechCommand.Tap -> tapNamed(c, screenTargets())
@@ -1145,7 +1192,7 @@ class VoxService : AccessibilityService() {
                 // never a tap on screen text of that name
                 EventLog.ev("exec", "n" to ++decisionCount, "action" to "open_app", "name" to c.name, "ok" to false, "how" to "not installed")
                 trace("exec", JSONObject().put("action", "open_app").put("ok", false).put("how", "not installed"))
-                toast("no app called ${c.name}")
+                notify("no app called ${c.name}", "no_app") { StripReasons.noApp(StripWords.final(strip?.words ?: c.name), c.name) }
                 updateBadge("no app called ${c.name}")
             }
             is SpeechCommand.OpenApp -> {
@@ -1156,7 +1203,7 @@ class VoxService : AccessibilityService() {
                     ?.let { AppChoice.prefer(it, prefs) { p -> p in launchable } }
                 if (pkg == null) {
                     EventLog.ev("exec", "n" to n, "action" to "open_app", "label" to c.label, "ok" to false, "how" to "ambiguous: ${(listOf(c.pkg) + c.others).joinToString()}")
-                    toast("which ${c.label}? " + (listOf(c.pkg) + c.others).joinToString(" or "))
+                    notify("which ${c.label}? " + (listOf(c.pkg) + c.others).joinToString(" or "), "ambiguous") { StripRow.Ask("which ${c.label}?") to emptySet() }
                     updateBadge("which ${c.label}?")
                     return
                 }
@@ -1166,16 +1213,21 @@ class VoxService : AccessibilityService() {
                 followups.record(Last.OpenApp(pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to c.pkg, "opened" to pkg.takeIf { it != c.pkg }, "label" to c.label, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
                 trace("exec", JSONObject().put("action", "open_app").put("app", c.pkg).put("ok", r.ok).put("how", r.how))
-                if (!r.ok) toast("couldn't open ${c.label}")
+                if (!r.ok) notify("couldn't open ${c.label}", "failed") { StripRow.Miss("couldn't open ${c.label}", false) to emptySet() }
+                else notify("", "done") { StripRow.Done("open ${c.label}") to emptySet() }
                 updateBadge("open ${c.label}")
             }
             is SpeechCommand.Timer -> {
                 val n = ++decisionCount
-                val s = c.seconds ?: run { toast("say how long: \"set a timer for 5 minutes\""); EventLog.ev("exec", "n" to n, "action" to "set_timer", "ok" to false, "how" to "no length heard"); return }
+                val s = c.seconds ?: run {
+                    notify("say how long: \"set a timer for 5 minutes\"", "say_how_long") { StripRow.Miss("say how long", true) to emptySet() }
+                    EventLog.ev("exec", "n" to n, "action" to "set_timer", "ok" to false, "how" to "no length heard"); return
+                }
                 val r = try { executor.setTimer(s, settings.timerApp) } catch (e: Exception) { Executor.Result(false, "error: $e") }
                 EventLog.ev("exec", "n" to n, "action" to "set_timer", "seconds" to s, "ok" to r.ok, "how" to r.how)
                 trace("exec", JSONObject().put("action", "set_timer").put("seconds", s).put("ok", r.ok).put("how", r.how))
-                toast(if (r.ok) "timer: ${timerText(s)}" else "no timer set: ${r.how}")
+                if (!r.ok) notify("no timer set: ${r.how}", "failed") { StripRow.Miss("no timer set", false) to emptySet() }
+                else notify("") { StripRow.Done("timer ${timerText(s)}") to emptySet() }
                 updateBadge("timer")
             }
             // [followup] spoken follow-ups on the last action (Followup.kt): decided app-side only, no model.
@@ -1190,6 +1242,7 @@ class VoxService : AccessibilityService() {
     /** A navigation phrase: the rules decide it (user phrase rules first, then the screen tie-break); never a model. */
     private fun decideNav(phrase: String) {
         val n = ++decisionCount
+        strip?.boundN = n; strip?.boundNav = true   // [strip] a navigation phrase's decision
         val pkg = currentApp()
         val screen = try { summarize(pkg).first } catch (e: Exception) { EventLog.ev("error", "where" to "screen", "error" to e.toString()); null }
         val scene = StateBuilder.build("listening", pkg, appLabel(pkg), emptyList(), emptyList(), phrase, profile, recentActions(), null, screen)
@@ -1234,12 +1287,16 @@ class VoxService : AccessibilityService() {
         val plan = resolve(c.kind, c.dir, c.said, last, targets)
         followupLog(n, c, followupResult(plan), last, (plan as? Plan.CantUndo)?.why ?: (plan as? Plan.Nothing)?.why, now)
         when (plan) {
-            is Plan.Run -> act(n, generation, plan.mode, Decision(plan.action, "followup:${c.kind.name.lowercase()}", explicit = true), local = true)
+            is Plan.Run -> {
+                act(n, generation, plan.mode, Decision(plan.action, "followup:${c.kind.name.lowercase()}", explicit = true), local = true)
+                notify("") { StripRow.Done(plan.action.replace('_', ' ')) to emptySet() }   // [strip]
+            }
             is Plan.RunVolume -> {
                 val r = try { executor.setVolume(SpeechCommand.Volume(plan.stream, plan.op)) } catch (e: Exception) { Executor.Result(false, "error: $e") }
                 followups.record(Last.Volume(plan.op, plan.stream, SystemClock.elapsedRealtime(), currentApp(), watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "volume", "stream" to plan.stream.key, "op" to plan.op.describe(), "ok" to r.ok, "how" to r.how, "watch" to r.watch)
-                if (!r.ok) toast("couldn't change the volume")
+                if (!r.ok) notify("couldn't change the volume", "failed") { StripRow.Miss("couldn't change the volume", false) to emptySet() }
+                else notify("") { StripRow.Done("volume ${plan.op.describe()}") to emptySet() }
                 updateBadge("volume")
             }
             is Plan.RunApp -> {
@@ -1247,13 +1304,14 @@ class VoxService : AccessibilityService() {
                 val r = try { executor.launchApp(plan.pkg) } catch (e: Exception) { Executor.Result(false, "error: $e") }
                 followups.record(Last.OpenApp(plan.pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to plan.pkg, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
-                if (!r.ok) toast("couldn't open the app")
+                if (!r.ok) notify("couldn't open the app", "failed") { StripRow.Miss("couldn't open the app", false) to emptySet() }
+                else notify("") { StripRow.Done("open ${plan.pkg}") to emptySet() }
                 updateBadge("open ${plan.pkg}")
             }
             is Plan.Tap -> tapTarget(n, plan.target, "followup ${c.kind.name.lowercase()}", alternatives = plan.alternatives)
             is Plan.Choose -> startChoice(n, plan.targets)
-            is Plan.CantUndo -> { toast(plan.why); updateBadge("") }
-            is Plan.Nothing -> { toast(plan.why); updateBadge("") }
+            is Plan.CantUndo -> { notify(plan.why, "cant_undo") { StripReasons.why(plan.why) }; updateBadge("") }
+            is Plan.Nothing -> { notify(plan.why, "nothing") { StripReasons.why(plan.why) }; updateBadge("") }
             Plan.Fallback -> c.fallback?.let { runCommand(it, screenTargets) } ?: toast("nothing to pick instead")
         }
     }
@@ -1282,6 +1340,7 @@ class VoxService : AccessibilityService() {
      */
     private fun swipeNamed(c: SpeechCommand.Swipe, screenTargets: () -> List<Target>) {
         val n = ++decisionCount
+        strip?.boundN = n; strip?.boundNav = true   // [strip] a spoken swipe is this ticket's decision (its DO row)
         var action = c.action
         var via = c.how
         if (action == null) {
@@ -1336,7 +1395,7 @@ class VoxService : AccessibilityService() {
                 c.fallback != null -> runCommand(c.fallback) { targets }
                 // The model decider can still find it by meaning ("the thing to write a message").
                 settings.decider != "rules" && targets.isNotEmpty() -> selectTarget(query, c.query)
-                else -> { toast("no \"${c.query}\" on screen"); updateBadge("not on screen") }
+                else -> { notify("no \"${c.query}\" on screen", "not_on_screen") { StripReasons.notOnScreen(StripWords.final(strip?.words ?: c.query), c.query) }; updateBadge("not on screen") }
             }
         }
     }
@@ -1394,6 +1453,7 @@ class VoxService : AccessibilityService() {
     private fun resolveInput(mode: String, pkg: String, sounds: List<String>, seq: List<String>, phrase: String?, waited: Boolean, heldMs: Long,
                              p: Sequencer.Pending? = null) {
         val n = ++decisionCount
+        if (phrase != null) { strip?.boundN = n; strip?.boundNav = false }   // [strip] the decider path for a spoken phrase
         EventLog.ev("resolve", "n" to n, "sequence" to seq.joinToString(" "), "phrase" to phrase, "waited" to waited, "held_ms" to heldMs, "app" to pkg,
             "clock" to p?.clock, "ended_by" to p?.endedBy, "gaps_ms" to p?.gapsMs?.let { org.json.JSONArray(it) }, "note" to p?.note)
         val gen = generation
@@ -1455,6 +1515,8 @@ class VoxService : AccessibilityService() {
             val decision = try { d.decide(input) } catch (e: Exception) { Decision("none", "error:${e.javaClass.simpleName}:${e.message}") }
             main.post { act(n, gen, mode, decision, p) }
         }
+        // [strip] a slow model: if nothing binds to this ticket within 8 s, hide it.
+        if (strip?.boundN == n) main.postDelayed({ if (strip?.boundN == n && strip?.gen == gen) { stripEvent("hidden", "failed", false); clearStrip() } }, 8000)
     }
 
     /** A global or per-app rule the user wrote for [seq] (the defaults are not rules). */
@@ -1484,7 +1546,19 @@ class VoxService : AccessibilityService() {
                 updateBadge("")
                 return
             }
-            if (Risk.needsConfirm(d)) { lastSwipe = null; askConfirm(n, gen, mode, d); return }
+            // [strip] the decider could not fit the words (an unparsed phrase) or the screen (a nav).
+            if (strip?.boundN == n && d.action == "none") {
+                val t = strip!!
+                if (t.boundNav) notify("", "nothing") { StripRow.Miss("nothing to do", true) to emptySet() }
+                else notify("", "unknown") { StripReasons.unknown(StripWords.final(t.words), PhraseGrammar.knownWords(PhraseGrammar.Context(apps = launchableApps()))) }
+                return
+            }
+            if (Risk.needsConfirm(d)) {
+                lastSwipe = null
+                if (strip?.boundN == n) notify("", "confirm") { StripRow.Ask("${d.action.replace('_', ' ')}? click to confirm") to emptySet() }
+                askConfirm(n, gen, mode, d)
+                return
+            }
             perform(n, mode, d, p)
         } finally { applyBufferedHold() }
     }
@@ -1570,6 +1644,12 @@ class VoxService : AccessibilityService() {
             while (recent.size > 3) recent.removeFirst()
         }
         updateBadge(d.action)
+        // [strip] a phrase/nav decision's result (only the decision this ticket is waiting on): Done, or Fail when the
+        // executor refused (a phone-side failure never retries).
+        if (strip?.boundN == n && d.action != "none") {
+            if (r.ok) notify("", "done") { StripRow.Done(d.action.replace('_', ' ')) to emptySet() }
+            else notify("", "failed") { StripRow.Miss("couldn't ${d.action.replace('_', ' ')}", false) to emptySet() }
+        }
         // a `none` shrugs (IGNORED), at most once per 2.5 s; anything else plays its action's one-shot
         BadgeStates.forDecision(d.action, r.ok)
             ?.takeIf { it != BadgeState.IGNORED || ignoredGate.admit(SystemClock.elapsedRealtime()) }
@@ -1578,6 +1658,52 @@ class VoxService : AccessibilityService() {
 
     private fun topJson(top: List<Pair<String, Double>>): org.json.JSONArray =
         org.json.JSONArray(top.map { (o, p) -> JSONObject().put("option", o).put("p", p) })
+
+    // --- the transcript strip (TranscriptStrip.kt / TranscriptStripView.kt) -----------------------------------------
+
+    /** [strip] While a live ticket's row says it, the strip shows the row; otherwise the toast, as before (exact text). */
+    private fun notify(toastText: String, reason: String? = null, row: () -> Pair<StripRow, Set<Int>>?) {
+        val t = strip
+        if (t == null || !settings.transcriptStrip || t.gen != generation) { if (toastText.isNotEmpty()) toast(toastText); return }
+        val r = row() ?: return
+        var rr = r.first
+        val wantsRetry = rr is StripRow.Miss && rr.retry
+        val retry = wantsRetry && retryAllowed(t)
+        // a miss that may not retry (the retry was used, a picker/confirm is open, ...) shows as a plain miss and hides
+        if (wantsRetry && !retry) rr = StripRow.Miss(rr.value, false)
+        val result = when (rr) { is StripRow.Done -> "done"; is StripRow.Ask -> "ask"; else -> if (wantsRetry) "miss" else "fail" }
+        stripEvent(result, if (rr is StripRow.Done) null else reason, retry)
+        stripModel.result(rr, r.second)
+        if (retry) startRetry(t)
+    }
+
+    /** [strip] The strip event carries a fixed reason key and no words (the transcript text is never logged). */
+    private fun stripEvent(result: String, reason: String?, retry: Boolean) {
+        val t = strip ?: return
+        val fields = arrayListOf<Pair<String, Any?>>("kind" to t.kind.name.lowercase(), "result" to result, "retry" to retry)
+        if (reason != null) fields += "reason" to reason
+        EventLog.ev("strip", *fields.toTypedArray())
+    }
+
+    private fun clearStrip() {
+        strip = null
+        stripModel.hide()
+    }
+
+    /** [strip] After a miss the mic stays open once (4 s) for a retry, only while every guard passes ([RetryRule]). */
+    private fun retryAllowed(t: StripTicket) = RetryRule.allowed(t.userOpened, t.retried, dictation.active, t.gen == generation,
+        armed, paused, choice != null, confirm != null, listenWindow.isOpen, settings.transcriptStrip)
+
+    private fun startRetry(t: StripTicket) {
+        run {
+            t.retried = true
+            EventLog.ev("listening", "state" to "open", "retry" to true)
+            stripModel.open(t.kind, RETRY_MS)   // [strip] the timer tab shows the 4 s retry window
+            val gen = generation
+            listenWindow.open(asr, RETRY_MS, onWords = { if (strip?.gen == gen) stripModel.partial(it) }) { d -> listenDone(d, gen) }
+            updateBadge("LISTENING")
+        }
+    }
 
     private fun toast(text: String) {
         EventLog.ev("toast", "text" to text)
@@ -1600,9 +1726,9 @@ class VoxService : AccessibilityService() {
         val options = Targets.options(targets)
         EventLog.ev("target_state", "n" to n, "app" to pkg, "text" to state, "query_raw" to raw.takeIf { it != query },
             "options" to org.json.JSONArray(options))
-        if (targets.isEmpty()) { toast("nothing to tap on this screen"); EventLog.ev("target", "n" to n, "result" to "no targets"); return }
+        if (targets.isEmpty()) { notify("nothing to tap on this screen", "failed") { StripRow.Miss("nothing to tap on this screen", false) to emptySet() }; EventLog.ev("target", "n" to n, "result" to "no targets"); return }
         if (settings.decider == "rules") {
-            toast("naming a target needs the model decider")
+            notify("naming a target needs the model decider", "failed") { StripRow.Miss("naming a target needs the model decider", false) to emptySet() }
             EventLog.ev("target", "n" to n, "result" to "no model (decider=rules)"); return
         }
         val client = SystemOneClient(settings.baseUrl, settings.targetModel.ifBlank { settings.model }, { settings.apiKey }, settings.httpTimeoutMs)
@@ -1620,7 +1746,7 @@ class VoxService : AccessibilityService() {
     private fun onTargetAnswer(n: Long, gen: Long, targets: List<Target>, res: Result<ChoiceAnswer>) {
         val a = res.getOrElse { e ->
             EventLog.ev("target_decision", "n" to n, "error" to "${e.javaClass.simpleName}: ${e.message?.take(160)}")
-            toast("couldn't pick a target"); updateBadge("target failed"); return
+            notify("couldn't pick a target", "failed") { StripRow.Miss("couldn't pick a target", false) to emptySet() }; updateBadge("target failed"); return
         }
         EventLog.ev("target_decision", "n" to n, "choice" to a.choice, "confidence" to if (a.unscored) null else a.confidence,
             "top" to topJson(a.top(3)), "ms" to a.ms, "server_ms" to a.serverMs, "min_confidence" to settings.targetMinConfidence,
@@ -1630,7 +1756,7 @@ class VoxService : AccessibilityService() {
             EventLog.ev("target", "n" to n, "result" to "error", "error" to e.message); return
         }
         when (out) {
-            is Targets.Outcome.NotOnScreen -> { toast("not on screen"); EventLog.ev("target", "n" to n, "result" to "not on screen"); updateBadge("not on screen") }
+            is Targets.Outcome.NotOnScreen -> { notify("not on screen", "not_on_screen") { StripReasons.notOnScreen(StripWords.final(strip?.words ?: ""), strip?.words ?: "") }; EventLog.ev("target", "n" to n, "result" to "not on screen"); updateBadge("not on screen") }
             is Targets.Outcome.Tap -> {
                 // [followup] the model's other candidates (NONE and the pick excluded, p >= 0.05) become the "other one" list.
                 val byOption = targets.associateBy { it.option }
@@ -1659,6 +1785,7 @@ class VoxService : AccessibilityService() {
         EventLog.ev("target", "n" to n, "result" to "tap", "why" to why, "option" to t.option, "x" to t.cx, "y" to t.cy,
             "ok" to r.ok, "how" to r.how, "watch" to r.watch)
         trace("exec", JSONObject().put("action", "tap_target").put("option", t.option).put("ok", r.ok).put("how", r.how))
+        notify("", "done") { StripRow.Done("tap ${t.label}") to emptySet() }   // [strip]
         updateBadge("tap ${t.label}")
     }
 
@@ -1667,7 +1794,13 @@ class VoxService : AccessibilityService() {
         choice = c; choiceN = n
         try { overlay.showTargets(candidates, 0) } catch (e: Exception) { EventLog.ev("error", "where" to "highlight", "error" to e.toString()) }
         EventLog.ev("target", "n" to n, "result" to "choose", "candidates" to org.json.JSONArray(candidates.map { it.option }), "selected" to 1)
-        toast(CHOICE_HINT)
+        // [strip] the picker: PICK ONE with "n LEFT", its own timer, no retry; the hint toast is replaced.
+        if (settings.transcriptStrip) {
+            strip = StripTicket(generation, StripKind.PICK, false, SystemClock.elapsedRealtime())
+            stripModel.start(StripKind.PICK, CHOICE_MS)
+            stripModel.result(StripRow.Left(candidates.size), emptySet())
+            stripEvent("show", "hint", false)
+        } else toast(CHOICE_HINT)
         armChoiceTimeout()
         openChoiceListening()
         updateBadge("pick 1-${candidates.size}")
@@ -1685,7 +1818,8 @@ class VoxService : AccessibilityService() {
         if (choice == null || !armed) return
         val engine = asr
         val gen = generation
-        listenWindow.open(engine, CHOICE_MS) { d -> listenDone(d, gen) }
+        listenWindow.open(engine, CHOICE_MS, onWords = { if (strip?.gen == gen) stripModel.partial(it) }) { d -> listenDone(d, gen) }
+        if (strip?.kind == StripKind.PICK) stripModel.open(StripKind.PICK, CHOICE_MS)   // [strip] each reopen resets the timer
         updateBadge("pick 1-${choice?.candidates?.size ?: 0}")
     }
 
@@ -1697,6 +1831,7 @@ class VoxService : AccessibilityService() {
         listenWindow.cancel("choice ended")
         try { overlay.hideTargets() } catch (_: Exception) {}
         if (why != null) { EventLog.ev("choice", "n" to choiceN, "event" to "cancelled", "why" to why); updateBadge("cancelled") }
+        if (why != null && strip?.kind == StripKind.PICK) clearStrip()   // [strip] a pick (why null) keeps it for the DO row
     }
 
     /** The spoken text of a choice listen window: a number picks, a narrowing re-ranks, else it runs normally. */
@@ -1729,7 +1864,8 @@ class VoxService : AccessibilityService() {
             }
             is SpokenPick.Result.Hint -> {
                 EventLog.ev("choice", "n" to choiceN, "event" to "no_match", "text" to text)
-                toast(r.text)
+                // [strip] no match while picking: every word BAD, no retry (the choice window reopens by itself).
+                notify(r.text, "hint") { StripRow.Miss(r.text, false) to StripWords.final(strip?.words ?: "").indices.toSet() }
                 armChoiceTimeout()
                 openChoiceListening()
             }
@@ -1764,7 +1900,12 @@ class VoxService : AccessibilityService() {
     private fun renumberChoice(targets: List<Target>) {
         choice = TargetChoice(targets)
         try { overlay.showTargets(targets, 0) } catch (e: Exception) { EventLog.ev("error", "where" to "highlight", "error" to e.toString()) }
-        toast(CHOICE_HINT)
+        // [strip] a narrowing re-open: PICK ONE with the new "n LEFT" (the hint toast is replaced).
+        if (settings.transcriptStrip) {
+            if (strip?.kind != StripKind.PICK) strip = StripTicket(generation, StripKind.PICK, false, SystemClock.elapsedRealtime())
+            stripModel.open(StripKind.PICK, CHOICE_MS)
+            stripModel.result(StripRow.Left(targets.size), emptySet())
+        } else toast(CHOICE_HINT)
         armChoiceTimeout()
         openChoiceListening()
         updateBadge("pick 1-${targets.size}")
@@ -1796,7 +1937,7 @@ class VoxService : AccessibilityService() {
     private fun onNarrowAnswer(n: Long, gen: Long, candidates: List<Target>, res: Result<ChoiceAnswer>) {
         val a = res.getOrElse { e ->
             EventLog.ev("target_decision", "n" to n, "error" to "${e.javaClass.simpleName}: ${e.message?.take(160)}")
-            toast("couldn't pick a target"); updateBadge("target failed"); return
+            notify("couldn't pick a target", "failed") { StripRow.Miss("couldn't pick a target", false) to emptySet() }; updateBadge("target failed"); return
         }
         EventLog.ev("target_decision", "n" to n, "choice" to a.choice, "confidence" to if (a.unscored) null else a.confidence,
             "top" to topJson(a.top(3)), "ms" to a.ms, "min_confidence" to settings.targetMinConfidence, "narrowed" to true)
@@ -1805,7 +1946,7 @@ class VoxService : AccessibilityService() {
             EventLog.ev("target", "n" to n, "result" to "error", "error" to e.message); return
         }
         when (out) {
-            is Targets.Outcome.NotOnScreen -> { toast("not on screen"); EventLog.ev("target", "n" to n, "result" to "not on screen"); updateBadge("not on screen") }
+            is Targets.Outcome.NotOnScreen -> { notify("not on screen", "not_on_screen") { StripReasons.notOnScreen(StripWords.final(strip?.words ?: ""), strip?.words ?: "") }; EventLog.ev("target", "n" to n, "result" to "not on screen"); updateBadge("not on screen") }
             is Targets.Outcome.Tap -> { EventLog.ev("choice", "n" to n, "event" to "narrowed", "remaining" to 1, "option" to out.target.option); cancelChoice(null); tapTarget(n, out.target, "spoken narrowed") }
             is Targets.Outcome.Choose -> startChoice(n, out.targets)
         }
@@ -2000,7 +2141,7 @@ class VoxService : AccessibilityService() {
         super.onConfigurationChanged(newConfig)
         if (instance == null) return
         // Rotation or fold: the head goes to its remembered place for the new orientation.
-        main.post { try { overlay.hideMenu(); overlay.placeBadge(); joy?.screenChanged() } catch (_: Exception) {} }
+        main.post { try { overlay.hideMenu(); overlay.placeBadge(); overlay.stripThemeChanged(); overlay.placeStrip(); joy?.screenChanged() } catch (_: Exception) {} }
     }
 
     // --- app and screen -------------------------------------------------------------------------------------------
@@ -2439,6 +2580,16 @@ class VoxService : AccessibilityService() {
                 reply.put("engine", asr.name).put("status", asrStatus()).put("window_open", listenWindow.isOpen)
             }
             "listen" -> { openListening(); reply.put("engine", asr.name) }
+            "strip_state" -> {
+                // [strip] The current frame. The reply may carry the words because it is not logged (the socket reply is
+                // not an event-log write; only the debug-broadcast path logs replies, and the suite uses the socket).
+                val f = stripModel.frame()
+                reply.put("visible", f.visible).put("kind", f.kind.name.lowercase()).put("title", f.kind.title)
+                    .put("row_key", f.row?.key).put("signal", f.row?.signal?.name?.lowercase())
+                    .put("cells_left", cellsLeft(SystemClock.elapsedRealtime(), f.deadline, f.totalMs))
+                    .put("lines", org.json.JSONArray(f.lines.flatten().map { org.json.JSONObject().put("text", it.text).put("tone", it.tone.name.lowercase()) }))
+                overlay.stripGeometry()?.let { reply.put("top", it[0]).put("height", it[1]) }
+            }
             // A recorded clip through the on-device recognizer with the live settings, never online (AudioFileAsr.kt):
             // {wav_b64} -> {id}; poll asr_audio_result {id}. grammar {texts}: each text's parse, no screen read, no action.
             "asr_audio" -> {
@@ -2465,7 +2616,7 @@ class VoxService : AccessibilityService() {
                 reply.put("result", tr)
             }
             "reset" -> {
-                generation++; sequencer.cancel(); sequencer.resetClock(); clickMerge.reset(); cursorClickGuard.reset(); holdScroll.stop("reset"); dropBufferedHold(); lastSwipe = null; overlay.stop(); executor.cancelDrag(); listenWindow.cancel("reset"); dictation.stop("reset"); recent.clear(); followups.clear()   // [followup]
+                generation++; sequencer.cancel(); sequencer.resetClock(); clickMerge.reset(); cursorClickGuard.reset(); holdScroll.stop("reset"); dropBufferedHold(); lastSwipe = null; overlay.stop(); executor.cancelDrag(); listenWindow.cancel("reset"); dictation.stop("reset"); recent.clear(); followups.clear(); clearStrip()   // [followup] [strip]
                 cancelChoice("reset")
                 lastMsgId = null; armed = true; paused = false
                 if (m.optBoolean("clear_log")) EventLog.clear()

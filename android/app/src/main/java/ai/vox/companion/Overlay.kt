@@ -52,8 +52,15 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     private val density = svc.resources.displayMetrics.density
     private val pixelFont: Typeface = try { Typeface.createFromAsset(svc.assets, "flutter_assets/assets/fonts/PressStart2P-Regular.ttf") }
         catch (_: Exception) { Typeface.MONOSPACE }
+    private val tinyFont: Typeface = try { Typeface.createFromAsset(svc.assets, "flutter_assets/assets/fonts/Tiny5-Regular.ttf") }
+        catch (_: Exception) { Typeface.MONOSPACE }
     private var cursorView: View? = null
     private val cursorParams = params(SIZE_PX, SIZE_PX).apply { gravity = Gravity.TOP or Gravity.START }
+    // [strip] the live transcript strip (TranscriptStrip.kt / TranscriptStripView.kt).
+    private var stripView: TranscriptStripView? = null
+    private var stripParams: WindowManager.LayoutParams? = null
+    private var stripPalette: StripPalette = StripPalette.dark()
+    private val stripHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     var x = 0f; private set
     var y = 0f; private set
@@ -170,11 +177,17 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
      * whether it shows once it is back.
      */
     fun hideForCapture(hide: Boolean, ms: Long = 10_000) {
-        val v = badge?.view ?: return
-        v.removeCallbacks(captureRestore)
+        stripHandler.removeCallbacks(captureRestore)
         captureHidden = hide
-        if (hide) { hideMenu(); v.visibility = View.INVISIBLE; v.postDelayed(captureRestore, ms) }
-        else v.visibility = if (tucked) View.INVISIBLE else View.VISIBLE
+        if (hide) {
+            hideMenu()
+            badge?.view?.let { it.visibility = View.INVISIBLE }
+            stripView?.let { it.visibility = View.INVISIBLE }
+            stripHandler.postDelayed(captureRestore, ms)
+        } else {
+            badge?.view?.let { it.visibility = if (tucked) View.INVISIBLE else View.VISIBLE }
+            stripView?.let { it.visibility = View.VISIBLE }
+        }
     }
 
     /**
@@ -377,7 +390,7 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     }
 
     /** Screen rects of Canti's own overlay windows (padded), so the pixel confirmer never sees its own drawing. */
-    fun maskRects(): List<IntArray> = listOfNotNull(badge?.view, menu, cursorView, bracketView).filter { it.isAttachedToWindow && it.isShown }.map { v ->
+    fun maskRects(): List<IntArray> = listOfNotNull(badge?.view, menu, cursorView, bracketView, stripView).filter { it.isAttachedToWindow && it.isShown }.map { v ->
         val l = IntArray(2); v.getLocationOnScreen(l)
         intArrayOf(l[0] - 32, l[1] - 32, l[0] + v.width + 32, l[1] + v.height + 32)
     }
@@ -586,6 +599,7 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         hideCursor()
         hideMenu()
         hidePrompt()
+        hideStrip()
         badge?.let { b -> hop?.let { b.view.removeCallbacks(it) }; try { wm.removeView(b.view) } catch (_: Exception) {} }
         badge = null; badgeParams = null; hop = null; tucked = false
     }
@@ -623,6 +637,102 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         promptHide?.let { promptView?.removeCallbacks(it) }
         promptView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         promptView = null; promptHide = null
+    }
+
+    // --- the transcript strip (TranscriptStrip.kt / TranscriptStripView.kt) -----------------------------------------
+
+    /** The night-mode palette; call again on configuration changes ([VoxService.onConfigurationChanged]). */
+    fun stripThemeChanged() {
+        val night = (svc.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        stripPalette = if (night) StripPalette.dark() else StripPalette.light()
+        stripView?.let { it.palette = stripPalette; it.invalidate() }
+    }
+
+    /** The §9 scale: device pixels at a 1080-wide screen. */
+    private fun stripScale() = (screenW() / 1080f).coerceAtLeast(0f)
+
+    private fun stripBodyHeight(@Suppress("UNUSED_PARAMETER") row: Boolean): Int {   // fixed: the row slot is always reserved (no resize when it appears)
+        val s = stripScale()
+        val body = 32f + 60f * 2 + 72f + 24f
+        return Math.round((body + 44f) * s)
+    }
+
+    fun showStrip(frame: StripFrame) {
+        val v = stripView ?: TranscriptStripView(svc, tinyFont, pixelFont).also { stripView = it }
+        v.palette = stripPalette
+        v.frame = frame
+        val p = stripParams ?: params(0, 0).apply { gravity = Gravity.TOP or Gravity.START }.also { stripParams = it }
+        p.width = 0; p.height = 0   // recomputed by placeStrip below
+        if (v.isAttachedToWindow) wm.updateViewLayout(v, placeStrip(p, frame))
+        else { placeStrip(p, frame); wm.addView(v, p); OwnWindows.note(v) }
+    }
+
+    fun updateStrip(frame: StripFrame) {
+        val v = stripView ?: return
+        v.frame = frame
+        stripParams?.let { if (v.isAttachedToWindow) wm.updateViewLayout(v, placeStrip(it, frame)) }
+    }
+
+    fun hideStrip() {
+        stripView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        stripView = null; stripParams = null
+    }
+
+    /** [strip] The strip window's current y and height, or null while hidden (for the `strip_state` op). */
+    fun stripGeometry(): IntArray? {
+        val p = stripParams ?: return null
+        if (stripView?.isAttachedToWindow != true) return null
+        return intArrayOf(p.y, p.height)
+    }
+
+    /** Re-place the strip (a window / focus change, or a rotation); no-op while it is hidden. */
+    fun placeStrip() {
+        val v = stripView ?: return
+        val f = v.frame ?: return
+        stripParams?.let { if (v.isAttachedToWindow) wm.updateViewLayout(v, placeStrip(it, f)) }
+    }
+
+    private fun placeStrip(p: WindowManager.LayoutParams, frame: StripFrame): WindowManager.LayoutParams {
+        val s = stripScale()
+        val gut = Math.round(16f * s)
+        p.x = gut
+        p.width = (screenW() - 2 * gut).coerceAtLeast(1)
+        p.height = stripBodyHeight(frame.row != null)
+        p.y = stripTop(p.height)
+        return p
+    }
+
+    /** [StripPlace.top] with the live nav bar / status bar insets and the focused editable field (IME dictation). */
+    private fun stripTop(stripH: Int): Int {
+        val navBottom = screenH() - navBarBottom()
+        val statusTop = statusBarTop()
+        val imeTop = imeTop()
+        val field = focusedFieldRect()
+        return StripPlace.top(screenH(), navBottom, statusTop, stripH, imeTop, field)
+    }
+
+    private fun navBarBottom(): Int = try {
+        wm.currentWindowMetrics.windowInsets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
+    } catch (_: Exception) { 0 }
+
+    private fun statusBarTop(): Int = try {
+        wm.currentWindowMetrics.windowInsets.getInsets(android.view.WindowInsets.Type.statusBars()).top
+    } catch (_: Exception) { 0 }
+
+    private fun imeTop(): Int? = try {
+        val r = android.graphics.Rect()
+        val w = svc.windows.firstOrNull { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+        if (w == null) null else { w.getBoundsInScreen(r); r.top }
+    } catch (_: Exception) { null }
+
+    private fun focusedFieldRect(): IntArray? {
+        return try {
+            val n = svc.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) ?: return null
+            if (!n.isEditable) return null
+            val r = android.graphics.Rect(); n.getBoundsInScreen(r)
+            intArrayOf(r.left, r.top, r.right, r.bottom)
+        } catch (_: Exception) { null }
     }
 
     /** Start moving: direction like "up", "down_left"; fast=true for loud hums. */

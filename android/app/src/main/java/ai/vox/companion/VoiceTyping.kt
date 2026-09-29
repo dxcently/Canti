@@ -137,6 +137,9 @@ class Dictation(
     private val logText: () -> Boolean,
     private val log: (Array<Pair<String, Any?>>) -> Unit,
     private val onStop: (why: String, status: String?) -> Unit = { _, _ -> },
+    private val onWords: (String) -> Unit = {},
+    private val onTyped: (String) -> Unit = {},
+    private val onQuiet: (Long) -> Unit = {},
     private val speechHoldMs: () -> Long = { SPEECH_HOLD_MS },
 ) {
     interface Typer {
@@ -200,12 +203,15 @@ class Dictation(
     /** The silence clock restarts on speech (a partial, a typed utterance). */
     private fun quiet() {
         silence?.invoke()
+        val deadline = scheduler.now() + SILENCE_MS
         silence = scheduler.schedule(SILENCE_MS) { stop("silence") }
+        onQuiet(deadline)
     }
 
     private fun listen() {
         if (!active) return
-        window.open(recognizer(), UTTERANCE_MS, onActivity = { kind -> if (active && kind == "partial") { lastWordsAt = scheduler.now(); quiet() } }) { d -> heard(d) }
+        window.open(recognizer(), UTTERANCE_MS, onActivity = { kind -> if (active && kind == "partial") { lastWordsAt = scheduler.now(); quiet() } },
+            onWords = { if (active) onWords(it) }) { d -> heard(d) }
     }
 
     private fun heard(d: ListenWindow.Done) {
@@ -220,7 +226,7 @@ class Dictation(
             if (text.isNotEmpty()) {
                 val r = typer.type(text)
                 utterances++
-                if (r.ok) chars += r.chars
+                if (r.ok) { chars += r.chars; onTyped(text) }
                 log(arrayOf("event" to "utterance", "why" to if (r.ok) "typed" else r.how, "chars" to r.chars,
                     "text" to if (logText()) text else null))
                 if (!r.ok) { stop(r.how); return }
