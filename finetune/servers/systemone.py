@@ -8,6 +8,9 @@ Models (the request's "model" field):
   jevk5        alibiserikbay/JevK5, also general. At most 16 options (its one-pass readout); more is a 422.
   vox-jevlike  our fine-tuned VOX student (jevlike scorer). It learned the VOX policy from labels, so it ignores
                `instructions` and option descriptions: it sees the state and the option texts only.
+  vox-jevlike-targets  the same scorer with its own checkpoint for the app's "target" question (settings
+               target_model): VOX_JEVLIKE_TARGET_CKPT, trained on the option text VOX_JEVLIKE_TARGET_FORMAT (v1 | v2 |
+               v2i, default v1), which /health declares so the app sends that text.
 Only `choice` questions are served; `score` and `noul` return 422 (VOX doesn't use them yet).
 
 Run (from finetune/):
@@ -76,10 +79,10 @@ class TeacherModel:
 
 
 class JevlikeModel:
-    def __init__(self) -> None:
-        ckpt = os.environ.get("VOX_JEVLIKE_CKPT")
+    def __init__(self, env: str = "VOX_JEVLIKE_CKPT", name: str = "vox-jevlike") -> None:
+        ckpt = os.environ.get(env)
         if not ckpt:
-            raise HTTPException(503, "vox-jevlike needs VOX_JEVLIKE_CKPT=<checkpoint .pt>")
+            raise HTTPException(503, f"{name} needs {env}=<checkpoint .pt>")
         spec = importlib.util.spec_from_file_location("jevlike_train", FINETUNE / "students/jevlike/train.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -109,8 +112,10 @@ def get_model(name: str):
             _models[name] = TeacherModel("jevk5")
         elif name == "vox-jevlike":
             _models[name] = JevlikeModel()
+        elif name == "vox-jevlike-targets":
+            _models[name] = JevlikeModel("VOX_JEVLIKE_TARGET_CKPT", name)
         else:
-            raise HTTPException(404, f"unknown model {name!r}; have decider-4b, jevk5, vox-jevlike")
+            raise HTTPException(404, f"unknown model {name!r}; have decider-4b, jevk5, vox-jevlike, vox-jevlike-targets")
     return _models[name]
 
 
@@ -142,7 +147,11 @@ def systemone(req: Request) -> dict:
 def _option_format() -> str:
     """Target option text format the served target model was trained on (the app's OptionFormat.kt keys on this).
     VOX_VERDICT_RUN=<verdict run dir> reports that run's student.json "option_format"; otherwise, and for every model
-    served here today (all trained on v1 text), "v1". Only a model trained on v2 text may ever report "v2"."""
+    served here today (all trained on v1 text), "v1". Only a model trained on v2 text may ever report "v2".
+    VOX_JEVLIKE_TARGET_CKPT set: the target checkpoint's VOX_JEVLIKE_TARGET_FORMAT (v1 | v2 | v2i, default v1) wins."""
+    if os.environ.get("VOX_JEVLIKE_TARGET_CKPT"):
+        f = os.environ.get("VOX_JEVLIKE_TARGET_FORMAT", "v1")
+        return f if f in ("v1", "v2", "v2i") else "v1"
     run = os.environ.get("VOX_VERDICT_RUN")
     if not run:
         return "v1"
@@ -155,6 +164,7 @@ def _option_format() -> str:
 @app.get("/health")
 def health() -> dict:
     return {"device": DEVICE, "loaded": sorted(_models), "jevlike_ckpt": os.environ.get("VOX_JEVLIKE_CKPT"),
+            "jevlike_target_ckpt": os.environ.get("VOX_JEVLIKE_TARGET_CKPT"),
             "option_format": _option_format()}
 
 

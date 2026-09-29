@@ -609,23 +609,35 @@ def jev_local_systemone_vox_jevlike(c: Ctx):
             if name == "hiss" and o["decision"]["action"] == "back":
                 time.sleep(1.0)
                 assert c.vox.control("ping")["app"] != "ai.vox.fixture", "back did not leave the feed"
-        # click click click -> listen (the app, source app:listen), then the phrase "next" (screen tie-break: video feed -> swipe up)
+        # click click click -> listen: owned by the app (source app:listen, no state, no model request), then the phrase
+        # "next" (rules:phrase; screen tie-break: video feed -> swipe up)
         c.open(FEED)
-        o = c.act("click", "click", "click", timeout=200)
-        check("click click click", o, "listen_for_phrase")
-        if o["decision"]["action"] == "listen_for_phrase":
-            assert c.ev.wait(0, lambda e: e["ev"] == "listening" and e.get("state") == "open", 3)
+        m = c.ev.mark()
+        c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click"); time.sleep(0.15); c.vox.sounds("click")
+        r = c.ev.wait(m, lambda e: e["ev"] == "resolve", 2)
+        assert r and r["sequence"] == "click click click", r
+        d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("n") == r["n"], 2)
+        assert d and d["action"] == "listen_for_phrase" and d["source"] == "app:listen", d
+        if d["action"] == "listen_for_phrase":
+            assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 3)
             m = c.ev.mark()
             c.vox.phrase("next")
-            o2 = c.outcome(m, timeout=200)
-            check("phrase 'next'", o2, "swipe_up")
+            # a phrase has no resolve event: follow its state's n
+            st = c.ev.wait(m, lambda e: e["ev"] == "state", 200)
+            assert st, [e["ev"] for e in c.ev.since(m)]
+            o2 = {"state": st}
+            for name in ("decision", "exec"):
+                o2[name] = c.ev.wait(m, lambda e, name=name: e["ev"] == name and e.get("n") == st["n"], 200)
+                assert o2[name], f"no {name} event for the phrase"
+            # nav phrases are decided by the rules even in model mode (rules:phrase), so not a model answer
+            assert o2["decision"]["action"] == "swipe_up" and o2["decision"]["source"] == "rules:phrase", o2["decision"]
             if o2["decision"]["action"] == "swipe_up":
                 c.texts_until("feed_index", "Video 2 of 20")
         apps = [x[1] for x in lat]
         servers = [x[2] for x in lat]
         c.note(f"{len(lat)} requests: app-side median {statistics.median(apps):.0f} ms (max {max(apps)}), "
                f"server median {statistics.median(servers):.0f} ms (max {max(servers):.0f})")
-        assert len(lat) >= 10, lat
+        assert len(lat) >= 9, lat   # the 9 sound scenes (listen and the phrase are app/rules-owned)
         assert not wrong, f"{len(wrong)}/{len(lat)} wrong: {wrong}"
     finally:
         c.vox.control("config", decider="rules", http_timeout_ms=2000)
