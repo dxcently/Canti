@@ -4,11 +4,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The bundled range spec (extractor/prompts/range_v1.json) parsed into the recorder's plan. [build] mirrors
+ * The bundled range spec (extractor/prompts/range_v2.json) parsed into the recorder's plan. [build] mirrors
  * extractor/range_layout.build_plan exactly for profile `short` | `full`: the same order, the same
  * take_id `<block>-<cell_id>-r<rep>`, and the same cue / expect / cond / cond_id / rep / bg; backgrounds are their own
- * kind. The spec bytes are bundled by a Gradle copy task (asset `range/range_v1.json`); JVM tests read the extractor
- * file directly (`../../extractor/prompts/range_v1.json` from the module dir) rather than the asset.
+ * kind. The spec bytes are bundled by a Gradle copy task (asset `range/range_v2.json`); JVM tests read the extractor
+ * file directly (`../../extractor/prompts/range_v2.json` from the module dir) rather than the asset. Both `range_v1`
+ * (frozen) and `range_v2` load — old sessions keep their own spec.json, so the library reads v1 too.
  */
 object RangePlan {
     class Take(
@@ -39,6 +40,7 @@ object RangePlan {
     class Block(val id: String, val kind: String, val intro: String, val cells: List<Take>)
 
     class Plan(
+        val version: String,
         val profile: String,
         val blocks: List<Block>,
         val takes: List<Take>,
@@ -53,11 +55,15 @@ object RangePlan {
     /** The six condition keys in canonical order (range_layout.COND_KEYS). */
     val COND_KEYS = listOf("tone", "pitch", "speed", "loud", "dist", "gap")
 
+    /** The bundled spec asset path (copied from extractor/prompts/range_v2.json by the Gradle copy task). */
+    const val ASSET = "range/range_v2.json"
+
     /** Parses [bytes] (the spec JSON) and builds the [profile] plan. */
     fun parse(bytes: ByteArray, profile: String): Plan = parse(JSONObject(String(bytes, Charsets.UTF_8)), profile)
 
     fun parse(spec: JSONObject, profile: String): Plan {
-        require(spec.optString("version") == "range_v1") { "expected range_v1" }
+        val version = spec.optString("version")
+        require(version == "range_v1" || version == "range_v2") { "expected range_v1 or range_v2, got '$version'" }
         val profiles = spec.optJSONObject("profiles")
         val chosen: JSONObject = profiles?.optJSONObject(profile)
             ?: throw IllegalArgumentException("unknown profile '$profile'; the spec has ${profiles?.keys()?.asSequence()?.toList()}")
@@ -89,7 +95,7 @@ object RangePlan {
         val defaults = spec.optJSONObject("defaults") ?: JSONObject()
         val ratings = spec.optJSONObject("ratings") ?: JSONObject()
         val analysis = spec.optJSONObject("analysis") ?: JSONObject()
-        return Plan(profile, blocksOut, takesOut, defaults, ratings.optInt("min", 1), ratings.optInt("max", 5), analysis)
+        return Plan(version, profile, blocksOut, takesOut, defaults, ratings.optInt("min", 1), ratings.optInt("max", 5), analysis)
     }
 
     private fun take(c: JSONObject, block: String, kind: String, rep: Int): Take {

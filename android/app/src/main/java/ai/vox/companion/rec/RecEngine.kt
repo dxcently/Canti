@@ -47,6 +47,8 @@ class RecEngine(
         val scale: JSONObject?        // {low_hz, home_hz, high_hz} from the saved calibration, or null
         val appForeground: String
         val filesDir: File
+        /** [rec] Turn the recorder's 20 ms pitch ticks on/off, with the pitch ceiling [f0MaxHz] (hum 1100, whistle 2600). */
+        fun ticks(on: Boolean, f0MaxHz: Double) {}
     }
 
     companion object {
@@ -57,6 +59,10 @@ class RecEngine(
         const val MIN_FREE_BYTES = 200L * 1024 * 1024
         const val TICK_MS = 50L
         const val LEVEL_BARS = 40
+        /** [rec] The live pitch trace's tick width and the f0 ceiling per tone (joystick_v1.json calib_v2). */
+        const val LIVE_TICK_MS = 20L
+        const val WHISTLE_F0_MAX_HZ = 2600.0
+        const val HUM_F0_MAX_HZ = 1100.0
         private val SAFE_NAME = Regex("[A-Za-z0-9_-]+")
         private val QR_ID = Regex("[0-9]+")
     }
@@ -82,6 +88,9 @@ class RecEngine(
     private var lastEndFrame = 0L
     private var lastReason: String? = null
     private var lastF0Hz: Double? = null
+    private var lastLive: List<Double?>? = null          // the last take's live pitch trace (saved / no_sound)
+    private val liveTrace = ArrayList<Double?>()          // f0 Hz per 20 ms tick since GO, null when unvoiced
+    private var liveCap = 0                              // (max_s + 1) s of ticks
 
     private var lastCommandAt = 0L
     private var idleCloseCancel: (() -> Unit)? = null
@@ -142,6 +151,9 @@ class RecEngine(
             "rec_rate" -> rate(args)
             "rec_close" -> close("op")
             "rec_clear" -> clear(args)
+            "rec_delete" -> delete(args)
+            "rec_restore" -> restore(args)
+            "rec_trash_clear" -> trashClear(args)
             else -> mapOf("error" to "unknown recorder op '$method'")
         }
     }
@@ -167,7 +179,7 @@ class RecEngine(
             "top_hz" to (sc?.opt("high_hz") as? Number)?.toDouble()))
         session = s
         skipped = emptySet(); blockStart.clear()
-        lastSavedTake = null; lastSavedRow = null; lastReason = null; lastF0Hz = null
+        lastSavedTake = null; lastSavedRow = null; lastReason = null; lastF0Hz = null; lastLive = null
         state = "idle"; error = null; reason = null
         armIdleClose()
         log("open", mapOf("name" to name, "speaker" to spk, "profile" to prof))
@@ -184,6 +196,11 @@ class RecEngine(
         if (!metaFile.exists()) return mapOf("error" to "no such session: $n")
         val meta = JSONObject(metaFile.readText())
         val p = RangePlan.parse(specBytes, meta.optString("profile", "short"))
+        // A session bound to a different spec version is refused (no sitting appended, no file written); the
+        // byte-for-byte compare in RecSession.open still guards the same version.
+        val sessionVersion = meta.optString("spec")
+        if (sessionVersion.isNotEmpty() && sessionVersion != p.version)
+            return mapOf("error" to "This session was recorded with $sessionVersion; the app records ${p.version}. Start a new session.")
         val pre = Math.round(p.analysis.getDouble("pre_roll_s") * env.rate).toInt().coerceAtLeast(0)
         val s = RecSession(File(env.filesDir, "range/$n"), env.rate, env.micName, pre)
         try { s.open(specBytes, env.rate, env.micName) }
@@ -191,7 +208,7 @@ class RecEngine(
         session = s; name = n; plan = p; preFrames = pre; sRate = env.rate
         speaker = meta.optString("speaker", "self"); profile = p.profile
         skipped = s.skipped(s.sitting()); blockStart.clear()
-        lastSavedTake = null; lastSavedRow = null; lastReason = null; lastF0Hz = null
+        lastSavedTake = null; lastSavedRow = null; lastReason = null; lastF0Hz = null; lastLive = null
         state = "idle"; error = null; reason = null
         armIdleClose()
         log("open", mapOf("name" to n))
@@ -267,6 +284,13 @@ class RecEngine(
         }
         state = "recording"; recStarted = scheduler.now()
         run = TakeRun(take, go, gen, pre)
+        // [rec] live pitch: hum and whistle takes get ticks on (f0 ceiling per tone); clicks/hisses/backgrounds don't.
+        val tone = take.cond["tone"]
+        if (tone == "hum" || tone == "whistle") {
+            liveTrace.clear()
+            liveCap = (((take.maxS ?: 0.0) + 1.0) * 1000.0 / LIVE_TICK_MS).toInt().coerceAtLeast(1)
+            env.ticks(true, if (tone == "whistle") WHISTLE_F0_MAX_HZ else HUM_F0_MAX_HZ)
+        }
         tickCancel = scheduler.schedule(TICK_MS) { tick() }
         log("take", mapOf("take_id" to take.takeId, "event" to "go"))
         pushNow()
@@ -315,6 +339,8 @@ class RecEngine(
         lastSavedTake = take; lastSavedRow = row; lastReason = r.detector.reason
         lastGoFrame = r.goFrame; lastEndFrame = endFrame
         lastF0Hz = if (take.block == "range") medianF0(heard.window(r.genAtGo, fromMs, toMs)) else null
+        lastLive = if (take.cond["tone"] == "hum" || take.cond["tone"] == "whistle") liveTrace.toList() else null
+        ticksOff()
         run = null
         state = if (r.detector.noSound) "no_sound" else "saved"
         log("take", mapOf("take_id" to take.takeId, "event" to "saved", "reason" to r.detector.reason,
@@ -411,6 +437,77 @@ class RecEngine(
         return mapOf("ok" to true, "deleted" to mapOf("sessions" to gone, "quickrec" to qGone))
     }
 
+    // --- delete / restore / purge (contract T) -----------------------------------------------------------------------
+
+    /** The session dir + its own plan (its spec.json, so a v1 session parses as v1) for a named session. */
+    private fun sessionPlan(name: String): Pair<File, RangePlan.Plan>? {
+        val dir = File(env.filesDir, "range/$name")
+        val metaFile = File(dir, "session.json")
+        if (!metaFile.exists()) return null
+        val meta = JSONObject(metaFile.readText())
+        val specFile = File(dir, "spec.json")
+        val spec = if (specFile.exists()) specFile.readBytes() else specBytes
+        return try { dir to RangePlan.parse(spec, meta.optString("profile", "short")) } catch (e: Exception) { null }
+    }
+
+    private fun targetName(args: Map<String, Any?>): String? =
+        args["name"] as? String ?: session?.name
+
+    private fun delete(args: Map<String, Any?>): Map<String, Any?> {
+        val n = targetName(args) ?: return mapOf("ok" to false, "error" to "no session open; pass {name}")
+        val takeId = args["take_id"] as? String ?: return mapOf("ok" to false, "error" to "rec_delete needs {take_id}")
+        val scope = args["scope"] as? String ?: return mapOf("ok" to false, "error" to "rec_delete needs {scope}")
+        val attempt = (args["attempt"] as? Number)?.toInt()
+        val (dir, plan) = sessionPlan(n) ?: return mapOf("ok" to false, "error" to "no such session: $n")
+        // a delete of the take currently recording/countdown is refused
+        if (n == session?.name && (state == "recording" || state == "countdown") && current?.takeId == takeId)
+            return mapOf("ok" to false, "error" to "that take is recording; abort it first")
+        val t = plan.takeById(takeId)
+        val bgName = if (t == null) plan.takes.firstOrNull { it.kind == "backgrounds" && it.name == takeId }?.name else null
+        if (t == null && bgName == null) return mapOf("ok" to false, "error" to "unknown take_id '$takeId'")
+        val s = RecSession(dir, env.rate, env.micName, 0)
+        val delId = try {
+            when {
+                t != null && t.kind == "backgrounds" -> { if (scope != "take") return mapOf("ok" to false, "error" to "backgrounds delete uses scope \"take\""); s.deleteBackground(t.name!!) }
+                bgName != null -> { if (scope != "take") return mapOf("ok" to false, "error" to "backgrounds delete uses scope \"take\""); s.deleteBackground(bgName) }
+                else -> { if (scope != "take" && scope != "attempt") return mapOf("ok" to false, "error" to "bad delete scope"); s.delete(takeId, scope, attempt) }
+            }
+        } catch (e: IllegalArgumentException) { return mapOf("ok" to false, "error" to e.message) }
+        log("delete", mapOf("take_id" to takeId, "scope" to scope, "attempt" to (attempt ?: JSONObject.NULL), "del_id" to delId))
+        if (n == session?.name) {
+            // a delete of the take just saved: `next` points at it again (its effective row is gone) and no auto-advance
+            if (lastSavedTake?.takeId == takeId || lastSavedTake?.name == takeId) {
+                lastSavedTake = null; lastSavedRow = null; lastReason = null; lastF0Hz = null; lastLive = null
+                autoNextCancel?.invoke(); autoNextCancel = null
+                if (state == "saved") state = "idle"
+            }
+            pushNow()
+        }
+        return (if (n == session?.name) status() else linkedMapOf()) + linkedMapOf("ok" to true, "del_id" to delId)
+    }
+
+    private fun restore(args: Map<String, Any?>): Map<String, Any?> {
+        val n = targetName(args) ?: return mapOf("ok" to false, "error" to "no session open; pass {name}")
+        val delId = args["del_id"] as? String ?: return mapOf("ok" to false, "error" to "rec_restore needs {del_id}")
+        val (dir, _) = sessionPlan(n) ?: return mapOf("ok" to false, "error" to "no such session: $n")
+        val s = RecSession(dir, env.rate, env.micName, 0)
+        val key = try { s.restore(delId) } catch (e: IllegalArgumentException) { return mapOf("ok" to false, "error" to e.message) }
+        log("restore", mapOf("del_id" to delId, "take_id" to key))
+        if (n == session?.name) pushNow()
+        return (if (n == session?.name) status() else linkedMapOf()) + linkedMapOf("ok" to true, "del_id" to delId)
+    }
+
+    private fun trashClear(args: Map<String, Any?>): Map<String, Any?> {
+        val n = targetName(args) ?: return mapOf("ok" to false, "error" to "no session open; pass {name}")
+        val delIds = (args["del_ids"] as? List<*>)?.map { it.toString() }
+        val (dir, _) = sessionPlan(n) ?: return mapOf("ok" to false, "error" to "no such session: $n")
+        val s = RecSession(dir, env.rate, env.micName, 0)
+        val ids = s.purge(delIds)
+        log("purge", mapOf("del_ids" to ids, "take_id" to null))
+        if (n == session?.name) pushNow()
+        return (if (n == session?.name) status() else linkedMapOf()) + linkedMapOf("ok" to true, "del_ids" to ids)
+    }
+
     // --- capture events -------------------------------------------------------------------------------------------
 
     /** A capture stop / restart during a take aborts only that take; the session stays open (state error). An older
@@ -485,7 +582,18 @@ class RecEngine(
         out["level"] = levelMap()
         out["heard"] = heardMap()
         out["last"] = lastMap()
+        out["live"] = liveMap()
         return out
+    }
+
+    /** The live pitch trace: while recording it is the take's own trace; saved/no_sound keeps the last take's. */
+    private fun liveMap(): Map<String, Any?>? {
+        val trace = when (state) {
+            "recording" -> liveTrace.toList()
+            "saved", "no_sound" -> lastLive
+            else -> null
+        } ?: return null
+        return mapOf("trace_hz" to trace, "tick_ms" to LIVE_TICK_MS)
     }
 
     private fun takeMap(t: RangePlan.Take): Map<String, Any?> {
@@ -520,12 +628,16 @@ class RecEngine(
         val toMs = if (r != null) Long.MAX_VALUE else (lastGoFrame + lastEndFrame) * 1000 / sRate
         return heard.window(g, fromMs, toMs).map { h ->
             val did = heard.did(h)
-            mapOf("label" to h.label, "t_start_ms" to h.tStartMs, "t_end_ms" to h.tEndMs,
+            val label = ai.vox.companion.SoundFold.label(h.label)
+            val m = linkedMapOf<String, Any?>(
+                "label" to label, "t_start_ms" to h.tStartMs, "t_end_ms" to h.tEndMs,
                 "rel_ms" to (h.tStartMs - goFrame * 1000 / sRate),
                 "dur_ms" to (h.tEndMs - h.tStartMs), "pitch16" to h.pitch16, "f0_hz" to h.f0Hz,
                 "dropped" to h.dropped, "gated" to h.gated, "relabel" to h.relabel,
                 "did" to did?.let { mapOf("n" to it.n, "sequence" to it.sequence, "action" to it.action, "ok" to it.ok) },
                 "did_text" to heard.didText(h, did))
+            if (label != h.label) m["raw_label"] = h.label   // a pop folded to click keeps its raw label
+            m
         }
     }
 
@@ -566,8 +678,17 @@ class RecEngine(
         countdownCancel?.invoke(); countdownCancel = null
         autoNextCancel?.invoke(); autoNextCancel = null
         run = null
+        ticksOff()
         if (reason != null) { this.reason = reason; log("abort", mapOf("reason" to reason)) }
     }
+
+    /** [rec] The live pitch trace since GO: one entry per 20 ms tick (null = unvoiced), capped at (max_s + 1) s. */
+    fun onTick(f0Hz: Double?, levelDb: Double?) {
+        if (state != "recording" || liveTrace.size >= liveCap) return
+        liveTrace.add(f0Hz)
+    }
+
+    private fun ticksOff() { env.ticks(false, HUM_F0_MAX_HZ) }
 
     /** Every take of [block] is recorded or skipped this sitting and the block has no rating yet (state "rate"). */
     private fun needsRating(block: String): Boolean {

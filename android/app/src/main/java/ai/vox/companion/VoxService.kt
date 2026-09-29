@@ -287,9 +287,9 @@ class VoxService : AccessibilityService() {
     // [rec] The in-app test recorder + quick record (package ai.vox.companion.rec), wired only while the gate is on.
     private fun setupRec(scheduler: Scheduler) {
         val m = mic ?: return
-        val spec = assets.open("range/range_v1.json").use { it.readBytes() }
+        val spec = assets.open(ai.vox.companion.rec.RangePlan.ASSET).use { it.readBytes() }
         val push: (Map<String, Any?>) -> Unit = { st -> recSink?.invoke(st); Unit }
-        m.recorderOpen = { rec?.recording == true }   // the §3 "recording" drop reads the open session live
+        m.recDrop = { ai.vox.companion.rec.RecDrops.reason(rec?.recording == true) }   // the §3 "recording" drop
         val env = object : ai.vox.companion.rec.RecEngine.Env {
             override val rate get() = settings.mic.rate
             override val source get() = settings.mic.source
@@ -304,6 +304,22 @@ class VoxService : AccessibilityService() {
             override val scale get() = recScale()
             override val appForeground get() = currentApp()
             override val filesDir get() = this@VoxService.filesDir
+            override fun ticks(on: Boolean, f0MaxHz: Double) {
+                val m = mic ?: return
+                m.recTickSink = if (!on) null else { rows, n, _ ->
+                    val copy = rows.copyOf(n * ai.vox.companion.audio.VxNative.TICK_COLS)
+                    main.post {
+                        val cols = ai.vox.companion.audio.VxNative.TICK_COLS
+                        for (i in 0 until n) {
+                            val o = i * cols
+                            val voiced = copy[o + ai.vox.companion.audio.VxNative.TICK_VOICED] > 0.5
+                            rec?.onTick(if (voiced) copy[o + ai.vox.companion.audio.VxNative.TICK_F0] else null,
+                                copy[o + ai.vox.companion.audio.VxNative.TICK_DB])
+                        }
+                    }
+                }
+                m.setRecTicks(on, f0MaxHz)
+            }
         }
         rec = ai.vox.companion.rec.RecEngine(scheduler, { System.currentTimeMillis() }, m.ring, m.heard, spec, env, push)
         quick = ai.vox.companion.rec.QuickRec(scheduler, { System.currentTimeMillis() }, m.ring, m.heard,
@@ -347,16 +363,17 @@ class VoxService : AccessibilityService() {
 
     private fun recList(): Map<String, Any?> {
         val root = java.io.File(filesDir, "range")
-        val spec = assets.open("range/range_v1.json").use { it.readBytes() }
+        val spec = assets.open(ai.vox.companion.rec.RangePlan.ASSET).use { it.readBytes() }
+        val bundledVersion = org.json.JSONObject(String(spec, Charsets.UTF_8)).optString("version")
         val openName = rec?.openName
         val sessions = (if (root.isDirectory) root.listFiles()?.filter { it.isDirectory } ?: emptyList() else emptyList())
-            .map { d -> sessionSummary(d, spec, openName) }
+            .map { d -> sessionSummary(d, spec, bundledVersion, openName) }
             .sortedByDescending { it["name"] as String }
         return mapOf("enabled" to true, "sessions" to sessions, "free_bytes" to filesDir.usableSpace,
             "quickrec" to ai.vox.companion.rec.quickrecSummary(filesDir))
     }
 
-    private fun sessionSummary(d: java.io.File, spec: ByteArray, openName: String?): Map<String, Any?> {
+    private fun sessionSummary(d: java.io.File, spec: ByteArray, bundledVersion: String, openName: String?): Map<String, Any?> {
         val meta = try { org.json.JSONObject(java.io.File(d, "session.json").readText()) } catch (e: Exception) { org.json.JSONObject() }
         val profile = meta.optString("profile", "short")
         val plan = try { ai.vox.companion.rec.RangePlan.parse(spec, profile) } catch (e: Exception) { null }
@@ -374,7 +391,8 @@ class VoxService : AccessibilityService() {
         return mapOf("name" to d.name, "speaker" to meta.optString("speaker", ""), "profile" to profile,
             "mic" to meta.optString("mic", ""), "rate" to meta.optInt("rate", 0),
             "done" to done, "total" to total, "backgrounds_done" to bgDone, "backgrounds_total" to bgTotal,
-            "rated_blocks" to rated.toList(), "bytes" to bytes, "open" to (d.name == openName))
+            "rated_blocks" to rated.toList(), "bytes" to bytes, "open" to (d.name == openName),
+            "resumable" to (meta.optString("spec") == bundledVersion))
     }
 
     private fun readJsonl(f: java.io.File): List<org.json.JSONObject> =
@@ -1998,7 +2016,7 @@ class VoxService : AccessibilityService() {
             }
             // [rec] the in-app test recorder + quick record: flat replies like measure_*. Disabled when the gate is off.
             "rec_list", "rec_start", "rec_open", "rec_status", "rec_next", "rec_go", "rec_abort", "rec_skip",
-            "rec_redo_last", "rec_rate", "rec_close", "rec_clear",
+            "rec_redo_last", "rec_rate", "rec_close", "rec_clear", "rec_delete", "rec_restore", "rec_trash_clear",
             "qr_snap", "qr_pending", "qr_save", "qr_discard" -> {
                 if (!ai.vox.companion.rec.DevRec.enabled) { reply.put("ok", false).put("error", "recorder disabled") }
                 else {
