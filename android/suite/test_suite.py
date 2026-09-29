@@ -986,6 +986,7 @@ def followup_cant_undo_after_home(c: Ctx):
 @test
 def followup_no_visible_change_shrugs(c: Ctx):
     c.open(STATIC)
+    time.sleep(1.0)   # the previous test went home: let the fixture's window animation settle before the baseline
     m = c.ev.mark()
     o = c.act("click")
     assert o["confirm"]["result"] == "no visible change", o
@@ -1039,7 +1040,8 @@ def followup_the_one_below_taps_the_item_below(c: Ctx):
         f = c.ev.wait(m2, lambda e: e["ev"] == "followup" and e.get("result") == "tap", 3)
         assert f and f["kind"] == "direction" and f["dir"] == "below", [e["ev"] for e in c.ev.since(m2)]
         tap2 = c.ev.wait(m2, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
-        assert tap2 and "01 Vocabulary · L06" in tap2["option"], tap2
+        # L05 is expanded, so the row right below its "01 Vocabulary" is its own "02 Grammar"
+        assert tap2 and "02 Grammar · L05" in tap2["option"], tap2
     finally:
         srv.close()
 
