@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -90,13 +91,25 @@ def synthetic_audio(take, rate, spec):
         x = .15 * np.sin(2 * np.pi * np.cumsum(f0) / rate)
     else:
         rng = np.random.default_rng(19)
-        x = rng.normal(0, .1, n)
-        if sound in ('pop', 'click'):
-            x *= np.exp(-ts * 70)
-        if len(take['expect']) == 2:
-            second = rng.normal(0, .1, n) * np.exp(-np.maximum(0, ts - duration / 2) * 70)
-            second[ts < duration / 2] = 0
-            x += second
+        gap = {'quick': .15, 'normal': .35, 'slow': .8, 'na': 0}[take['cond']['gap']]
+        if len(take['expect']) == 1:
+            # a single click (a short decaying burst) or a hiss lasting the cell's target_s (0.3/0.5/0.7/1.0 s)
+            x = rng.normal(0, .1, n)
+            if sound == 'click':
+                x = x * np.exp(-ts * 70)
+        else:
+            # combos: n clicks spaced by the gap; 'hiss click' is a hiss, then the gap, then a click
+            x = np.zeros(n)
+            step = round(.3 * rate) + round(gap * rate)
+            at = 0
+            for s in take['expect']:
+                m = round(.3 * rate)
+                seg = rng.normal(0, .1, m)
+                if s == 'click':
+                    seg = seg * np.exp(-np.arange(m) / rate * 70)
+                end = min(at + m, n)
+                x[at:end] += seg[:end - at]
+                at += step
     # The calibration anchors have flat envelopes except short attack/release ramps.
     x *= np.minimum(1, np.minimum(np.arange(n), np.arange(n)[::-1]) / (rate * .02))
     return np.concatenate((np.zeros(round(a['pre_roll_s'] * rate)), x,
@@ -266,9 +279,12 @@ def main():
     p.add_argument('--auto', action='store_true')
     p.add_argument('--fake-speed', type=float, default=100)
     args = p.parse_args()
-    if args.rate is None:
-        args.rate = L.load_spec(args.spec)['defaults']['rate']
-    run_session(args)
+    try:
+        run_session(args)
+    except (ValueError, RuntimeError) as e:
+        print(f'range_session: {e}', file=sys.stderr)
+        return 2
+    return 0
 
 
 if __name__ == '__main__':

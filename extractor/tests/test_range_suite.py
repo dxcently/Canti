@@ -49,15 +49,18 @@ def bi(s, block_id):
 
 def test_spec_contract_grid():
     s = spec()
-    assert s['version'] == 'range_v1'
+    assert s['version'] == 'range_v2'
     assert s['analysis']['pre_roll_s'] == 1
     assert s['analysis']['post_roll_s'] == .5
     assert s['analysis']['f0_min_hz'] < 75
+    assert s['analysis']['long_hiss_ms'] == 700
+    assert s['defaults']['hiss_s'] == {'long05': 0.5, 'long07': 0.7, 'long10': 1.0}
     plan = L.build_plan(s)
     counts = {b['id']: sum(t['block'] == b['id'] for t in plan) for b in s['blocks']}
-    assert counts == {'range': 4, 'room': 1, 'contours': 5 * 14 * 2, 'discrete': 3 * 6 * 2,
+    assert counts == {'range': 4, 'room': 1, 'contours': 5 * 14 * 2, 'discrete': 36,
                       'combos': 4 * 5 * 2, 'backgrounds': 7, 'real-media-60': 12 * 2, 'real-talk': 12 * 2}
-    assert len(plan) == 276
+    assert len(plan) == 276   # 269 takes + 7 backgrounds
+    assert sum(t['kind'] == 'takes' for t in plan) == 269
     assert len({t['take_id'] for t in plan}) == len(plan)
     assert s['blocks'][0]['id'] == 'range'
     assert [c['anchor'] for c in s['blocks'][0]['cells']] == ['bottom_hz', 'home_hz', 'top_hz', 'whistle_home_hz']
@@ -93,6 +96,21 @@ def test_generated_spec_matches():
     exec(compile((L.SPEC_PATH.parent / 'make_range_spec.py').read_text(), 'make_range_spec.py', 'exec'),
          {'__file__': str(L.SPEC_PATH.parent / 'make_range_spec.py')})
     assert L.SPEC_PATH.read_bytes() == before
+
+
+def test_range_v1_is_frozen():
+    import hashlib
+    digest = hashlib.sha256((L.HERE / 'prompts' / 'range_v1.json').read_bytes()).hexdigest()
+    assert digest == 'd5d886e282714d0661dfbb3f64740b4afa2fb2995e074cbf5bd3cc93060d7101'
+
+
+def test_v1_still_loads_and_builds():
+    s = L.load_spec(L.HERE / 'prompts' / 'range_v1.json')
+    assert s['version'] == 'range_v1'
+    plan = L.build_plan(s)
+    assert len(plan) == 276
+    short = L.build_plan(s, profile='short')
+    assert len(short) == 42
 
 
 def test_desktop_fake_cli_full_layout_and_resume(tmp_path):
@@ -223,6 +241,17 @@ def test_changed_spec_rejected(tmp_path):
     s['analysis']['open_db'] += 1
     with pytest.raises(ValueError, match='spec differs'):
         L.open_session(out, s, 'desktop', 'fake', 16000, 1, True)
+
+
+def test_v1_session_resume_under_v2_is_refused_and_untouched(tmp_path):
+    out = tmp_path / 'v1session'
+    v1 = L.load_spec(L.HERE / 'prompts' / 'range_v1.json')
+    L.open_session(out, v1, 'desktop', 'fake', 16000, 1, True)
+    before = (out / 'session.json').read_bytes()
+    with pytest.raises(ValueError, match='was recorded with range_v1'):
+        L.open_session(out, spec(), 'desktop', 'fake', 16000, 1, True)
+    assert (out / 'session.json').read_bytes() == before   # no sitting appended, no file written
+    assert len(json.loads((out / 'session.json').read_text())['sittings']) == 1
 
 
 def test_disk_guard(tmp_path, monkeypatch):
@@ -559,7 +588,7 @@ def test_short_profile_counts_and_comparable_ids():
     counts = {}
     for t in short:
         counts[t['block']] = counts.get(t['block'], 0) + 1
-    assert counts == {'range': 4, 'room': 1, 'contours': 5 * 4 * 1, 'discrete': 3 * 3 * 1, 'combos': 4 * 1 * 2}
+    assert counts == {'range': 4, 'room': 1, 'contours': 5 * 4 * 1, 'discrete': 9, 'combos': 4 * 1 * 2}
     full = {t['take_id']: t for t in L.build_plan(s)}
     assert len(full) == 276 and L.build_plan(s, profile='full') == L.build_plan(s)
     # every short take is the full grid's take: same take_id, cell, cond_id
@@ -570,7 +599,8 @@ def test_short_profile_counts_and_comparable_ids():
     assert conds == {'hum-home-normal-normal-hand-na', 'hum-bottom-normal-normal-hand-na',
                      'hum-home-normal-soft-hand-na', 'hum-home-normal-normal-across-na'}
     assert {t['cond_id'] for t in short if t['block'] == 'discrete'} == {
-        'na-na-na-normal-hand-na', 'na-na-na-soft-hand-na', 'na-na-na-normal-across-na'}
+        'na-na-na-normal-hand-na', 'na-na-na-soft-hand-na', 'na-na-na-normal-across-na',
+        'na-na-long05-normal-hand-na', 'na-na-long07-normal-hand-na', 'na-na-long10-normal-hand-na'}
     assert {t['cond_id'] for t in short if t['block'] == 'combos'} == {'na-na-na-normal-hand-normal'}
 
 
@@ -626,7 +656,45 @@ def test_cues_fit_the_phone_prompt_overlay():
     limit = int(kt.split('const val MAX_CUE_CHARS = ')[1].split()[0])
     cues = [c['cue'] for b in spec()['blocks'] for c in b['cells']]
     assert max(map(len, cues)) <= limit
-    assert 'RISE · centre · about 0.6 s' in cues
+    assert 'Hum a RISE at your home note about 0.6 s' in cues
+    assert 'Make a LONG hiss about 0.7 s' in cues
+    assert 'Make three CLICKS' in cues   # clicks and combos carry no 'about N s'
+
+
+def _cue_key_words(cue):
+    """The ALL-CAPS words of 2+ letters (the key words the terminal/Flutter highlight); also flags stray capitals."""
+    words = cue.split()
+    keys = []
+    for i, w in enumerate(words):
+        alpha = [ch for ch in w if ch.isalpha()]
+        if not alpha:
+            continue
+        if all(ch.isupper() for ch in alpha) and len(alpha) >= 2:
+            keys.append(w)
+        elif i == 0 and alpha[0].isupper() and all(ch.islower() for ch in alpha[1:]):
+            continue   # sentence-initial capital
+        elif all(ch.islower() for ch in alpha):
+            continue
+        else:
+            raise AssertionError(f'stray capital in {cue!r}: {w!r}')
+    return keys
+
+
+def test_cues_contract_capitals_and_length():
+    s = spec()
+    for b in s['blocks']:
+        for cell in b['cells']:
+            cue = cell['cue']
+            assert len(cue) <= 100, (cell['cell_id'], len(cue))
+            keys = _cue_key_words(cue)
+            assert keys, cell['cell_id']   # at least one key word to notice
+    # a centre cell has one key word (the gesture); a one-change cell one (the change); a corner up to three
+    centre = s['blocks'][2]['cells'][0]   # contours centre
+    assert _cue_key_words(centre['cue']) == ['RISE']
+    one_change = s['blocks'][2]['cells'][1]   # pitch bottom
+    assert _cue_key_words(one_change['cue']) == ['LOWEST']
+    corner = s['blocks'][2]['cells'][10]   # soft + across + bottom
+    assert len(_cue_key_words(corner['cue'])) == 3
 
 
 def test_phone_short_profile_block_and_cue_retry(tmp_path, monkeypatch):
@@ -669,7 +737,7 @@ def test_room_step_in_both_profiles_right_after_range():
         assert [t['take_id'] for t in room] == ['room-room-r1']
         assert plan[plan.index(room[0]) - 1]['block'] == 'range'
     t = room[0]
-    assert (t['expect'], t['cond_id'], t['cue'], L.is_quiet(t)) == ([], 'na-na-na-na-na-na', 'Stay quiet for 3 seconds', True)
+    assert (t['expect'], t['cond_id'], t['cue'], L.is_quiet(t)) == ([], 'na-na-na-na-na-na', 'Stay QUIET for 3 seconds', True)
     joy = json.loads((L.HERE / 'prompts' / 'joystick_v1.json').read_text())['calib_v2']['room']
     # the fixed window covers the app's room window + settle
     assert t['max_s'] * 1000 >= joy['window_ms'] + joy['settle_ms']
@@ -705,4 +773,4 @@ def test_phone_room_take_is_a_fixed_window(tmp_path, monkeypatch):
     t = L.build_plan(s, ['room'])[0]
     an = s['analysis']
     assert row['dur_ms'] == pytest.approx((an['pre_roll_s'] + t['max_s'] + an['post_roll_s']) * 1000, abs=1)
-    assert [kw['text'] for op, kw in phone.calls if op == 'measure_cue'] == ['Stay quiet for 3 seconds']
+    assert [kw['text'] for op, kw in phone.calls if op == 'measure_cue'] == ['Stay QUIET for 3 seconds']

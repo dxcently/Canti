@@ -22,16 +22,17 @@ import wave
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SPEC_PATH = HERE / 'prompts' / 'range_v1.json'
+SPEC_PATH = HERE / 'prompts' / 'range_v2.json'
 COND_KEYS = ('tone', 'pitch', 'speed', 'loud', 'dist', 'gap')
 DEFAULT_PROFILE = 'full'
 DEFAULT_SPEAKER = 'self'
+SPEC_VERSIONS = ('range_v1', 'range_v2')
 
 
 def load_spec(path=SPEC_PATH):
     spec = json.loads(Path(path).read_text())
-    if spec['version'] != 'range_v1':
-        raise ValueError('expected range_v1')
+    if spec['version'] not in SPEC_VERSIONS:
+        raise ValueError('expected range_v1 or range_v2')
     ids, block_ids = set(), set()
     for block in spec['blocks']:
         safe_name(block['id'])
@@ -198,6 +199,10 @@ def open_session(out, spec, device, mic, rate, channels, synthetic=False, profil
     path = out / 'session.json'
     if path.exists():
         meta = json.loads(path.read_text())
+        if meta.get('spec') != spec['version']:
+            raise ValueError(f"session {out.name} was recorded with {meta.get('spec')}; this recorder runs "
+                             f"{spec['version']}. Start a new session, or pass --spec prompts/{meta.get('spec')}.json "
+                             "to finish it")
         if (meta['device'], meta['mic'], meta['rate'], meta['channels'], meta['synthetic']) != (
                 device, mic, rate, channels, synthetic):
             raise ValueError('session device/mic/format/source differs; use another session')
@@ -267,12 +272,22 @@ def getkey(auto=False, default='\n'):
     return line[:1] if line[:1] in ('r', 's', 'q') else '\n'
 
 
+def cue_text(cue, tty):
+    """The cue, with its ALL-CAPS key words in reverse video (ANSI) on a TTY, plain otherwise."""
+    if not tty:
+        return cue
+    return re.sub(r'(?<![A-Za-z0-9])[A-Z]{2,}(?![A-Za-z0-9])',
+                  lambda m: f'\x1b[7m{m.group(0)}\x1b[0m', cue)
+
+
 def operate(items, done, capture, auto=False, key=getkey):
     """Enter records; r repeats the last take; s skips for this sitting; q resumes later.
 
     Also offer a review prompt after the final take, so its redo is reachable.
     capture must persist each accepted attempt before returning.
     """
+    import sys
+    tty = sys.stdout.isatty()
     pending = [t for t in items if t['take_id'] not in done]
     previous = None
     redos = 0
@@ -281,7 +296,7 @@ def operate(items, done, capture, auto=False, key=getkey):
         if i == len(pending) and previous is None:
             break
         take = pending[i] if i < len(pending) else None
-        print(take['cue'] if take else 'Block complete. Enter to finish; r to redo last.')
+        print(cue_text(take['cue'], tty) if take else 'Block complete. Enter to finish; r to redo last.')
         print('Enter = record/continue · r = redo last · s = skip · q = quit')
         action = key(auto)
         if action == 'q':
@@ -289,7 +304,7 @@ def operate(items, done, capture, auto=False, key=getkey):
         if action == 'r':
             if previous is None:
                 continue
-            print('Redo: ' + previous['cue'])
+            print('Redo: ' + cue_text(previous['cue'], tty))
             capture(previous)
             redos += 1
             continue

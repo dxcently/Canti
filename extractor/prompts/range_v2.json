@@ -1,0 +1,3387 @@
+{
+  "version": "range_v2",
+  "about": "PRIVATE recorded range suite. One explicit grid for desktop and phone.",
+  "cond_keys": [
+    "tone",
+    "pitch",
+    "speed",
+    "loud",
+    "dist",
+    "gap"
+  ],
+  "cond_values": {
+    "tone": [
+      "hum",
+      "whistle",
+      "na"
+    ],
+    "pitch": [
+      "bottom",
+      "home",
+      "top",
+      "na"
+    ],
+    "speed": [
+      "slow",
+      "normal",
+      "quick",
+      "long05",
+      "long07",
+      "long10",
+      "na"
+    ],
+    "loud": [
+      "soft",
+      "normal",
+      "loud",
+      "na"
+    ],
+    "dist": [
+      "hand",
+      "table",
+      "across",
+      "na"
+    ],
+    "gap": [
+      "quick",
+      "normal",
+      "slow",
+      "na"
+    ]
+  },
+  "defaults": {
+    "rate": 16000,
+    "channels": 1,
+    "distances_cm": {
+      "hand": 25,
+      "table": 60,
+      "across": 150
+    },
+    "speed_s": {
+      "slow": 1.2,
+      "normal": 0.6,
+      "quick": 0.3
+    },
+    "gap_s": {
+      "quick": 0.15,
+      "normal": 0.35,
+      "slow": 0.8
+    },
+    "hiss_s": {
+      "long05": 0.5,
+      "long07": 0.7,
+      "long10": 1.0
+    }
+  },
+  "analysis": {
+    "pre_roll_s": 1,
+    "post_roll_s": 0.5,
+    "silence_s": 1,
+    "no_sound_s": 4,
+    "tick_s": 0.05,
+    "floor_window_s": 0.5,
+    "open_db": 8,
+    "close_db": 5,
+    "key_guard_s": 0.25,
+    "fs": 16000,
+    "win": 2048,
+    "hop": 320,
+    "f0_min_hz": 35,
+    "f0_max_hz": 2600,
+    "mpm_k": 0.88,
+    "clarity_min": 0.8,
+    "min_level_db": -55,
+    "snr_db": [
+      30,
+      20,
+      10,
+      5,
+      0,
+      -5
+    ],
+    "long_hiss_ms": 700
+  },
+  "live": {
+    "meter_margin_st": 1.5,
+    "meter_lines": 19,
+    "initial_scale_hz": [
+      35,
+      120,
+      2600
+    ]
+  },
+  "phone": {
+    "max_s": 1200
+  },
+  "ratings": {
+    "min": 1,
+    "max": 5
+  },
+  "blocks": [
+    {
+      "id": "range",
+      "kind": "takes",
+      "intro": "Measure your own comfortable range first.",
+      "cells": [
+        {
+          "cell_id": "bottom_hz",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-normal-hand-na",
+          "cue": "LOWEST comfortable hum; do not strain \u00b7 hold about 2 s",
+          "target_s": 2,
+          "max_s": 5,
+          "reps": 1,
+          "bg": null,
+          "anchor": "bottom_hz"
+        },
+        {
+          "cell_id": "home_hz",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "HOME note; a relaxed normal hum \u00b7 hold about 2 s",
+          "target_s": 2,
+          "max_s": 5,
+          "reps": 1,
+          "bg": null,
+          "anchor": "home_hz"
+        },
+        {
+          "cell_id": "top_hz",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-normal-hand-na",
+          "cue": "HIGHEST comfortable hum; do not strain \u00b7 hold about 2 s",
+          "target_s": 2,
+          "max_s": 5,
+          "reps": 1,
+          "bg": null,
+          "anchor": "top_hz"
+        },
+        {
+          "cell_id": "whistle_home_hz",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-normal-normal-hand-na",
+          "cue": "WHISTLE home; a relaxed whistle \u00b7 hold about 2 s",
+          "target_s": 2,
+          "max_s": 5,
+          "reps": 1,
+          "bg": null,
+          "anchor": "whistle_home_hz"
+        }
+      ]
+    },
+    {
+      "id": "room",
+      "kind": "takes",
+      "intro": "Room. Stay quiet for 3 seconds (no talking, humming or tapping): this measures the room's noise, like the app's calibration room step.",
+      "cells": [
+        {
+          "cell_id": "room",
+          "expect": [],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "na",
+            "dist": "na",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-na-na-na",
+          "cue": "Stay QUIET for 3 seconds",
+          "target_s": 3,
+          "max_s": 3.5,
+          "reps": 1,
+          "bg": null,
+          "quiet": true
+        }
+      ]
+    },
+    {
+      "id": "contours",
+      "kind": "takes",
+      "intro": "Contours. Centre = hum at your home note, normal speed (about 0.6 s), normal loudness, hand distance (about 25 cm); each prompt names only what differs. Pitch bottom/top are your measured lowest/highest hum; whistle uses your whistle home.",
+      "cells": [
+        {
+          "cell_id": "rise-hum-home-normal-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a RISE at your home note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-bottom-normal-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-normal-hand-na",
+          "cue": "Hum a rise starting at your LOWEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-top-normal-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-normal-hand-na",
+          "cue": "Hum a rise starting at your HIGHEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-home-slow-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "slow",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-slow-normal-hand-na",
+          "cue": "Hum a rise at your home note SLOWLY about 1.2 s",
+          "target_s": 1.2,
+          "max_s": 3.2,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-home-quick-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-normal-hand-na",
+          "cue": "Hum a rise at your home note QUICKLY about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-home-normal-soft-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-soft-hand-na",
+          "cue": "Hum a rise at your home note SOFTLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-home-normal-loud-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-loud-hand-na",
+          "cue": "Hum a rise at your home note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-home-normal-normal-table-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-table-na",
+          "cue": "Hum a rise at your home note at TABLE distance about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-home-normal-normal-across-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-across-na",
+          "cue": "Hum a rise at your home note ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-whistle-home-normal-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-normal-normal-hand-na",
+          "cue": "WHISTLE a rise at your whistle home about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-bottom-normal-soft-across-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-soft-across-na",
+          "cue": "Hum a rise starting at your LOWEST note SOFTLY ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-top-normal-loud-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-loud-hand-na",
+          "cue": "Hum a rise starting at your HIGHEST note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-hum-home-quick-soft-table-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "soft",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-soft-table-na",
+          "cue": "Hum a rise at your home note QUICKLY SOFTLY at TABLE distance about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "rise-whistle-home-quick-normal-across-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-quick-normal-across-na",
+          "cue": "WHISTLE a rise at your whistle home QUICKLY ACROSS the room about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-normal-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a FALL at your home note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-bottom-normal-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-normal-hand-na",
+          "cue": "Hum a fall starting at your LOWEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-top-normal-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-normal-hand-na",
+          "cue": "Hum a fall starting at your HIGHEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-slow-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "slow",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-slow-normal-hand-na",
+          "cue": "Hum a fall at your home note SLOWLY about 1.2 s",
+          "target_s": 1.2,
+          "max_s": 3.2,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-quick-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-normal-hand-na",
+          "cue": "Hum a fall at your home note QUICKLY about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-normal-soft-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-soft-hand-na",
+          "cue": "Hum a fall at your home note SOFTLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-normal-loud-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-loud-hand-na",
+          "cue": "Hum a fall at your home note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-normal-normal-table-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-table-na",
+          "cue": "Hum a fall at your home note at TABLE distance about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-normal-normal-across-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-across-na",
+          "cue": "Hum a fall at your home note ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-whistle-home-normal-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-normal-normal-hand-na",
+          "cue": "WHISTLE a fall at your whistle home about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-bottom-normal-soft-across-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-soft-across-na",
+          "cue": "Hum a fall starting at your LOWEST note SOFTLY ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-top-normal-loud-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-loud-hand-na",
+          "cue": "Hum a fall starting at your HIGHEST note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-hum-home-quick-soft-table-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "soft",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-soft-table-na",
+          "cue": "Hum a fall at your home note QUICKLY SOFTLY at TABLE distance about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "fall-whistle-home-quick-normal-across-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-quick-normal-across-na",
+          "cue": "WHISTLE a fall at your whistle home QUICKLY ACROSS the room about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-normal-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum an ARCH at your home note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-bottom-normal-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-normal-hand-na",
+          "cue": "Hum an arch starting at your LOWEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-top-normal-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-normal-hand-na",
+          "cue": "Hum an arch starting at your HIGHEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-slow-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "slow",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-slow-normal-hand-na",
+          "cue": "Hum an arch at your home note SLOWLY about 1.2 s",
+          "target_s": 1.2,
+          "max_s": 3.2,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-quick-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-normal-hand-na",
+          "cue": "Hum an arch at your home note QUICKLY about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-normal-soft-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-soft-hand-na",
+          "cue": "Hum an arch at your home note SOFTLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-normal-loud-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-loud-hand-na",
+          "cue": "Hum an arch at your home note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-normal-normal-table-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-table-na",
+          "cue": "Hum an arch at your home note at TABLE distance about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-normal-normal-across-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-across-na",
+          "cue": "Hum an arch at your home note ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-whistle-home-normal-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-normal-normal-hand-na",
+          "cue": "WHISTLE an arch at your whistle home about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-bottom-normal-soft-across-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-soft-across-na",
+          "cue": "Hum an arch starting at your LOWEST note SOFTLY ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-top-normal-loud-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-loud-hand-na",
+          "cue": "Hum an arch starting at your HIGHEST note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-hum-home-quick-soft-table-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "soft",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-soft-table-na",
+          "cue": "Hum an arch at your home note QUICKLY SOFTLY at TABLE distance about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "arch-whistle-home-quick-normal-across-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-quick-normal-across-na",
+          "cue": "WHISTLE an arch at your whistle home QUICKLY ACROSS the room about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-normal-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a DIP at your home note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-bottom-normal-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-normal-hand-na",
+          "cue": "Hum a dip starting at your LOWEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-top-normal-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-normal-hand-na",
+          "cue": "Hum a dip starting at your HIGHEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-slow-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "slow",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-slow-normal-hand-na",
+          "cue": "Hum a dip at your home note SLOWLY about 1.2 s",
+          "target_s": 1.2,
+          "max_s": 3.2,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-quick-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-normal-hand-na",
+          "cue": "Hum a dip at your home note QUICKLY about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-normal-soft-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-soft-hand-na",
+          "cue": "Hum a dip at your home note SOFTLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-normal-loud-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-loud-hand-na",
+          "cue": "Hum a dip at your home note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-normal-normal-table-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-table-na",
+          "cue": "Hum a dip at your home note at TABLE distance about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-normal-normal-across-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-across-na",
+          "cue": "Hum a dip at your home note ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-whistle-home-normal-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-normal-normal-hand-na",
+          "cue": "WHISTLE a dip at your whistle home about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-bottom-normal-soft-across-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-soft-across-na",
+          "cue": "Hum a dip starting at your LOWEST note SOFTLY ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-top-normal-loud-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-loud-hand-na",
+          "cue": "Hum a dip starting at your HIGHEST note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-hum-home-quick-soft-table-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "soft",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-soft-table-na",
+          "cue": "Hum a dip at your home note QUICKLY SOFTLY at TABLE distance about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "dip-whistle-home-quick-normal-across-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-quick-normal-across-na",
+          "cue": "WHISTLE a dip at your whistle home QUICKLY ACROSS the room about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-normal-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a FLAT note at your home note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-bottom-normal-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-normal-hand-na",
+          "cue": "Hum a flat note starting at your LOWEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-top-normal-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-normal-hand-na",
+          "cue": "Hum a flat note starting at your HIGHEST note about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-slow-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "slow",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-slow-normal-hand-na",
+          "cue": "Hum a flat note at your home note SLOWLY about 1.2 s",
+          "target_s": 1.2,
+          "max_s": 3.2,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-quick-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-normal-hand-na",
+          "cue": "Hum a flat note at your home note QUICKLY about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-normal-soft-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-soft-hand-na",
+          "cue": "Hum a flat note at your home note SOFTLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-normal-loud-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-loud-hand-na",
+          "cue": "Hum a flat note at your home note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-normal-normal-table-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-table-na",
+          "cue": "Hum a flat note at your home note at TABLE distance about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-normal-normal-across-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-across-na",
+          "cue": "Hum a flat note at your home note ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-whistle-home-normal-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-normal-normal-hand-na",
+          "cue": "WHISTLE a flat note at your whistle home about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-bottom-normal-soft-across-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "bottom",
+            "speed": "normal",
+            "loud": "soft",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "hum-bottom-normal-soft-across-na",
+          "cue": "Hum a flat note starting at your LOWEST note SOFTLY ACROSS the room about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-top-normal-loud-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "top",
+            "speed": "normal",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-top-normal-loud-hand-na",
+          "cue": "Hum a flat note starting at your HIGHEST note LOUDLY about 0.6 s",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-hum-home-quick-soft-table-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "soft",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-quick-soft-table-na",
+          "cue": "Hum a flat note at your home note QUICKLY SOFTLY at TABLE distance about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "flat-whistle-home-quick-normal-across-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "whistle",
+            "pitch": "home",
+            "speed": "quick",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "whistle-home-quick-normal-across-na",
+          "cue": "WHISTLE a flat note at your whistle home QUICKLY ACROSS the room about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        }
+      ]
+    },
+    {
+      "id": "discrete",
+      "kind": "takes",
+      "intro": "One mouth sound per GO. Centre = normal loudness at hand distance (about 25 cm); each prompt names only what differs. A click is one tongue click; a hiss is a short tss (about 0.3 s), or a LONG hiss (about 0.5, 0.7 or 1 s, the cursor-listen sound).",
+      "cells": [
+        {
+          "cell_id": "click-na-na-na-normal-hand-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-hand-na",
+          "cue": "Make a CLICK",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-na-na-na-soft-hand-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-soft-hand-na",
+          "cue": "Make a click SOFTLY",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-na-na-na-loud-hand-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-loud-hand-na",
+          "cue": "Make a click LOUDLY",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-na-na-na-normal-table-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-table-na",
+          "cue": "Make a click at TABLE distance",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-na-na-na-normal-across-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-across-na",
+          "cue": "Make a click ACROSS the room",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-na-na-na-soft-across-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-soft-across-na",
+          "cue": "Make a click SOFTLY ACROSS the room",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-na-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-hand-na",
+          "cue": "Make a HISS about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-na-soft-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-soft-hand-na",
+          "cue": "Make a hiss SOFTLY about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-na-loud-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "loud",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-loud-hand-na",
+          "cue": "Make a hiss LOUDLY about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-na-normal-table-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "table",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-table-na",
+          "cue": "Make a hiss at TABLE distance about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-na-normal-across-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-across-na",
+          "cue": "Make a hiss ACROSS the room about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-na-soft-across-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-soft-across-na",
+          "cue": "Make a hiss SOFTLY ACROSS the room about 0.3 s",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-long05-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long05",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long05-normal-hand-na",
+          "cue": "Make a LONG hiss about 0.5 s",
+          "target_s": 0.5,
+          "max_s": 2.5,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-long05-normal-across-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long05",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long05-normal-across-na",
+          "cue": "Make a LONG hiss ACROSS the room about 0.5 s",
+          "target_s": 0.5,
+          "max_s": 2.5,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-long07-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long07",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long07-normal-hand-na",
+          "cue": "Make a LONG hiss about 0.7 s",
+          "target_s": 0.7,
+          "max_s": 2.7,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-long07-normal-across-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long07",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long07-normal-across-na",
+          "cue": "Make a LONG hiss ACROSS the room about 0.7 s",
+          "target_s": 0.7,
+          "max_s": 2.7,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-long10-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long10",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long10-normal-hand-na",
+          "cue": "Make a LONG hiss about 1 s",
+          "target_s": 1.0,
+          "max_s": 3.0,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-na-na-long10-normal-across-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long10",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long10-normal-across-na",
+          "cue": "Make a LONG hiss ACROSS the room about 1 s",
+          "target_s": 1.0,
+          "max_s": 3.0,
+          "reps": 2,
+          "bg": null
+        }
+      ]
+    },
+    {
+      "id": "combos",
+      "kind": "takes",
+      "intro": "Two or three sounds per GO. Centre = a normal gap (about 0.35 s), normal loudness, hand distance; each prompt names only what differs. Keep the requested gap.",
+      "cells": [
+        {
+          "cell_id": "click-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make two CLICKS",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-na-na-na-normal-hand-quick",
+          "expect": [
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "quick"
+          },
+          "cond_id": "na-na-na-normal-hand-quick",
+          "cue": "Make two clicks with a QUICK gap",
+          "target_s": 0.75,
+          "max_s": 2.75,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-na-na-na-normal-hand-slow",
+          "expect": [
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "slow"
+          },
+          "cond_id": "na-na-na-normal-hand-slow",
+          "cue": "Make two clicks with a SLOW gap",
+          "target_s": 1.4,
+          "max_s": 3.4,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-na-na-na-normal-across-normal",
+          "expect": [
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-across-normal",
+          "cue": "Make two clicks ACROSS the room",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-na-na-na-soft-hand-normal",
+          "expect": [
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-soft-hand-normal",
+          "cue": "Make two clicks SOFTLY",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make three CLICKS",
+          "target_s": 1.5999999999999999,
+          "max_s": 3.5999999999999996,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-click-na-na-na-normal-hand-quick",
+          "expect": [
+            "click",
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "quick"
+          },
+          "cond_id": "na-na-na-normal-hand-quick",
+          "cue": "Make three clicks with a QUICK gap",
+          "target_s": 1.2,
+          "max_s": 3.2,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-click-na-na-na-normal-hand-slow",
+          "expect": [
+            "click",
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "slow"
+          },
+          "cond_id": "na-na-na-normal-hand-slow",
+          "cue": "Make three clicks with a SLOW gap",
+          "target_s": 2.5,
+          "max_s": 4.5,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-click-na-na-na-normal-across-normal",
+          "expect": [
+            "click",
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-across-normal",
+          "cue": "Make three clicks ACROSS the room",
+          "target_s": 1.5999999999999999,
+          "max_s": 3.5999999999999996,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-click-click-na-na-na-soft-hand-normal",
+          "expect": [
+            "click",
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-soft-hand-normal",
+          "cue": "Make three clicks SOFTLY",
+          "target_s": 1.5999999999999999,
+          "max_s": 3.5999999999999996,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "hiss",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make a HISS then a click",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-click-na-na-na-normal-hand-quick",
+          "expect": [
+            "hiss",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "quick"
+          },
+          "cond_id": "na-na-na-normal-hand-quick",
+          "cue": "Make a hiss then a click with a QUICK gap",
+          "target_s": 0.75,
+          "max_s": 2.75,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-click-na-na-na-normal-hand-slow",
+          "expect": [
+            "hiss",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "slow"
+          },
+          "cond_id": "na-na-na-normal-hand-slow",
+          "cue": "Make a hiss then a click with a SLOW gap",
+          "target_s": 1.4,
+          "max_s": 3.4,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-click-na-na-na-normal-across-normal",
+          "expect": [
+            "hiss",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-across-normal",
+          "cue": "Make a hiss then a click ACROSS the room",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "hiss-click-na-na-na-soft-hand-normal",
+          "expect": [
+            "hiss",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-soft-hand-normal",
+          "cue": "Make a hiss then a click SOFTLY",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-hiss-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make a click then a HISS",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-hiss-na-na-na-normal-hand-quick",
+          "expect": [
+            "click",
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "quick"
+          },
+          "cond_id": "na-na-na-normal-hand-quick",
+          "cue": "Make a click then a hiss with a QUICK gap",
+          "target_s": 0.75,
+          "max_s": 2.75,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-hiss-na-na-na-normal-hand-slow",
+          "expect": [
+            "click",
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "slow"
+          },
+          "cond_id": "na-na-na-normal-hand-slow",
+          "cue": "Make a click then a hiss with a SLOW gap",
+          "target_s": 1.4,
+          "max_s": 3.4,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-hiss-na-na-na-normal-across-normal",
+          "expect": [
+            "click",
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "across",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-across-normal",
+          "cue": "Make a click then a hiss ACROSS the room",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        },
+        {
+          "cell_id": "click-hiss-na-na-na-soft-hand-normal",
+          "expect": [
+            "click",
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "soft",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-soft-hand-normal",
+          "cue": "Make a click then a hiss SOFTLY",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": null
+        }
+      ]
+    },
+    {
+      "id": "backgrounds",
+      "kind": "backgrounds",
+      "intro": "Remain silent for each 60 second recording.",
+      "cells": [
+        {
+          "cell_id": "media-30",
+          "name": "media-30",
+          "kind": "media",
+          "level": 30,
+          "seconds": 60,
+          "reps": 1,
+          "cue": "PLAY a reel or short on phone or laptop speakers at 30%; stay silent for 60 s"
+        },
+        {
+          "cell_id": "media-60",
+          "name": "media-60",
+          "kind": "media",
+          "level": 60,
+          "seconds": 60,
+          "reps": 1,
+          "cue": "PLAY a reel or short on phone or laptop speakers at 60%; stay silent for 60 s"
+        },
+        {
+          "cell_id": "media-90",
+          "name": "media-90",
+          "kind": "media",
+          "level": 90,
+          "seconds": 60,
+          "reps": 1,
+          "cue": "PLAY a reel or short on phone or laptop speakers at 90%; stay silent for 60 s"
+        },
+        {
+          "cell_id": "tv",
+          "name": "tv",
+          "kind": "tv",
+          "level": null,
+          "seconds": 60,
+          "reps": 1,
+          "cue": "PLAY tv or music across the room; stay silent for 60 s"
+        },
+        {
+          "cell_id": "fan",
+          "name": "fan",
+          "kind": "fan",
+          "level": null,
+          "seconds": 60,
+          "reps": 1,
+          "cue": "RUN a fan; stay silent for 60 s"
+        },
+        {
+          "cell_id": "talk",
+          "name": "talk",
+          "kind": "talk",
+          "level": null,
+          "seconds": 60,
+          "reps": 1,
+          "cue": "PLAY people talking (a podcast); stay silent for 60 s"
+        },
+        {
+          "cell_id": "typing-kitchen",
+          "name": "typing-kitchen",
+          "kind": "other",
+          "level": null,
+          "seconds": 60,
+          "reps": 1,
+          "cue": "MAKE typing or kitchen sounds; stay silent for 60 s"
+        }
+      ]
+    },
+    {
+      "id": "real-media-60",
+      "kind": "takes",
+      "intro": "Keep media-60 playing throughout. Do each centre gesture and combo, twice.",
+      "cells": [
+        {
+          "cell_id": "rise-hum-home-normal-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a RISE at your home note about 0.6 s \u00b7 with media-60 playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "fall-hum-home-normal-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a FALL at your home note about 0.6 s \u00b7 with media-60 playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "arch-hum-home-normal-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum an ARCH at your home note about 0.6 s \u00b7 with media-60 playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "dip-hum-home-normal-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a DIP at your home note about 0.6 s \u00b7 with media-60 playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "flat-hum-home-normal-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a FLAT note at your home note about 0.6 s \u00b7 with media-60 playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "click-na-na-na-normal-hand-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-hand-na",
+          "cue": "Make a CLICK \u00b7 with media-60 playing",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "hiss-na-na-na-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-hand-na",
+          "cue": "Make a HISS about 0.3 s \u00b7 with media-60 playing",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "hiss-na-na-long10-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long10",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long10-normal-hand-na",
+          "cue": "Make a LONG hiss about 1 s \u00b7 with media-60 playing",
+          "target_s": 1.0,
+          "max_s": 3.0,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "click-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make two CLICKS \u00b7 with media-60 playing",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "click-click-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make three CLICKS \u00b7 with media-60 playing",
+          "target_s": 1.5999999999999999,
+          "max_s": 3.5999999999999996,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "hiss-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "hiss",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make a HISS then a click \u00b7 with media-60 playing",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        },
+        {
+          "cell_id": "click-hiss-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make a click then a HISS \u00b7 with media-60 playing",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": {
+            "name": "media-60",
+            "kind": "media",
+            "level": 60
+          }
+        }
+      ]
+    },
+    {
+      "id": "real-talk",
+      "kind": "takes",
+      "intro": "Keep talk playing throughout. Do each centre gesture and combo, twice.",
+      "cells": [
+        {
+          "cell_id": "rise-hum-home-normal-normal-hand-na",
+          "expect": [
+            "rise"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a RISE at your home note about 0.6 s \u00b7 with talk playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "fall-hum-home-normal-normal-hand-na",
+          "expect": [
+            "fall"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a FALL at your home note about 0.6 s \u00b7 with talk playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "arch-hum-home-normal-normal-hand-na",
+          "expect": [
+            "arch"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum an ARCH at your home note about 0.6 s \u00b7 with talk playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "dip-hum-home-normal-normal-hand-na",
+          "expect": [
+            "dip"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a DIP at your home note about 0.6 s \u00b7 with talk playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "flat-hum-home-normal-normal-hand-na",
+          "expect": [
+            "flat"
+          ],
+          "cond": {
+            "tone": "hum",
+            "pitch": "home",
+            "speed": "normal",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "hum-home-normal-normal-hand-na",
+          "cue": "Hum a FLAT note at your home note about 0.6 s \u00b7 with talk playing",
+          "target_s": 0.6,
+          "max_s": 2.6,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "click-na-na-na-normal-hand-na",
+          "expect": [
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-hand-na",
+          "cue": "Make a CLICK \u00b7 with talk playing",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "hiss-na-na-na-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-na-normal-hand-na",
+          "cue": "Make a HISS about 0.3 s \u00b7 with talk playing",
+          "target_s": 0.3,
+          "max_s": 2.3,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "hiss-na-na-long10-normal-hand-na",
+          "expect": [
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "long10",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "na"
+          },
+          "cond_id": "na-na-long10-normal-hand-na",
+          "cue": "Make a LONG hiss about 1 s \u00b7 with talk playing",
+          "target_s": 1.0,
+          "max_s": 3.0,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "click-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make two CLICKS \u00b7 with talk playing",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "click-click-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "click",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make three CLICKS \u00b7 with talk playing",
+          "target_s": 1.5999999999999999,
+          "max_s": 3.5999999999999996,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "hiss-click-na-na-na-normal-hand-normal",
+          "expect": [
+            "hiss",
+            "click"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make a HISS then a click \u00b7 with talk playing",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        },
+        {
+          "cell_id": "click-hiss-na-na-na-normal-hand-normal",
+          "expect": [
+            "click",
+            "hiss"
+          ],
+          "cond": {
+            "tone": "na",
+            "pitch": "na",
+            "speed": "na",
+            "loud": "normal",
+            "dist": "hand",
+            "gap": "normal"
+          },
+          "cond_id": "na-na-na-normal-hand-normal",
+          "cue": "Make a click then a HISS \u00b7 with talk playing",
+          "target_s": 0.95,
+          "max_s": 2.95,
+          "reps": 2,
+          "bg": {
+            "name": "talk",
+            "kind": "talk",
+            "level": null
+          }
+        }
+      ]
+    }
+  ],
+  "profiles": {
+    "full": {
+      "about": "The whole grid, the default.",
+      "blocks": [
+        {
+          "id": "range",
+          "cells": [
+            "bottom_hz",
+            "home_hz",
+            "top_hz",
+            "whistle_home_hz"
+          ],
+          "reps": null
+        },
+        {
+          "id": "room",
+          "cells": [
+            "room"
+          ],
+          "reps": null
+        },
+        {
+          "id": "contours",
+          "cells": [
+            "rise-hum-home-normal-normal-hand-na",
+            "rise-hum-bottom-normal-normal-hand-na",
+            "rise-hum-top-normal-normal-hand-na",
+            "rise-hum-home-slow-normal-hand-na",
+            "rise-hum-home-quick-normal-hand-na",
+            "rise-hum-home-normal-soft-hand-na",
+            "rise-hum-home-normal-loud-hand-na",
+            "rise-hum-home-normal-normal-table-na",
+            "rise-hum-home-normal-normal-across-na",
+            "rise-whistle-home-normal-normal-hand-na",
+            "rise-hum-bottom-normal-soft-across-na",
+            "rise-hum-top-normal-loud-hand-na",
+            "rise-hum-home-quick-soft-table-na",
+            "rise-whistle-home-quick-normal-across-na",
+            "fall-hum-home-normal-normal-hand-na",
+            "fall-hum-bottom-normal-normal-hand-na",
+            "fall-hum-top-normal-normal-hand-na",
+            "fall-hum-home-slow-normal-hand-na",
+            "fall-hum-home-quick-normal-hand-na",
+            "fall-hum-home-normal-soft-hand-na",
+            "fall-hum-home-normal-loud-hand-na",
+            "fall-hum-home-normal-normal-table-na",
+            "fall-hum-home-normal-normal-across-na",
+            "fall-whistle-home-normal-normal-hand-na",
+            "fall-hum-bottom-normal-soft-across-na",
+            "fall-hum-top-normal-loud-hand-na",
+            "fall-hum-home-quick-soft-table-na",
+            "fall-whistle-home-quick-normal-across-na",
+            "arch-hum-home-normal-normal-hand-na",
+            "arch-hum-bottom-normal-normal-hand-na",
+            "arch-hum-top-normal-normal-hand-na",
+            "arch-hum-home-slow-normal-hand-na",
+            "arch-hum-home-quick-normal-hand-na",
+            "arch-hum-home-normal-soft-hand-na",
+            "arch-hum-home-normal-loud-hand-na",
+            "arch-hum-home-normal-normal-table-na",
+            "arch-hum-home-normal-normal-across-na",
+            "arch-whistle-home-normal-normal-hand-na",
+            "arch-hum-bottom-normal-soft-across-na",
+            "arch-hum-top-normal-loud-hand-na",
+            "arch-hum-home-quick-soft-table-na",
+            "arch-whistle-home-quick-normal-across-na",
+            "dip-hum-home-normal-normal-hand-na",
+            "dip-hum-bottom-normal-normal-hand-na",
+            "dip-hum-top-normal-normal-hand-na",
+            "dip-hum-home-slow-normal-hand-na",
+            "dip-hum-home-quick-normal-hand-na",
+            "dip-hum-home-normal-soft-hand-na",
+            "dip-hum-home-normal-loud-hand-na",
+            "dip-hum-home-normal-normal-table-na",
+            "dip-hum-home-normal-normal-across-na",
+            "dip-whistle-home-normal-normal-hand-na",
+            "dip-hum-bottom-normal-soft-across-na",
+            "dip-hum-top-normal-loud-hand-na",
+            "dip-hum-home-quick-soft-table-na",
+            "dip-whistle-home-quick-normal-across-na",
+            "flat-hum-home-normal-normal-hand-na",
+            "flat-hum-bottom-normal-normal-hand-na",
+            "flat-hum-top-normal-normal-hand-na",
+            "flat-hum-home-slow-normal-hand-na",
+            "flat-hum-home-quick-normal-hand-na",
+            "flat-hum-home-normal-soft-hand-na",
+            "flat-hum-home-normal-loud-hand-na",
+            "flat-hum-home-normal-normal-table-na",
+            "flat-hum-home-normal-normal-across-na",
+            "flat-whistle-home-normal-normal-hand-na",
+            "flat-hum-bottom-normal-soft-across-na",
+            "flat-hum-top-normal-loud-hand-na",
+            "flat-hum-home-quick-soft-table-na",
+            "flat-whistle-home-quick-normal-across-na"
+          ],
+          "reps": null
+        },
+        {
+          "id": "discrete",
+          "cells": [
+            "click-na-na-na-normal-hand-na",
+            "click-na-na-na-soft-hand-na",
+            "click-na-na-na-loud-hand-na",
+            "click-na-na-na-normal-table-na",
+            "click-na-na-na-normal-across-na",
+            "click-na-na-na-soft-across-na",
+            "hiss-na-na-na-normal-hand-na",
+            "hiss-na-na-na-soft-hand-na",
+            "hiss-na-na-na-loud-hand-na",
+            "hiss-na-na-na-normal-table-na",
+            "hiss-na-na-na-normal-across-na",
+            "hiss-na-na-na-soft-across-na",
+            "hiss-na-na-long05-normal-hand-na",
+            "hiss-na-na-long05-normal-across-na",
+            "hiss-na-na-long07-normal-hand-na",
+            "hiss-na-na-long07-normal-across-na",
+            "hiss-na-na-long10-normal-hand-na",
+            "hiss-na-na-long10-normal-across-na"
+          ],
+          "reps": null
+        },
+        {
+          "id": "combos",
+          "cells": [
+            "click-click-na-na-na-normal-hand-normal",
+            "click-click-na-na-na-normal-hand-quick",
+            "click-click-na-na-na-normal-hand-slow",
+            "click-click-na-na-na-normal-across-normal",
+            "click-click-na-na-na-soft-hand-normal",
+            "click-click-click-na-na-na-normal-hand-normal",
+            "click-click-click-na-na-na-normal-hand-quick",
+            "click-click-click-na-na-na-normal-hand-slow",
+            "click-click-click-na-na-na-normal-across-normal",
+            "click-click-click-na-na-na-soft-hand-normal",
+            "hiss-click-na-na-na-normal-hand-normal",
+            "hiss-click-na-na-na-normal-hand-quick",
+            "hiss-click-na-na-na-normal-hand-slow",
+            "hiss-click-na-na-na-normal-across-normal",
+            "hiss-click-na-na-na-soft-hand-normal",
+            "click-hiss-na-na-na-normal-hand-normal",
+            "click-hiss-na-na-na-normal-hand-quick",
+            "click-hiss-na-na-na-normal-hand-slow",
+            "click-hiss-na-na-na-normal-across-normal",
+            "click-hiss-na-na-na-soft-hand-normal"
+          ],
+          "reps": null
+        },
+        {
+          "id": "backgrounds",
+          "cells": [
+            "media-30",
+            "media-60",
+            "media-90",
+            "tv",
+            "fan",
+            "talk",
+            "typing-kitchen"
+          ],
+          "reps": null
+        },
+        {
+          "id": "real-media-60",
+          "cells": [
+            "rise-hum-home-normal-normal-hand-na",
+            "fall-hum-home-normal-normal-hand-na",
+            "arch-hum-home-normal-normal-hand-na",
+            "dip-hum-home-normal-normal-hand-na",
+            "flat-hum-home-normal-normal-hand-na",
+            "click-na-na-na-normal-hand-na",
+            "hiss-na-na-na-normal-hand-na",
+            "hiss-na-na-long10-normal-hand-na",
+            "click-click-na-na-na-normal-hand-normal",
+            "click-click-click-na-na-na-normal-hand-normal",
+            "hiss-click-na-na-na-normal-hand-normal",
+            "click-hiss-na-na-na-normal-hand-normal"
+          ],
+          "reps": null
+        },
+        {
+          "id": "real-talk",
+          "cells": [
+            "rise-hum-home-normal-normal-hand-na",
+            "fall-hum-home-normal-normal-hand-na",
+            "arch-hum-home-normal-normal-hand-na",
+            "dip-hum-home-normal-normal-hand-na",
+            "flat-hum-home-normal-normal-hand-na",
+            "click-na-na-na-normal-hand-na",
+            "hiss-na-na-na-normal-hand-na",
+            "hiss-na-na-long10-normal-hand-na",
+            "click-click-na-na-na-normal-hand-normal",
+            "click-click-click-na-na-na-normal-hand-normal",
+            "hiss-click-na-na-na-normal-hand-normal",
+            "click-hiss-na-na-na-normal-hand-normal"
+          ],
+          "reps": null
+        }
+      ]
+    },
+    "short": {
+      "about": "About 8 minutes, e.g. for a second speaker: the range step, the room step, contours at centre + pitch bottom + loud soft + dist across, click and short hiss at centre + soft + across, long hiss at centre (one rep each), combos at centre x 2; no backgrounds or real checks.",
+      "blocks": [
+        {
+          "id": "range",
+          "cells": [
+            "bottom_hz",
+            "home_hz",
+            "top_hz",
+            "whistle_home_hz"
+          ],
+          "reps": null
+        },
+        {
+          "id": "room",
+          "cells": [
+            "room"
+          ],
+          "reps": null
+        },
+        {
+          "id": "contours",
+          "cells": [
+            "rise-hum-home-normal-normal-hand-na",
+            "rise-hum-bottom-normal-normal-hand-na",
+            "rise-hum-home-normal-soft-hand-na",
+            "rise-hum-home-normal-normal-across-na",
+            "fall-hum-home-normal-normal-hand-na",
+            "fall-hum-bottom-normal-normal-hand-na",
+            "fall-hum-home-normal-soft-hand-na",
+            "fall-hum-home-normal-normal-across-na",
+            "arch-hum-home-normal-normal-hand-na",
+            "arch-hum-bottom-normal-normal-hand-na",
+            "arch-hum-home-normal-soft-hand-na",
+            "arch-hum-home-normal-normal-across-na",
+            "dip-hum-home-normal-normal-hand-na",
+            "dip-hum-bottom-normal-normal-hand-na",
+            "dip-hum-home-normal-soft-hand-na",
+            "dip-hum-home-normal-normal-across-na",
+            "flat-hum-home-normal-normal-hand-na",
+            "flat-hum-bottom-normal-normal-hand-na",
+            "flat-hum-home-normal-soft-hand-na",
+            "flat-hum-home-normal-normal-across-na"
+          ],
+          "reps": 1
+        },
+        {
+          "id": "discrete",
+          "cells": [
+            "click-na-na-na-normal-hand-na",
+            "click-na-na-na-soft-hand-na",
+            "click-na-na-na-normal-across-na",
+            "hiss-na-na-na-normal-hand-na",
+            "hiss-na-na-na-soft-hand-na",
+            "hiss-na-na-na-normal-across-na",
+            "hiss-na-na-long05-normal-hand-na",
+            "hiss-na-na-long07-normal-hand-na",
+            "hiss-na-na-long10-normal-hand-na"
+          ],
+          "reps": 1
+        },
+        {
+          "id": "combos",
+          "cells": [
+            "click-click-na-na-na-normal-hand-normal",
+            "click-click-click-na-na-na-normal-hand-normal",
+            "hiss-click-na-na-na-normal-hand-normal",
+            "click-hiss-na-na-na-normal-hand-normal"
+          ],
+          "reps": 2
+        }
+      ]
+    }
+  }
+}

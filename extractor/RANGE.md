@@ -1,9 +1,12 @@
-# Recorded range suite, v1
+# Recorded range suite (v1 and v2)
 
-`prompts/range_v1.json` is the shared desktop/phone/checks contract. Its cells
-are explicit; `prompts/make_range_spec.py` deterministically regenerates them.
-Neither recorder generates a grid. Both save an exact copy as `spec.json` and
-refuse to resume with a different spec, source or mic.
+`prompts/range_v2.json` is the current shared desktop/phone/checks contract (round 7 removed the
+pop sound: a pop now counts as a click, and a long hiss is a new trigger). Its cells are explicit;
+`prompts/make_range_spec.py` deterministically regenerates them. `prompts/range_v1.json` is frozen
+(byte-identical) and still loads and scores; a session keeps its own `spec.json` and is validated
+and scored with it. `range_layout.SPEC_PATH` (the recorders' default) is `range_v2.json`. Neither
+recorder generates a grid. Both save an exact copy as `spec.json` and refuse to resume with a
+different spec, source or mic.
 
 The ordered blocks are `range`, `room`, `contours`, `discrete`, `combos`, `backgrounds`,
 `real-media-60`, `real-talk`. Counts:
@@ -13,10 +16,10 @@ The ordered blocks are `range`, `room`, `contours`, `discrete`, `combos`, `backg
 | Range | bottom, home, top hum; whistle home | 4 |
 | Room | 3 s of quiet (the app's calibration room step) | 1 |
 | Contours | 5 gestures × 14 conditions × 2 reps | 140 |
-| Discrete | 3 gestures × 6 conditions × 2 reps | 36 |
+| Discrete | click + short hiss × 6 conditions × 2 reps + long hiss × 3 lengths × 2 conditions × 2 reps | 36 |
 | Combos | 4 sequences × 5 conditions × 2 reps | 40 |
-| Real checks | all 12 centre sequences × 2 backgrounds × 2 reps | 48 |
-| Backgrounds | 3 media levels + TV/music + fan + talk + typing/kitchen | 7 recordings |
+| Real checks | 12 centre cells × 2 backgrounds × 2 reps | 48 |
+| Backgrounds | 3 media levels + tv/music + fan + talk + typing/kitchen | 7 recordings |
 
 Thus **269 labelled takes and seven 60-second backgrounds**, with eight block
 ratings for a complete session. Real checks include combos. The six condition
@@ -24,6 +27,27 @@ keys, in canonical ID order, are `tone,pitch,speed,loud,dist,gap`. IDs include
 `na` values, so no applicable dimension is lost. An example is
 `hum-home-normal-normal-hand-na`. Each take ID is
 `<block>-<cell_id>-r<rep>`; it does not depend on dictionary ordering.
+
+Round 7 removed the pop sound: a pop counts as a click everywhere (a heard `pop` folds to `click`,
+a v1 `expect` `pop` folds to `click`, `pop pop` to `click click`, before any scoring). There are no
+pop cells in v2. Singles are `click` and `hiss`; the combos are `click click` (home),
+`click click click` (listen), `hiss click` (back) and `click hiss` (forward, app-only).
+
+A short hiss (Back, about 150–400 ms) keeps v1's cell exactly: cond speed `na`, `target_s` 0.3, so
+the `cell_id` is the same as v1's hiss cells. A long hiss (the cursor-mode listen and the media-lock
+unlock; the app's `CursorListen.LONG_HISS_MS = 700`, measured as event `t_end_ms - t_start_ms`) gets
+three new speed values `long05` / `long07` / `long10`, aimed at 0.5 / 0.7 / 1.0 s (`target_s`).
+Example `cell_id`: `hiss-na-na-long07-normal-hand-na`. `defaults.hiss_s` maps the three lengths;
+`analysis.long_hiss_ms = 700`.
+
+Combo `target_s = 0.3*n + gap*(n-1)` (a pair is still `0.6 + gap`); `max_s = target_s + 2`, as before.
+
+Cues are plain language with ONE key word in capitals (the thing to notice): at a block's centre the
+key word is the gesture ("Hum a RISE at your home note, about 0.6 s"), a one-change cell capitalises
+the change ("Hum a rise starting at your LOWEST note"), a corner cell capitalises each change (at most
+three). No other capitals anywhere ("tv", not "TV"); every cue is at most 100 characters. The cue ends
+with "about N s" only for contours and hisses (where length matters); a click or a combo gets no time
+("Make two CLICKS", "Make two clicks with a QUICK gap").
 
 ## Profiles and speakers
 
@@ -33,13 +57,23 @@ across profiles, so a short session compares cell-for-cell with a full one.
 | Profile | Blocks | Takes |
 | --- | --- | ---: |
 | `full` (default) | everything above | 269 + 7 backgrounds |
-| `short` (~8 min, a second speaker) | range 4; room 1; contours: centre, pitch bottom, loud soft, dist across × 5 gestures × 1 rep = 20; discrete: centre, soft, across × 3 × 1 = 9; combos: centre × 4 × 2 reps = 8 | 42, no backgrounds or real checks |
+| `short` (~8 min, a second speaker) | range 4; room 1; contours: centre, pitch bottom, loud soft, dist across × 5 gestures × 1 rep = 20; discrete: click and short hiss at centre + soft + across, long hiss at centre (one rep each) = 9; combos: 4 × centre × 2 reps = 8 | 42, no backgrounds or real checks |
 
 Both recorders take `--profile full|short` and `--speaker <id>` (default
 `self`; use a pseudonym, never a real name). `session.json` records both, and a
 resume with a different profile or speaker is refused. Without `--session`, a
 speaker other than self gets `range-<speaker>-<time>`. Sessions written before
 profiles existed read as `full`/`self`.
+
+A session is bound to the spec version it was recorded with. Resuming a `range_v1` session with
+the v2 recorder (the default) is refused with a plain message and leaves the session untouched (no
+sitting appended, no file written):
+
+> session `<name>` was recorded with range_v1; this recorder runs range_v2. Start a new session, or
+> pass --spec prompts/range_v1.json to finish it
+
+To finish a v1 session, pass `--spec prompts/range_v1.json`. The `desk mic` is the PC's USB mic
+(`--source pw --device <USB-source-name>`).
 
 ## Desktop
 
@@ -229,7 +263,11 @@ last-row-wins rows, profile, speaker) and writes `report.md`/`report.json`
 (version 2) into each private session folder; it refuses any folder outside
 the private roots, including `--summary-out`. The level gate is derived like
 the app's CalibV2 (clicks/hiss/pops steps) from the discrete block's centre
-takes only, then the room step runs on the room take as the app's does
+takes only: the clicks bucket is centre discrete takes expecting click (a v1 pop
+take, now folded to click, is included), the hiss bucket is centre SHORT hiss
+takes only (speed `na` — the app's hiss step asks for short "tss"es; a long hiss
+never feeds the gate), and the pops bucket stays empty for new data. Then the
+room step runs on the room take as the app's does
 (JoyCalibration.room): over 3 s from GO, the floor (median tick level), the
 longest voiced run (3+ ticks fails as "not quiet"), and the loudest pop, click
 or hiss by SNR and by level. A transient as loud as the weakest example (both)
@@ -244,6 +282,24 @@ disk. Real-vs-mix mixes the *clean* counterparts (same `cond_id`) at the
 estimated real SNR and pools the verdict per background. App replay
 (`--emulator`) refuses the phone's serial, any non-emulator serial, adb port
 5037 and socket 7788.
+
+Round 7 folds every heard `pop` into `click` and every v1 `expect` `pop` into `click` (`pop pop`
+into `click click`) before any scoring, then merges click events whose spans overlap or lie within
+30 ms of each other into one (the app's `ClickMerge`, `SLACK_MS` 30). `GESTURES` drops `pop`; the
+report says "pop folded into click (round 7)". Because a v1 pop take now feeds the clicks bucket,
+v1 gate numbers can shift slightly against older reports. The app-replay expected action uses a
+local round-7 table (rise swipe_up, fall swipe_down, arch swipe_right, dip swipe_left, click tap,
+hiss back, flat long_press, click click home, click click click listen_for_phrase, hiss click back,
+click hiss forward), not `vox_extract.vocab`.
+
+A new report section "hiss length" (json + md) covers every take expecting `["hiss"]` (discrete and
+real): per aimed length (short / long05 / long07 / long10) the count and the median / p10 / p90 of
+the heard hiss duration (the longest hiss event's `t_end_ms - t_start_ms`); a cutoff sweep for
+c in 400..1000 ms step 50 (the share of short takes with duration < c that stay Back, and the
+share of long07+long10 takes with duration >= c that listen, long05 listed apart as the grey zone);
+the app's 700 ms row is marked; and a hiss whose `sounds_like` is in
+`vox_extract.policy.NOT_GESTURE_SOURCES` is never long (as the app's `CursorListen`). The summary
+over several sessions pools this per speaker.
 
 Run the tests with `--basetemp` under `android/.state` (a `.pytest-tmp`
 folder is neither gitignored nor a private root, so the privacy guard refuses
