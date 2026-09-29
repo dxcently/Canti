@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import shutil
 import time
@@ -131,10 +132,6 @@ def read_rows(path):
     return [json.loads(s) for s in Path(path).read_text().splitlines() if s.strip()] if Path(path).exists() else []
 
 
-def latest_rows(path, key='take_id'):
-    return {r[key]: r for r in read_rows(path)}
-
-
 def is_no_sound(row):
     """A missed attempt: the recorder's silence detector heard nothing (the phone app tags it; kept, never overwritten)."""
     return row.get('no_sound') is True
@@ -145,10 +142,173 @@ def take_file(block, take_id, attempt=None):
     return f"takes/{block}/{take_id}.wav" if attempt is None else f"takes/{block}/{take_id}.a{attempt}.wav"
 
 
+def _row_key(row):
+    """A data/op row's target: its take_id (labels journal), else its name (backgrounds journal)."""
+    return row['take_id'] if 'take_id' in row else row.get('name')
+
+
+def effective_rows(rows):
+    """(effective take/background rows, deletes in force, restorable del_ids) for one journal, in journal order.
+
+    An operation row carries "op". A delete (op "delete") excludes the earlier rows its scope names (contract T):
+    scope "take" excludes every earlier row of the take, "attempt" with an int excludes that missed (no_sound)
+    attempt, "attempt" with null excludes the earlier heard attempts (they all name the plain path, the moved file).
+    A restore (op "restore") undoes a delete (its del_id leaves the in-force set); a purge (op "purge") removes a
+    delete's trash so it can never be restored but stays in force. Op rows are never effective rows themselves.
+    """
+    rows = list(rows)
+    deletes, order, restored, purged = {}, [], set(), set()
+    for r in rows:
+        op = r.get('op')
+        if op == 'delete':
+            deletes[r['del_id']] = r
+            order.append(r['del_id'])
+        elif op == 'restore':
+            restored.add(r['del_id'])
+        elif op == 'purge':
+            purged.update(r.get('del_ids') or [])
+    in_force = [d for d in order if d not in restored]
+    restorable = [d for d in in_force if d not in purged]
+    excluded = set()
+    for did in in_force:
+        d = deletes[did]
+        key, scope, attempt = _row_key(d), d['scope'], d.get('attempt')
+        for i, r in enumerate(rows[:rows.index(d)]):
+            if r.get('op') or _row_key(r) != key:
+                continue
+            if scope == 'take':
+                excluded.add(i)
+            elif attempt is not None:
+                if is_no_sound(r) and r.get('attempt') == attempt:
+                    excluded.add(i)
+            elif not is_no_sound(r):
+                excluded.add(i)
+    effective = [r for i, r in enumerate(rows) if not r.get('op') and i not in excluded]
+    return effective, in_force, restorable
+
+
+def delete_files(rows, take_id, scope='take', attempt=None):
+    """The distinct relative paths a delete of [take_id] with [scope]/[attempt] moves (contract T)."""
+    if scope not in ('take', 'attempt'):
+        raise ValueError('bad delete scope')
+    files = []
+    for r in rows:
+        if r.get('op') or _row_key(r) != take_id:
+            continue
+        if scope == 'take':
+            files.append(r['file'])
+        elif attempt is not None:
+            if is_no_sound(r) and r.get('attempt') == attempt:
+                files.append(r['file'])
+        elif not is_no_sound(r):
+            files.append(r['file'])
+    return list(dict.fromkeys(files))
+
+
+def _new_del_id(rows):
+    """d<wall_ms>-<n>: n counts the delete rows already in the journal, so a del_id is never reused."""
+    return f"d{int(time.time() * 1000)}-{sum(1 for r in rows if r.get('op') == 'delete')}"
+
+
+def _move_to_trash(out, del_id, files):
+    """Moves each existing [files] to trash/<del_id>/<file>, returning the ones actually moved."""
+    moved = []
+    for f in files:
+        src = out / f
+        if src.exists():
+            dst = out / 'trash' / del_id / f
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(src, dst)
+            moved.append(f)
+    return moved
+
+
+def delete_take(out, take_id, scope='take', attempt=None):
+    """Soft-delete a take: move its WAV(s) to trash/<del_id>/<file>, THEN append the delete row (contract T)."""
+    out = Path(out)
+    rows = read_rows(out / 'labels.jsonl')
+    files = delete_files(rows, take_id, scope, attempt)
+    del_id = _new_del_id(rows)
+    moved = _move_to_trash(out, del_id, files)
+    append_row(out / 'labels.jsonl', dict(op='delete', del_id=del_id, take_id=take_id, scope=scope, attempt=attempt,
+                                          files=moved, trash=f'trash/{del_id}', t=time.time()))
+    return del_id
+
+
+def delete_background(out, name):
+    """Soft-delete a background (scope "take"): move its WAV to trash, THEN append the row to backgrounds.jsonl."""
+    out = Path(out)
+    rows = read_rows(out / 'backgrounds.jsonl')
+    files = delete_files(rows, name, 'take')
+    del_id = _new_del_id(rows)
+    moved = _move_to_trash(out, del_id, files)
+    append_row(out / 'backgrounds.jsonl', dict(op='delete', del_id=del_id, name=name, scope='take', attempt=None,
+                                               files=moved, trash=f'trash/{del_id}', t=time.time()))
+    return del_id
+
+
+def restore(out, del_id):
+    """Undo a delete: move its files back, THEN append the restore row. Refused (no row) if a destination exists
+    again, if the delete was purged, or if it was already restored."""
+    out = Path(out)
+    for journal in ('labels.jsonl', 'backgrounds.jsonl'):
+        rows = read_rows(out / journal)
+        d = next((r for r in rows if r.get('op') == 'delete' and r.get('del_id') == del_id), None)
+        if d is None:
+            continue
+        purged = {did for r in rows if r.get('op') == 'purge' for did in (r.get('del_ids') or [])}
+        if del_id in purged:
+            raise ValueError(f'{del_id}: already purged, cannot restore')
+        if any(r.get('op') == 'restore' and r.get('del_id') == del_id for r in rows):
+            raise ValueError(f'{del_id}: already restored')
+        for f in d['files']:
+            if (out / f).exists():
+                raise ValueError(f'{del_id}: {f} exists now (the take was re-recorded)')
+        for f in d['files']:
+            os.replace(out / 'trash' / del_id / f, out / f)
+        shutil.rmtree(out / 'trash' / del_id, ignore_errors=True)
+        key = 'take_id' if 'take_id' in d else 'name'
+        append_row(out / journal, dict(op='restore', del_id=del_id, **{key: d[key]}, t=time.time()))
+        return d[key]
+    raise ValueError(f'unknown delete {del_id!r}')
+
+
+def purge_trash(out, del_ids=None):
+    """Remove trash/<del_id>/ for each id and append a purge row. None purges every restorable delete (clear trash)."""
+    out = Path(out)
+    if del_ids is None:
+        del_ids = effective_rows(read_rows(out / 'labels.jsonl'))[2] + \
+            effective_rows(read_rows(out / 'backgrounds.jsonl'))[2]
+    del_ids = list(del_ids)
+    for did in del_ids:
+        shutil.rmtree(out / 'trash' / did, ignore_errors=True)
+    # Each purge row goes to the journal that holds the delete, so that journal's restore sees it (backgrounds too).
+    bg = {r['del_id'] for r in read_rows(out / 'backgrounds.jsonl') if r.get('op') == 'delete'}
+    takes = [d for d in del_ids if d not in bg]
+    bgs = [d for d in del_ids if d in bg]
+    if takes or not bgs:
+        append_row(out / 'labels.jsonl', dict(op='purge', del_ids=takes, take_id=None, t=time.time()))
+    if bgs:
+        append_row(out / 'backgrounds.jsonl', dict(op='purge', del_ids=bgs, name=None, t=time.time()))
+    return del_ids
+
+
+def next_redo(rows, take_id):
+    """The next redo of a take is 1 + its max redo over ALL take rows, excluded ones included (an .a<N> name is
+    never reused)."""
+    redos = [r['redo'] for r in rows if r.get('take_id') == take_id and not r.get('op') and 'redo' in r]
+    return max(redos) + 1 if redos else 0
+
+
+def latest_rows(path, key='take_id'):
+    return {r[key]: r for r in effective_rows(read_rows(path))[0]}
+
+
 def take_rows(path_or_rows):
     """{take_id: the take's row}: its last heard (not no_sound) row, else its last row (only missed attempts)."""
+    rows = read_rows(path_or_rows) if isinstance(path_or_rows, (str, Path)) else path_or_rows
     out = {}
-    for r in (read_rows(path_or_rows) if isinstance(path_or_rows, (str, Path)) else path_or_rows):
+    for r in effective_rows(rows)[0]:
         if not is_no_sound(r) or r['take_id'] not in out or is_no_sound(out[r['take_id']]):
             out[r['take_id']] = r
     return out
@@ -157,7 +317,7 @@ def take_rows(path_or_rows):
 def no_sound_rows(path_or_rows):
     """Every missed (no_sound) attempt, in journal order."""
     rows = read_rows(path_or_rows) if isinstance(path_or_rows, (str, Path)) else path_or_rows
-    return [r for r in rows if is_no_sound(r)]
+    return [r for r in effective_rows(rows)[0] if is_no_sound(r)]
 
 
 def append_row(path, row):
@@ -244,9 +404,11 @@ def rating(out, block, seconds, redos, spec, auto=False, ask=input):
     append_row(out / 'ratings.jsonl', dict(block=block, rating=value, note=note, seconds=seconds, redos=redos))
 
 
-def getkey(auto=False, default='\n'):
-    """The guided recorder's single-key control, kept stdlib-only for Android's dev env."""
+def getkey(auto=False, default='\n', extra=''):
+    """The guided recorder's single-key control, kept stdlib-only for Android's dev env. [extra] adds accepted keys
+    (e.g. 'du' for the range recorder's delete/undo) without changing guided_session's default set."""
     import sys
+    keys = tuple('rsq' + extra)
     if auto:
         return default
     if sys.stdin.isatty():
@@ -261,7 +423,7 @@ def getkey(auto=False, default='\n'):
                 ch = sys.stdin.read(1)
                 if ch in ('\n', '\r'):
                     return '\n'
-                if ch.lower() in ('r', 's', 'q'):
+                if ch.lower() in keys:
                     return ch.lower()
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -269,7 +431,7 @@ def getkey(auto=False, default='\n'):
     if not line:
         return 'q'
     line = line.strip().lower()
-    return line[:1] if line[:1] in ('r', 's', 'q') else '\n'
+    return line[:1] if line[:1] in keys else '\n'
 
 
 def cue_text(cue, tty):
@@ -280,9 +442,12 @@ def cue_text(cue, tty):
                   lambda m: f'\x1b[7m{m.group(0)}\x1b[0m', cue)
 
 
-def operate(items, done, capture, auto=False, key=getkey):
+def operate(items, done, capture, auto=False, key=getkey, delete=None, undo=None, count=None):
     """Enter records; r repeats the last take; s skips for this sitting; q resumes later.
 
+    d deletes the last saved take this sitting (after a y/N confirm; it is prompted again next) and u restores the
+    most recent delete of this sitting. [delete] (take -> del_id), [undo] (del_id -> take_id) and [count] (take ->
+    number of files moved) are the range recorder's hooks; without them d/u are not offered and nothing changes.
     Also offer a review prompt after the final take, so its redo is reachable.
     capture must persist each accepted attempt before returning.
     """
@@ -290,6 +455,7 @@ def operate(items, done, capture, auto=False, key=getkey):
     tty = sys.stdout.isatty()
     pending = [t for t in items if t['take_id'] not in done]
     previous = None
+    deleted = []
     redos = 0
     i = 0
     while i <= len(pending):
@@ -297,7 +463,10 @@ def operate(items, done, capture, auto=False, key=getkey):
             break
         take = pending[i] if i < len(pending) else None
         print(cue_text(take['cue'], tty) if take else 'Block complete. Enter to finish; r to redo last.')
-        print('Enter = record/continue · r = redo last · s = skip · q = quit')
+        keys = 'Enter = record/continue · r = redo last · s = skip · q = quit'
+        if delete is not None:
+            keys += ' · d = delete last · u = undo'
+        print(keys)
         action = key(auto)
         if action == 'q':
             return False, redos
@@ -307,6 +476,29 @@ def operate(items, done, capture, auto=False, key=getkey):
             print('Redo: ' + cue_text(previous['cue'], tty))
             capture(previous)
             redos += 1
+            continue
+        if action == 'd' and delete is not None:
+            if previous is None:
+                continue
+            n = (count or (lambda t: 1))(previous)
+            print(f'Delete {previous["take_id"]} ({n} attempt files)? y/N')
+            if key(auto) != 'y':
+                continue
+            del_id = delete(previous)
+            if del_id is not None:
+                deleted.append((previous, del_id))
+                print('Deleted. u = undo')
+                i -= 1
+            continue
+        if action == 'u' and undo is not None:
+            if not deleted:
+                continue
+            take0, del_id = deleted[-1]
+            restored = undo(del_id)
+            if restored is not None:
+                deleted.pop()
+                i += 1
+                print(f'Restored {restored}.')
             continue
         if take is None:
             break
@@ -389,6 +581,36 @@ def validate_session(path, spec=None, complete=False):
             raise ValueError('bad GO/pre-roll mapping')
     bgs = latest_rows(path / 'backgrounds.jsonl', 'name')
     expected_bg = {t['name']: t for t in full if t['kind'] == 'backgrounds'}
+    bg_journal = read_rows(path / 'backgrounds.jsonl')
+
+    # operation rows (contract T): validate their shape, and count the deletes still in force.
+    del_ids = set()
+    for op_rows, known in ((journal, plan), (bg_journal, expected_bg)):
+        for r in op_rows:
+            op = r.get('op')
+            if op is None:
+                continue
+            if op not in ('delete', 'restore', 'purge'):
+                raise ValueError('unknown op')
+            if op == 'purge':
+                if r.get('take_id') is not None or not isinstance(r.get('del_ids'), list):
+                    raise ValueError('bad purge row')
+                continue
+            did = r.get('del_id')
+            if not isinstance(did, str) or not did:
+                raise ValueError('bad del_id')
+            if op == 'delete':
+                if did in del_ids:
+                    raise ValueError('duplicate del_id')
+                del_ids.add(did)
+                if r.get('scope') not in ('take', 'attempt'):
+                    raise ValueError('bad delete scope')
+                if r.get('attempt') is not None and type(r.get('attempt')) is not int:
+                    raise ValueError('bad delete attempt')
+            if _row_key(r) not in known:
+                raise ValueError('unknown delete/restore target')
+    deleted = len(effective_rows(journal)[1]) + len(effective_rows(bg_journal)[1])
+
     for name, r in bgs.items():
         if name not in expected_bg:
             raise ValueError('unknown background')
@@ -410,7 +632,7 @@ def validate_session(path, spec=None, complete=False):
     if len({(r['take_id'], r['attempt']) for r in missed}) != len(missed):
         raise ValueError('duplicate no_sound attempt')
     return dict(takes=len(rows), backgrounds=len(bgs), ratings=len(ratings), sittings=len(meta['sittings']),
-                no_sound=len(missed))
+                no_sound=len(missed), deleted=deleted)
 
 
 def session_profile(meta):

@@ -193,6 +193,31 @@ def run_session(args):
     sitting = len(meta['sittings'])
     rows = L.latest_rows(out / 'labels.jsonl')
     bgs = L.latest_rows(out / 'backgrounds.jsonl', 'name')
+
+    def rkey(auto):
+        return L.getkey(auto, extra='du')
+
+    def count_files(take):
+        rows_ = L.read_rows(out / 'labels.jsonl' if take['kind'] != 'backgrounds' else out / 'backgrounds.jsonl')
+        return len(L.delete_files(rows_, take['take_id'] if take['kind'] != 'backgrounds' else take['name'], 'take'))
+
+    def delete(take):
+        if take['kind'] == 'backgrounds':
+            del_id = L.delete_background(out, take['name'])
+            bgs.pop(take['name'], None)
+        else:
+            del_id = L.delete_take(out, take['take_id'], 'take')
+            rows.pop(take['take_id'], None)
+        return del_id
+
+    def undo(del_id):
+        key = L.restore(out, del_id)
+        rows.clear()
+        rows.update(L.take_rows(out / 'labels.jsonl'))
+        bgs.clear()
+        bgs.update(L.latest_rows(out / 'backgrounds.jsonl', 'name'))
+        return key
+
     rec = None
     try:
         rec = R.Recorder(src, Config(), out / f'run-{sitting:03d}', print_events=False)
@@ -214,8 +239,7 @@ def run_session(args):
             def capture(take):
                 L.disk_guard(out, round((take.get('seconds', take.get('max_s', 0)) +
                                         spec['analysis']['pre_roll_s'] + spec['analysis']['post_roll_s']) * rate * 2))
-                previous = rows.get(take['take_id'])
-                redo = previous['redo'] + 1 if previous else 0
+                redo = L.next_redo(L.read_rows(out / 'labels.jsonl'), take['take_id'])
                 meter, target = None, None
                 if take.get('cond', {}).get('tone') in ('hum', 'whistle'):
                     rg = meta['range']
@@ -249,7 +273,8 @@ def run_session(args):
                     if take.get('anchor'):
                         meta['range'] = finalize_range(out, spec)
 
-            completed, redos = L.operate(items, done, capture, args.auto, G.getkey)
+            completed, redos = L.operate(items, done, capture, args.auto, rkey, delete=delete, undo=undo,
+                                        count=count_files)
             if not completed:
                 break
             L.rating(out, block['id'], time.monotonic() - began, redos, spec, args.auto)
@@ -263,7 +288,101 @@ def run_session(args):
     return out
 
 
+def _open_existing(args):
+    """The private folder of an existing session, for a non-recording command (no audio source is opened)."""
+    session = getattr(args, 'session', None)
+    path = L.private_dir(args.out if args.out is not None else L.HERE / 'recordings' / L.safe_name(session))
+    if not (path / 'session.json').is_file():
+        raise ValueError(f'{path.name}: not an existing range session')
+    return path
+
+
+def list_takes(args):
+    out = _open_existing(args)
+    spec = L.load_spec(out / 'spec.json')
+    profile = L.session_profile(json.loads((out / 'session.json').read_text()))
+    plan = [t for t in L.build_plan(spec, args.block, profile) if t['kind'] == 'takes']
+    journal = L.read_rows(out / 'labels.jsonl')
+    rows = L.take_rows(journal)
+    in_force = set(L.effective_rows(journal)[1])
+    attempts, deletes = {}, {}
+    for r in journal:
+        if r.get('op'):
+            if r.get('op') == 'delete' and r.get('del_id') in in_force:
+                deletes[r['take_id']] = deletes.get(r['take_id'], 0) + 1
+        else:
+            attempts[r['take_id']] = attempts.get(r['take_id'], 0) + 1
+    for t in plan:
+        tid = t['take_id']
+        status = 'missing' if tid not in rows else ('no_sound' if L.is_no_sound(rows[tid]) else 'done')
+        print(f"{tid}  {status}  attempts={attempts.get(tid, 0)}  deletes={deletes.get(tid, 0)}")
+    return 0
+
+
+def delete_command(args):
+    out = _open_existing(args)
+    scope, attempt = 'take', None
+    if args.attempt is not None:
+        scope, attempt = 'attempt', args.attempt
+    elif args.heard:
+        scope, attempt = 'attempt', None
+    if not args.yes and input(f'Delete {args.take_id}? [y/N] ').strip().lower() not in ('y', 'yes'):
+        print('Not deleted.')
+        return 0
+    del_id = L.delete_take(out, args.take_id, scope, attempt)
+    print(f'Deleted {args.take_id} ({del_id}). u = restore {del_id}')
+    return 0
+
+
+def restore_command(args):
+    out = _open_existing(args)
+    key = L.restore(out, args.del_id)
+    print(f'Restored {key}.')
+    return 0
+
+
+def clear_trash_command(args):
+    out = _open_existing(args)
+    if not args.yes and input('Clear the trash? Type "yes" to confirm: ').strip() != 'yes':
+        print('Trash kept.')
+        return 0
+    del_ids = L.purge_trash(out)
+    print(f'Purged {len(del_ids)} delete(s).')
+    return 0
+
+
+_COMMANDS = ('list-takes', 'delete', 'restore', 'clear-trash')
+
+
+def run_command(name, argv):
+    p = argparse.ArgumentParser(prog=f'range_session.py {name}')
+    p.add_argument('--session', help='the session folder under extractor/recordings')
+    p.add_argument('--out', type=Path, help='or the absolute private session folder')
+    if name == 'list-takes':
+        p.add_argument('--block', action='append')
+    elif name == 'delete':
+        p.add_argument('take_id')
+        g = p.add_mutually_exclusive_group()
+        g.add_argument('--attempt', type=int, help='delete that missed (no_sound) attempt')
+        g.add_argument('--heard', action='store_true', help='delete the current heard attempt')
+        g.add_argument('--all', action='store_true', help='delete every attempt of the take (the default)')
+        p.add_argument('--yes', action='store_true')
+    elif name == 'restore':
+        p.add_argument('del_id')
+    elif name == 'clear-trash':
+        p.add_argument('--yes', action='store_true')
+    args = p.parse_args(argv)
+    try:
+        return {'list-takes': list_takes, 'delete': delete_command, 'restore': restore_command,
+                'clear-trash': clear_trash_command}[name](args)
+    except (ValueError, RuntimeError) as e:
+        print(f'range_session: {e}', file=sys.stderr)
+        return 2
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] in _COMMANDS:
+        return run_command(sys.argv[1], sys.argv[2:])
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--spec', type=Path, default=L.SPEC_PATH)
     p.add_argument('--session', help='default: range-<time>, or range-<speaker>-<time> for another speaker')

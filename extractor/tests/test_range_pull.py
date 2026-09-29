@@ -144,6 +144,21 @@ def test_pull_refuses_mismatched_size(tmp_path, monkeypatch):
     assert not any(op == 'rec_clear' for op, _ in phone.calls)
 
 
+def test_pull_refuses_a_local_copy_with_rows_the_phone_lacks(tmp_path, monkeypatch):
+    files = tmp_path / 'remote'
+    build_session(files, 'range-self-0101')
+    pull_phone(tmp_path, monkeypatch, files)
+    out = tmp_path / 'dest' / 'range-self-0101'
+    # a delete on the PC appends an op row the phone journal does not have
+    take_id = L.take_rows(out / 'labels.jsonl').popitem()[0]
+    L.delete_take(out, take_id, 'take')
+    with pytest.raises(ValueError, match='changed on the PC'):
+        pull_phone(tmp_path, monkeypatch, files)
+    assert L.validate_session(out)['deleted'] == 1      # the local copy was left untouched
+    pull_phone(tmp_path, monkeypatch, files, force=True)  # --force replaces it anyway
+    assert L.validate_session(out)['deleted'] == 0
+
+
 def test_pull_refuses_non_app_existing_folder(tmp_path, monkeypatch):
     files = tmp_path / 'remote'
     build_session(files, 'range-self-0101')

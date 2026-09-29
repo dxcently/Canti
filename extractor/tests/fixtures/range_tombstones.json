@@ -1,0 +1,130 @@
+{
+  "cases": [
+    {
+      "about": "scope take excludes every earlier row of the take, heard and missed",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"take_id": "t1", "file": "takes/range/t1.a1.wav", "redo": 1, "no_sound": true, "attempt": 1},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "take", "attempt": null,
+         "files": ["takes/range/t1.wav", "takes/range/t1.a1.wav"], "trash": "trash/d1", "t": 1.0}
+      ],
+      "take_rows": {},
+      "no_sound": [],
+      "in_force": ["d1"],
+      "restorable": ["d1"]
+    },
+    {
+      "about": "scope attempt with an int excludes only that missed attempt",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"take_id": "t1", "file": "takes/range/t1.a1.wav", "redo": 1, "no_sound": true, "attempt": 1},
+        {"take_id": "t1", "file": "takes/range/t1.a2.wav", "redo": 2, "no_sound": true, "attempt": 2},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "attempt", "attempt": 1,
+         "files": ["takes/range/t1.a1.wav"], "trash": "trash/d1", "t": 1.0}
+      ],
+      "take_rows": {"t1": {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0}},
+      "no_sound": [
+        {"take_id": "t1", "file": "takes/range/t1.a2.wav", "redo": 2, "no_sound": true, "attempt": 2}
+      ],
+      "in_force": ["d1"],
+      "restorable": ["d1"]
+    },
+    {
+      "about": "scope attempt with null excludes the heard attempts (the plain path)",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 1},
+        {"take_id": "t1", "file": "takes/range/t1.a1.wav", "redo": 2, "no_sound": true, "attempt": 1},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "attempt", "attempt": null,
+         "files": ["takes/range/t1.wav"], "trash": "trash/d1", "t": 1.0}
+      ],
+      "take_rows": {"t1": {"take_id": "t1", "file": "takes/range/t1.a1.wav", "redo": 2, "no_sound": true, "attempt": 1}},
+      "no_sound": [
+        {"take_id": "t1", "file": "takes/range/t1.a1.wav", "redo": 2, "no_sound": true, "attempt": 1}
+      ],
+      "in_force": ["d1"],
+      "restorable": ["d1"]
+    },
+    {
+      "about": "restore undoes a delete: nothing stays in force",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "take", "attempt": null,
+         "files": ["takes/range/t1.wav"], "trash": "trash/d1", "t": 1.0},
+        {"op": "restore", "del_id": "d1", "take_id": "t1", "t": 2.0}
+      ],
+      "take_rows": {"t1": {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0}},
+      "no_sound": [],
+      "in_force": [],
+      "restorable": []
+    },
+    {
+      "about": "restore refused after a re-record: the delete stays in force, the new take counts (no restore row was written)",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"take_id": "t1", "file": "takes/range/t1.a1.wav", "redo": 1, "no_sound": true, "attempt": 1},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "take", "attempt": null,
+         "files": ["takes/range/t1.wav", "takes/range/t1.a1.wav"], "trash": "trash/d1", "t": 1.0},
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 1}
+      ],
+      "take_rows": {"t1": {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 1}},
+      "no_sound": [],
+      "in_force": ["d1"],
+      "restorable": ["d1"]
+    },
+    {
+      "about": "purge keeps the delete in force forever but it is no longer restorable",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "take", "attempt": null,
+         "files": ["takes/range/t1.wav"], "trash": "trash/d1", "t": 1.0},
+        {"op": "purge", "del_ids": ["d1"], "take_id": null, "t": 3.0}
+      ],
+      "take_rows": {},
+      "no_sound": [],
+      "in_force": ["d1"],
+      "restorable": []
+    },
+    {
+      "about": "re-record after a delete: the new take counts again, the delete stays in force",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "take", "attempt": null,
+         "files": ["takes/range/t1.wav"], "trash": "trash/d1", "t": 1.0},
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 1}
+      ],
+      "take_rows": {"t1": {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 1}},
+      "no_sound": [],
+      "in_force": ["d1"],
+      "restorable": ["d1"]
+    },
+    {
+      "about": "background delete: name in place of take_id, scope take",
+      "journal": [
+        {"name": "media-30", "file": "backgrounds/media-30.wav", "redo": 0},
+        {"op": "delete", "del_id": "d1", "name": "media-30", "scope": "take", "attempt": null,
+         "files": ["backgrounds/media-30.wav"], "trash": "trash/d1", "t": 1.0}
+      ],
+      "take_rows": {},
+      "no_sound": [],
+      "in_force": ["d1"],
+      "restorable": ["d1"]
+    },
+    {
+      "about": "two deletes, restoring one leaves the other in force",
+      "journal": [
+        {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0},
+        {"take_id": "t2", "file": "takes/range/t2.wav", "redo": 0},
+        {"op": "delete", "del_id": "d1", "take_id": "t1", "scope": "take", "attempt": null,
+         "files": ["takes/range/t1.wav"], "trash": "trash/d1", "t": 1.0},
+        {"op": "delete", "del_id": "d2", "take_id": "t2", "scope": "take", "attempt": null,
+         "files": ["takes/range/t2.wav"], "trash": "trash/d2", "t": 1.0},
+        {"op": "restore", "del_id": "d1", "take_id": "t1", "t": 2.0}
+      ],
+      "take_rows": {"t1": {"take_id": "t1", "file": "takes/range/t1.wav", "redo": 0}},
+      "no_sound": [],
+      "in_force": ["d2"],
+      "restorable": ["d2"]
+    }
+  ]
+}

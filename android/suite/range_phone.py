@@ -320,10 +320,24 @@ def _app_only(target):
         raise ValueError(f"{target.name}: existing local folder is not a recorder 'app' session")
 
 
-def pull(vox, dest, sessions=None, quickrec=False, clear=False, quickrec_dest=None, confirm=None):
+def _journal_extends(local, remote):
+    """True when [remote] (the phone's journal) starts with [local] (the PC copy): the phone must extend the local
+    one, so a local row the phone lacks (e.g. a delete made on the PC) refuses the replace."""
+    for name in ('labels.jsonl', 'backgrounds.jsonl'):
+        lr = L.read_rows(local / name)
+        rr = L.read_rows(remote / name)
+        if rr[:len(lr)] != lr:
+            return False
+    return True
+
+
+def pull(vox, dest, sessions=None, quickrec=False, clear=False, quickrec_dest=None, confirm=None, force=False):
     """The recorder pull (contract §8): verify every session into .pull-<ns>, replace (recorder "app" folders only),
     then, only with [clear] and a yes from [confirm], rec_clear exactly the verified names/ids. Everything lands under
-    gitignored roots (zflip/range or --out via private_dir; zflip/quickrec). Never runs against a real device in tests."""
+    gitignored roots (zflip/range or --out via private_dir; zflip/quickrec). Never runs against a real device in tests.
+
+    A local copy is replaced only if the phone's journal extends the local one (a PC-side delete would be lost
+    otherwise); [force] replaces it anyway."""
     dest = Path(dest).expanduser().resolve()
     qdest = quickrec_dir(quickrec_dest or QUICKREC_ROOTS[0])
     st = vox.control("rec_status")
@@ -354,7 +368,11 @@ def pull(vox, dest, sessions=None, quickrec=False, clear=False, quickrec_dest=No
                 qdone.append(qid)                  # an unfinished save stays on the phone (never cleared)
         # all verified: replace, then clear only the verified names/ids
         for name in names:
-            _replace(dest / name, staging / name, _app_only)
+            target = dest / name
+            if target.exists() and not force and not _journal_extends(target, staging / name):
+                raise ValueError(f"{name}: changed on the PC since the last pull (a delete?); "
+                                 "delete on the phone too, or pass --force")
+            _replace(target, staging / name, _app_only)
         for qid in qdone:
             _replace(qdest / qid, staging / 'quickrec' / qid)
         if clear and (names or qdone):
@@ -399,6 +417,7 @@ def main():
     pull_cmd.add_argument('--quickrec', action='store_true', help='also pull quick records to zflip/quickrec')
     pull_cmd.add_argument('--clear', action='store_true', help='after verifying, offer to delete them on the phone')
     pull_cmd.add_argument('--yes', action='store_true', help='with --clear: delete without asking')
+    pull_cmd.add_argument('--force', action='store_true', help='replace a local copy even if it has rows the phone lacks')
     args = p.parse_args()
     if args.command == 'finalize':
         from range_session import finalize_range
@@ -410,7 +429,7 @@ def main():
         vox = voxlib.Vox()
         try:
             names, qids = pull(vox, dest, args.session, args.quickrec, args.clear,
-                               confirm=(lambda _: True) if args.yes else ask)
+                               confirm=(lambda _: True) if args.yes else ask, force=args.force)
             print("Pulled: " + " ".join(names + [f"quickrec/{q}" for q in qids]))
             if names:
                 print("Next: finalize each session under extractor/run (range_session.py), then range_suite.py.")
