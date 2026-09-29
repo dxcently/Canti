@@ -887,9 +887,10 @@ Ops (method channel `ai.vox/recorder`, main thread; the same names are debug ops
 like `measure_*`; with the gate off the channel answers `{enabled:false}` and the debug ops `{ok:false,
 "recorder disabled"}`): `rec_list {}`, `rec_start {who:"me"|"other", speaker?, profile:"short"|"full"}`, `rec_open
 {name}`, `rec_status {}`, `rec_next {take_id?}`, `rec_go {}`, `rec_abort {}`, `rec_skip {}`, `rec_redo_last {}`,
-`rec_rate {block, rating:1..5, note}`, `rec_close {}`, `rec_clear {sessions?, quickrec?}`, `rec_delete {name?,
-take_id, scope:"take"|"attempt", attempt?: int|null}`, `rec_restore {name?, del_id}`, `rec_trash_clear {name?,
-del_ids?}`, `qr_snap {}`, `qr_pending
+`rec_rate {block, rating:1..5, note}`, `rec_close {}`, `rec_clear {sessions?, pc_sessions?, quickrec?}`, `rec_delete {name?,
+origin?, take_id, scope:"take"|"attempt", attempt?: int|null}`, `rec_restore {name?, origin?, del_id}`, `rec_trash_clear {name?,
+origin?, del_ids?}`, `rec_library {}`, `rec_session {name, origin}`, `rec_spec {profile}`, `rec_play {name, origin, file}`,
+`rec_play_stop {}`, `qr_snap {}`, `qr_pending
 {}`, `qr_save {id, label, note?, sound?}`, `qr_discard {id}`. Kotlin pushes `rec_status {map}` on every change and every
 100 ms while ready/countdown/recording, and `qr_snapshot {map}` from the badge's QUICK REC menu row (which then opens
 the `quickrec` route).
@@ -949,7 +950,9 @@ Events: `rec{event: open|take|skip|rate|close|clear|abort|delete|restore|purge, 
 `mic_sound` (all builds) gains `pitch16` (16 floats, semitones from the sound's start, rounded to 0.1; `[]` when
 unpitched) and `f0_hz` (median f0 from `fp[0]` as `TrainJudge.f0Hz`, rounded to 1 Hz; null when unpitched). While a
 recorder session is open every phone/usb sound is dropped with `mic_sound{dropped:"recording"}` (precedence
-`touch ?: level gate ?: joystick ?: recording ?: dry_run`), so labels/gates/pitch still log and nothing acts.
+`touch ?: level gate ?: joystick ?: recording ?: playback ?: dry_run`), so labels/gates/pitch still log and nothing
+acts. While the library is playing a WAV (`rec_play`) — and for 500 ms after — every sound is dropped as
+`mic_sound{dropped:"playback"}`, because the phone's own speaker must not trigger gestures.
 
 `rec_start` refuses unless the source is phone|usb, the capture is listening, the mode is gesture ("Switch Canti to
 gesture mode first"), no calibration/training/measurement is open, and ≥ 200 MB is free; the other way round,
@@ -959,6 +962,38 @@ the session closes on `rec_close`, UiBridge close, or 10 min idle — never on B
 the phone). The PC pulls with `android/suite/range_phone.py pull` (see extractor/RANGE.md): every file is
 size-checked and each session validated before anything local is replaced, and the phone copy is deleted only with
 `--clear` and a typed yes (or `--yes`).
+
+**The in-app library (contract L).** Dev-only, in `ai.vox.companion.rec` (`RecLibrary.kt`, `RecPlayer.kt`). Phone
+sessions live under `files/range/<name>` and pushed PC copies under `files/range_pc/<name>`; each is parsed with its own
+`spec.json` (range_v1 or range_v2) and its rows read through the contract-T effective rows (deletes/restores/purges
+honoured). `origin` is `"phone"` | `"pc"`; `resumable` means phone origin and the same spec version as the bundled one.
+A damaged session is listed as `{name, origin, error}` and never crashes the list.
+
+- `rec_library {}` → `{sessions:[{name, origin, speaker, profile, device, mic, recorder, spec, synthetic, sittings,
+  done, total, backgrounds_done, backgrounds_total, no_sound, deleted, blocks:[{id, done, total, rating}], missing_n,
+  resumable, twin}], bundled:{version}}`.
+- `rec_session {name, origin}` → the same fields + `takes:[{take_id, block, cue, expect, cond, target_s,
+  status:"done"|"missing"|"no_sound", file, dur_ms, redo, attempts:[{attempt, file, dur_ms}]}]`,
+  `backgrounds:[{name, status, file, seconds}]`, `deletes:[{del_id, take_id, scope, attempt, restorable}]`.
+- `rec_spec {profile:"short"|"full"}` → the BUNDLED plan for browsing without recording: `{version, profile,
+  blocks:[{id, intro, takes:[{take_id, cue, expect, cond, target_s, max_s, manual, quiet}]}]}`.
+- `rec_play {name, origin, file}` → `{ok, dur_ms}`. Plays a WAV of that session (PCM16 mono/stereo; the path is checked
+  to stay inside the session folder) through `RecPlayer` (AudioTrack behind an interface, a fake in the JVM tests).
+  Refused while a take is in countdown/recording. `rec_play_stop {}` stops it. Kotlin pushes
+  `rec_play {state: playing|stopped|done|error, name, origin, file, pos_ms, dur_ms}` at 10 Hz while it plays and once on
+  each change. While playing, and for 500 ms after, phone/usb sounds are dropped as `"playback"`.
+- `rec_delete` / `rec_restore` / `rec_trash_clear` take an optional `origin`; `origin:"pc"` is refused ("PC sessions are
+  read-only here; delete on the PC and push again"). `rec_clear` gains `pc_sessions: [names]` (deletes pushed copies).
+- Events: `rec{event: library|play|play_stop, ...}` with names/ids only.
+
+**PC sessions reach the phone only by an explicit push** — never a background sync. Only the phone owner's own sessions
+(speaker `"self"`) may be pushed: `android/suite/range_phone.py push <session-dir>... [--replace] [--list]
+[--remove NAME [--yes]]` validates each folder (under a private root), copies only `session.json`, `spec.json`,
+`labels.jsonl`, `backgrounds.jsonl`, `ratings.jsonl`, `takes/**/*.wav`, `backgrounds/*.wav` and `report.json` (never
+`run-*/`, `trash/` or `report.md`) into `files/range_pc/.staging-<name>/` (each file size-checked with run-as `stat`),
+then swaps it in as `files/range_pc/<name>/` (the old copy is removed only after the new one is complete). A session
+whose `session.json` speaker is not `"self"` is refused with exit 2, "only your own sessions go to the phone" (no
+override).
 
 ## Decider HTTP call
 

@@ -330,7 +330,7 @@ class RecEngineTest {
         assertTrue(r.command("rec_clear", mapOf("sessions" to listOf("../range")))["error"] != null)
         assertTrue(File(e.filesDir, "range/range-a").exists())
         val out = r.command("rec_clear", mapOf("sessions" to listOf("range-a"), "quickrec" to "all"))
-        assertEquals(mapOf("sessions" to listOf("range-a"), "quickrec" to listOf("111", "222")),
+        assertEquals(mapOf("sessions" to listOf("range-a"), "pc_sessions" to emptyList<String>(), "quickrec" to listOf("111", "222")),
             (out["deleted"] as Map<*, *>).mapValues { (_, v) -> (v as List<*>).sortedBy { it.toString() } })
         assertTrue(File(e.filesDir, "range/range-b").exists())
     }
@@ -365,5 +365,26 @@ class RecEngineTest {
         metaFile.writeText(meta.toString(2) + "\n")
         val out = r.command("rec_open", mapOf("name" to name))
         assertEquals("This session was recorded with range_v1; the app records range_v2. Start a new session.", out["error"])
+    }
+
+    @Test fun pcOriginDeleteRestorePurgeRefused() {
+        val s = FakeScheduler(); val e = FakeEnv()
+        val r = engine(s, e, RingBuffer(), HeardLog())
+        val msg = "PC sessions are read-only here; delete on the PC and push again"
+        assertEquals(msg, r.command("rec_delete", mapOf("origin" to "pc", "name" to "x", "take_id" to "t", "scope" to "take"))["error"])
+        assertEquals(msg, r.command("rec_restore", mapOf("origin" to "pc", "name" to "x", "del_id" to "d"))["error"])
+        assertEquals(msg, r.command("rec_trash_clear", mapOf("origin" to "pc", "name" to "x"))["error"])
+    }
+
+    @Test fun recClearDeletesPushedPcSessions() {
+        val s = FakeScheduler(); val e = FakeEnv()
+        val r = engine(s, e, RingBuffer(), HeardLog())
+        File(e.filesDir, "range_pc/range-a").mkdirs()
+        File(e.filesDir, "range_pc/range-b").mkdirs()
+        val out = r.command("rec_clear", mapOf("pc_sessions" to listOf("range-a")))
+        assertEquals(mapOf("sessions" to emptyList<Any>(), "pc_sessions" to listOf("range-a"), "quickrec" to emptyList<Any>()),
+            out["deleted"])
+        assertTrue(!File(e.filesDir, "range_pc/range-a").exists())
+        assertTrue(File(e.filesDir, "range_pc/range-b").exists())
     }
 }

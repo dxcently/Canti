@@ -48,8 +48,8 @@ def device_ms() -> int:
     return int(time.monotonic() * 1000)
 
 
-def adb(*args: str, check: bool = True, timeout: float = 60, binary: bool = False):
-    r = subprocess.run(["adb", "-s", SERIAL, *args], capture_output=True, timeout=timeout)
+def adb(*args: str, check: bool = True, timeout: float = 60, binary: bool = False, input: bytes | None = None):
+    r = subprocess.run(["adb", "-s", SERIAL, *args], capture_output=True, timeout=timeout, input=input)
     if check and r.returncode != 0:
         raise RuntimeError(f"adb {' '.join(args)} failed: {r.stderr.decode(errors='replace')[:400]}")
     return r.stdout if binary else r.stdout.decode(errors="replace")

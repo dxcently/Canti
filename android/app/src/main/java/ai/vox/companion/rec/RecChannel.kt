@@ -13,6 +13,7 @@ class RecChannel(messenger: BinaryMessenger, private val command: (String, Map<S
     private val methods = MethodChannel(messenger, NAME)
     val statusSink: (Map<String, Any?>) -> Unit = { m -> methods.invokeMethod("rec_status", m) }
     val snapshotSink: (Map<String, Any?>) -> Unit = { m -> methods.invokeMethod("qr_snapshot", m) }
+    val playSink: (Map<String, Any?>) -> Unit = { m -> methods.invokeMethod("rec_play", m) }   // [rec] contract L playback
 
     init {
         methods.setMethodCallHandler { call, result ->

@@ -419,10 +419,12 @@ class RecEngine(
         return mapOf("ok" to true, "active" to false)
     }
 
-    /** rec_clear {sessions?: [names], quickrec?: [ids] | "all"}: deletes exactly those (names/ids checked, never a path). */
+    /** rec_clear {sessions?: [names], pc_sessions?: [names], quickrec?: [ids] | "all"}: deletes exactly those (names/ids
+     *  checked, never a path). pc_sessions removes pushed PC copies under files/range_pc/. */
     private fun clear(args: Map<String, Any?>): Map<String, Any?> {
         if (session != null) return mapOf("error" to "close the open session first")
         val sessions = (args["sessions"] as? List<*>)?.map { it.toString() } ?: emptyList()
+        val pcSessions = (args["pc_sessions"] as? List<*>)?.map { it.toString() } ?: emptyList()
         val qrRoot = File(env.filesDir, "quickrec")
         val quick = when (val q = args["quickrec"]) {
             null -> emptyList()
@@ -430,18 +432,21 @@ class RecEngine(
             is List<*> -> q.map { it.toString() }
             else -> return mapOf("error" to "quickrec must be a list of ids or \"all\"")
         }
-        if (sessions.any { !it.matches(SAFE_NAME) } || quick.any { !it.matches(QR_ID) }) return mapOf("error" to "bad session name or quickrec id")
+        if (sessions.any { !it.matches(SAFE_NAME) } || pcSessions.any { !it.matches(SAFE_NAME) } || quick.any { !it.matches(QR_ID) })
+            return mapOf("error" to "bad session name or quickrec id")
         val gone = sessions.filter { n -> File(env.filesDir, "range/$n").let { it.isDirectory && it.deleteRecursively() } }
+        val pcGone = pcSessions.filter { n -> File(env.filesDir, "range_pc/$n").let { it.isDirectory && it.deleteRecursively() } }
         val qGone = quick.filter { id -> File(qrRoot, id).let { it.isDirectory && it.deleteRecursively() } }
-        log("clear", mapOf("sessions" to gone.size, "quickrec" to qGone.size))
-        return mapOf("ok" to true, "deleted" to mapOf("sessions" to gone, "quickrec" to qGone))
+        log("clear", mapOf("sessions" to gone.size, "pc_sessions" to pcGone.size, "quickrec" to qGone.size))
+        return mapOf("ok" to true, "deleted" to mapOf("sessions" to gone, "pc_sessions" to pcGone, "quickrec" to qGone))
     }
 
     // --- delete / restore / purge (contract T) -----------------------------------------------------------------------
 
-    /** The session dir + its own plan (its spec.json, so a v1 session parses as v1) for a named session. */
-    private fun sessionPlan(name: String): Pair<File, RangePlan.Plan>? {
-        val dir = File(env.filesDir, "range/$name")
+    /** The session dir + its own plan (its spec.json, so a v1 session parses as v1) for a named session. [origin]
+     *  "phone" reads `files/range/<name>`, "pc" reads `files/range_pc/<name>`. */
+    private fun sessionPlan(name: String, origin: String = "phone"): Pair<File, RangePlan.Plan>? {
+        val dir = File(env.filesDir, if (origin == "pc") "range_pc/$name" else "range/$name")
         val metaFile = File(dir, "session.json")
         if (!metaFile.exists()) return null
         val meta = JSONObject(metaFile.readText())
@@ -453,7 +458,14 @@ class RecEngine(
     private fun targetName(args: Map<String, Any?>): String? =
         args["name"] as? String ?: session?.name
 
+    /** The delete/restore/purge origin ("phone" unless passed); "pc" is refused by each op (read-only here). */
+    private fun origin(args: Map<String, Any?>): String {
+        val o = args["origin"] as? String ?: "phone"
+        return if (o == "pc") "pc" else "phone"
+    }
+
     private fun delete(args: Map<String, Any?>): Map<String, Any?> {
+        if (origin(args) == "pc") return mapOf("ok" to false, "error" to "PC sessions are read-only here; delete on the PC and push again")
         val n = targetName(args) ?: return mapOf("ok" to false, "error" to "no session open; pass {name}")
         val takeId = args["take_id"] as? String ?: return mapOf("ok" to false, "error" to "rec_delete needs {take_id}")
         val scope = args["scope"] as? String ?: return mapOf("ok" to false, "error" to "rec_delete needs {scope}")
@@ -487,6 +499,7 @@ class RecEngine(
     }
 
     private fun restore(args: Map<String, Any?>): Map<String, Any?> {
+        if (origin(args) == "pc") return mapOf("ok" to false, "error" to "PC sessions are read-only here; delete on the PC and push again")
         val n = targetName(args) ?: return mapOf("ok" to false, "error" to "no session open; pass {name}")
         val delId = args["del_id"] as? String ?: return mapOf("ok" to false, "error" to "rec_restore needs {del_id}")
         val (dir, _) = sessionPlan(n) ?: return mapOf("ok" to false, "error" to "no such session: $n")
@@ -498,6 +511,7 @@ class RecEngine(
     }
 
     private fun trashClear(args: Map<String, Any?>): Map<String, Any?> {
+        if (origin(args) == "pc") return mapOf("ok" to false, "error" to "PC sessions are read-only here; delete on the PC and push again")
         val n = targetName(args) ?: return mapOf("ok" to false, "error" to "no session open; pass {name}")
         val delIds = (args["del_ids"] as? List<*>)?.map { it.toString() }
         val (dir, _) = sessionPlan(n) ?: return mapOf("ok" to false, "error" to "no such session: $n")

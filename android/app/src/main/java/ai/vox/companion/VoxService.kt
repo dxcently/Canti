@@ -49,9 +49,10 @@ class VoxService : AccessibilityService() {
         const val OPTION_FORMAT_MAX_AGE_MS = 10 * 60_000L
         /** [train] The UI channel's `train_status` pushes (UiBridge sets it; main thread). */
         @Volatile var trainSink: ((Map<String, Any?>) -> Unit)? = null
-        /** [rec] The `ai.vox/recorder` channel's `rec_status` / `qr_snapshot` pushes (UiBridge sets them; main thread). */
+        /** [rec] The `ai.vox/recorder` channel's `rec_status` / `qr_snapshot` / `rec_play` pushes (UiBridge sets them; main thread). */
         @Volatile var recSink: ((Map<String, Any?>) -> Unit)? = null
         @Volatile var qrSink: ((Map<String, Any?>) -> Unit)? = null
+        @Volatile var recPlaySink: ((Map<String, Any?>) -> Unit)? = null
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -122,6 +123,7 @@ class VoxService : AccessibilityService() {
     // [rec] The in-app test recorder + quick record (package ai.vox.companion.rec); null while the gate is off.
     private var rec: ai.vox.companion.rec.RecEngine? = null
     private var quick: ai.vox.companion.rec.QuickRec? = null
+    private var recPlayer: ai.vox.companion.rec.RecPlayer? = null   // [rec] contract L playback
     private var recPump: Runnable? = null
     private var matcher: Matcher? = null
     // Per-feature std floors by fp_version: assets/fp_floors.json, overridden by files/fp_floors.json (op fp_floors).
@@ -291,7 +293,9 @@ class VoxService : AccessibilityService() {
         val m = mic ?: return
         val spec = assets.open(ai.vox.companion.rec.RangePlan.ASSET).use { it.readBytes() }
         val push: (Map<String, Any?>) -> Unit = { st -> recSink?.invoke(st); Unit }
-        m.recDrop = { ai.vox.companion.rec.RecDrops.reason(rec?.recording == true) }   // the §3 "recording" drop
+        recPlayer = ai.vox.companion.rec.RecPlayer(ai.vox.companion.rec.RecPlayAudio(), scheduler,
+            { m -> recPlaySink?.invoke(m); Unit })   // [rec] contract L playback
+        m.recDrop = { ai.vox.companion.rec.RecDrops.reason(rec?.recording == true, recPlayer?.dropping == true) }   // the §3 "recording"/"playback" drop
         val env = object : ai.vox.companion.rec.RecEngine.Env {
             override val rate get() = settings.mic.rate
             override val source get() = settings.mic.source
@@ -352,6 +356,11 @@ class VoxService : AccessibilityService() {
     fun recCommand(method: String, args: Map<String, Any?>): Map<String, Any?> {
         if (!ai.vox.companion.rec.DevRec.enabled) return mapOf("enabled" to false)
         if (method == "rec_list") return recList()
+        if (method == "rec_library") return recLibrary()   // [rec] contract L
+        if (method == "rec_session") return recSession(args)   // [rec] contract L
+        if (method == "rec_spec") return recSpec(args)   // [rec] contract L
+        if (method == "rec_play") return recPlay(args)   // [rec] contract L
+        if (method == "rec_play_stop") return recPlayStop()   // [rec] contract L
         val r = rec ?: return mapOf("enabled" to true, "active" to false)
         if (method.startsWith("qr_")) return quick?.command(method, args) ?: mapOf("id" to null)
         return r.command(method, args)
@@ -400,12 +409,60 @@ class VoxService : AccessibilityService() {
     private fun readJsonl(f: java.io.File): List<org.json.JSONObject> =
         if (!f.exists()) emptyList() else f.readLines().filter { it.isNotBlank() }.map { org.json.JSONObject(it) }
 
+    // --- [rec] contract L: the in-app library (phone + pushed PC sessions) and playback ---------------------------------
+
+    private fun recSpecBytes(): ByteArray = assets.open(ai.vox.companion.rec.RangePlan.ASSET).use { it.readBytes() }
+
+    private fun recLibrary(): Map<String, Any?> {
+        val lib = ai.vox.companion.rec.RecLibrary(filesDir, recSpecBytes())
+        ai.vox.companion.EventLog.ev("rec", "event" to "library")
+        return lib.list() + mapOf("enabled" to true)
+    }
+
+    private fun recSession(args: Map<String, Any?>): Map<String, Any?> {
+        val name = args["name"] as? String ?: return mapOf("error" to "rec_session needs {name}")
+        val origin = args["origin"] as? String ?: ai.vox.companion.rec.RecLibrary.PHONE
+        val lib = ai.vox.companion.rec.RecLibrary(filesDir, recSpecBytes())
+        return try { lib.session(name, origin) + mapOf("enabled" to true) }
+        catch (e: Exception) { mapOf("error" to (e.message ?: "unreadable session")) }
+    }
+
+    private fun recSpec(args: Map<String, Any?>): Map<String, Any?> {
+        val profile = args["profile"] as? String ?: "short"
+        val lib = ai.vox.companion.rec.RecLibrary(filesDir, recSpecBytes())
+        return try { lib.spec(profile) + mapOf("enabled" to true) }
+        catch (e: Exception) { mapOf("error" to (e.message ?: "bad profile '$profile'")) }
+    }
+
+    private fun recPlay(args: Map<String, Any?>): Map<String, Any?> {
+        val name = args["name"] as? String ?: return mapOf("ok" to false, "error" to "rec_play needs {name}")
+        val origin = args["origin"] as? String ?: ai.vox.companion.rec.RecLibrary.PHONE
+        val file = args["file"] as? String ?: return mapOf("ok" to false, "error" to "rec_play needs {file}")
+        ai.vox.companion.rec.RecPlayer.refusal(rec?.state)?.let { return mapOf("ok" to false, "error" to it) }
+        val lib = ai.vox.companion.rec.RecLibrary(filesDir, recSpecBytes())
+        val f = try { ai.vox.companion.rec.RecLibrary.resolvePlay(lib.sessionDir(name, origin), file) }
+        catch (e: Exception) { return mapOf("ok" to false, "error" to e.message) }
+        val (_, _, durMs) = try { ai.vox.companion.rec.RecLibrary.wavInfo(f) }
+        catch (e: Exception) { return mapOf("ok" to false, "error" to e.message) }
+        val p = recPlayer ?: return mapOf("ok" to false, "error" to "player not ready")
+        p.start(name, origin, file, f, durMs)
+        ai.vox.companion.EventLog.ev("rec", "event" to "play", "name" to name, "file" to file)
+        return mapOf("ok" to true, "dur_ms" to durMs)
+    }
+
+    private fun recPlayStop(): Map<String, Any?> {
+        recPlayer?.stop()
+        ai.vox.companion.EventLog.ev("rec", "event" to "play_stop")
+        return mapOf("ok" to true)
+    }
+
     private fun shutdown() {
         if (instance == null) return
         instance = null
         holdScroll.stop("service stopped")
         train?.cancel("service stopped"); train = null   // [train]
         rec?.close("service stopped"); recPump?.let(main::removeCallbacks); rec = null; quick = null; recPump = null   // [rec]
+        recPlayer?.stop(); recPlayer = null   // [rec]
         try { audio.unregisterAudioPlaybackCallback(playbackWatch) } catch (_: Exception) {}
         try { audio.unregisterAudioDeviceCallback(routeWatch) } catch (_: Exception) {}
         main.removeCallbacks(mediaWindowEnd); main.removeCallbacks(mediaRecheck)
@@ -2135,9 +2192,10 @@ class VoxService : AccessibilityService() {
                 if (!r.optBoolean("ok", true)) { reply.put("ok", false).put("error", r.optString("error")) }
                 else for (k in r.keys()) if (k != "ok") reply.put(k, r.get(k))
             }
-            // [rec] the in-app test recorder + quick record: flat replies like measure_*. Disabled when the gate is off.
+            // [rec] the in-app test recorder + quick record + library: flat replies like measure_*. Disabled when the gate is off.
             "rec_list", "rec_start", "rec_open", "rec_status", "rec_next", "rec_go", "rec_abort", "rec_skip",
             "rec_redo_last", "rec_rate", "rec_close", "rec_clear", "rec_delete", "rec_restore", "rec_trash_clear",
+            "rec_library", "rec_session", "rec_spec", "rec_play", "rec_play_stop",
             "qr_snap", "qr_pending", "qr_save", "qr_discard" -> {
                 if (!ai.vox.companion.rec.DevRec.enabled) { reply.put("ok", false).put("error", "recorder disabled") }
                 else {
