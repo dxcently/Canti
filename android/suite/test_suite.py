@@ -640,8 +640,9 @@ def jev_local_systemone_vox_jevlike(c: Ctx):
         assert len(lat) >= 9, lat   # the 9 sound scenes (listen and the phrase are app/rules-owned)
         assert not wrong, f"{len(wrong)}/{len(lat)} wrong: {wrong}"
     finally:
-        c.vox.control("config", decider="rules", http_timeout_ms=2000)
+        # drop the tunnel first: the config change re-reads the server's option format, which must not stick (v2i)
         adb("reverse", "--remove", "tcp:8765", check=False)
+        c.vox.control("config", decider="rules", base_url="https://api.typesafe.ai", http_timeout_ms=2000)
 
 
 # --- intent cursor mode: a long hiss, a spoken target, then tap / highlight / not on screen ----------------------------
