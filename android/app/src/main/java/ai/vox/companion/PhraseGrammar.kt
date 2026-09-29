@@ -51,6 +51,12 @@ sealed class SpeechCommand {
      * "previous" resolved on the screen ([SwipePlan]); [count] times (1..5); [how]: "finger", "content" or the noun said.
      */
     data class Swipe(val action: String?, val semantic: String?, val count: Int = 1, val how: String = "") : SpeechCommand()
+    /**
+     * A spoken follow-up on the last action ([Followup.kt]): [kind] retry / other / direction / undo, [dir] the
+     * direction for a direction follow-up, [said] the exact matched phrase, and [fallback] what [PhraseGrammar.parse]
+     * would have returned without the follow-up rule (the service uses it when there is no pick to act on).
+     */
+    data class Followup(val kind: FollowKind, val dir: Dir?, val said: String, val fallback: SpeechCommand? = null) : SpeechCommand()
 
     fun describe(): String = when (this) {
         is OpenApp -> "open_app $label ($pkg, ${"%.2f".format(Locale.ROOT, score)})" + (if (others.isNotEmpty()) " or ${others.joinToString()}" else "")
@@ -62,6 +68,7 @@ sealed class SpeechCommand {
         is Ignore -> "ignore ($why)"
         is Volume -> "volume ${stream.key} ${op.describe()}"
         is Swipe -> "swipe ${action ?: semantic}" + (if (count > 1) " x$count" else "") + (if (how.isNotEmpty()) " ($how)" else "")
+        is Followup -> "followup " + (if (kind == FollowKind.DIRECTION) dir?.name?.lowercase() ?: "direction" else kind.name.lowercase())
     }
 }
 
@@ -291,6 +298,52 @@ object PhraseGrammar {
         return t.trim()
     }
 
+    // --- spoken follow-ups -----------------------------------------------------------------------------------------
+
+    /** Politeness tails stripped from a follow-up, like [TRAIL_PHRASES] but "again" stays ("try again" is the follow-up). */
+    private val FOLLOWUP_TRAIL = TRAIL_PHRASES.filter { it != "again" }
+
+    /** Only these EXACT phrases are follow-ups ("try again", "undo", "the one below", ...); anything longer is not. */
+    private val FOLLOWUP_EXACT: Map<String, Pair<FollowKind, Dir?>> = buildMap {
+        put("try again", FollowKind.RETRY to null); put("again", FollowKind.RETRY to null); put("once more", FollowKind.RETRY to null)
+        put("the other one", FollowKind.OTHER to null); put("other one", FollowKind.OTHER to null)
+        put("not that one", FollowKind.OTHER to null); put("the next one", FollowKind.OTHER to null); put("next one", FollowKind.OTHER to null)
+        put("the one below", FollowKind.DIRECTION to Dir.BELOW); put("the one above", FollowKind.DIRECTION to Dir.ABOVE)
+        put("the one on the left", FollowKind.DIRECTION to Dir.LEFT); put("the one to the left", FollowKind.DIRECTION to Dir.LEFT)
+        put("the one on the right", FollowKind.DIRECTION to Dir.RIGHT); put("the one to the right", FollowKind.DIRECTION to Dir.RIGHT)
+        put("undo", FollowKind.UNDO to null); put("undo that", FollowKind.UNDO to null)
+    }
+
+    /**
+     * The follow-up in the tidy [words], or null. Matched on the last self-correction part with lead phrases /
+     * softeners and politeness tails other than "again" removed, so "please try again", "try again please" and
+     * "no, the other one" all match while "scroll down again" does not ("again" is not a tail here).
+     */
+    private fun followupMatch(words: List<String>): Triple<FollowKind, Dir?, String>? {
+        val part = corrections(words).last()
+        if (part.isEmpty()) return null
+        var w = part
+        var changed = true
+        while (changed && w.isNotEmpty()) {
+            changed = false
+            if (w.first() in LEAD_WORDS || w.first() in SOFT_WORDS) { w = w.drop(1); changed = true; continue }
+            for (p in LEAD_PHRASES) {
+                val pw = p.split(' ')
+                if (w.size > pw.size && w.take(pw.size) == pw) { w = w.drop(pw.size); changed = true; break }
+            }
+        }
+        changed = true
+        while (changed && w.isNotEmpty()) {
+            changed = false
+            for (p in FOLLOWUP_TRAIL) {
+                val pw = p.split(' ')
+                if (w.size > pw.size && w.takeLast(pw.size) == pw) { w = w.dropLast(pw.size); changed = true; break }
+            }
+        }
+        val t = w.joinToString(" ")
+        return FOLLOWUP_EXACT[t]?.let { (kind, dir) -> Triple(kind, dir, t) }
+    }
+
     fun parse(raw: String, ctx: Context = Context()): SpeechCommand {
         val words = tidy(basic(raw))
         if (words.isEmpty()) return SpeechCommand.Ignore("empty")
@@ -304,6 +357,19 @@ object PhraseGrammar {
         // "swipe left, no, right": after a correction "right" is a direction, not an ack
         if (!ctx.cursor && last.split(" ").all { it in ACK } && !(parts.size > 1 && last == "right") && !LIKE_FORM.matches(last)) return SpeechCommand.Ignore("filler")
         if (last in ctx.userPhrases) return SpeechCommand.Phrase(last, "user phrase rule")
+        // [follow-up] an exact spoken follow-up ("try again", "undo", "the other one") wins over the normal parse, but
+        // the normal parse is kept as its fallback (the service uses it when there is no pick to act on).
+        val normal = normalCommand(parts, last, ctx)
+        followupMatch(words)?.let { (kind, dir, said) ->
+            // a user phrase rule still wins over a follow-up ("try again" bound by the user beats the retry)
+            if (said in ctx.userPhrases) return SpeechCommand.Phrase(said, "user phrase rule")
+            return SpeechCommand.Followup(kind, dir, said, normal)
+        }
+        return normal
+    }
+
+    /** The normal parse (self-correction merge, then [command]) — the follow-up rule's fallback. */
+    private fun normalCommand(parts: List<List<String>>, last: String, ctx: Context): SpeechCommand {
         if (parts.size > 1) {
             // "open youtube, no, spotify", "scroll down, i mean up": the correction borrows the verb it replaces.
             // The part corrected is the last non-empty one ("open facebook, sorry, i mean instagram" splits twice).
@@ -474,6 +540,7 @@ object PhraseGrammar {
     /** How concrete a parse is: a known command > a tap on something > a timer without a length > unparsed. */
     private fun rank(c: SpeechCommand, tapScore: ((String) -> Double)?): Int = when (c) {
         is SpeechCommand.OpenApp, is SpeechCommand.Nav, is SpeechCommand.Volume, is SpeechCommand.Swipe -> 4
+        is SpeechCommand.Followup -> 4   // a follow-up counts as concrete (n-best)
         is SpeechCommand.AppMissing -> 1
         is SpeechCommand.Timer -> if (c.seconds != null) 4 else 1
         is SpeechCommand.Phrase -> when (c.why) { "user phrase rule" -> 4; else -> 0 }

@@ -83,7 +83,7 @@ class PhraseGrammarTest {
             "go home" to "go home", "take me home" to "go home", "go to the home screen" to "go home", "home" to "go home",
             "scroll down" to "scroll down", "scroll down a bit please" to "scroll down", "scroll" to "scroll down", "page down" to "scroll down",
             "scroll up" to "scroll up", "scroll up a little" to "scroll up",
-            "next" to "next", "next video" to "next", "skip this" to "next", "next one" to "next",
+            "next" to "next", "next video" to "next", "skip this" to "next",
             "pause the video" to "pause", "resume" to "play", "keep playing" to "play",
             "open camera" to "open camera", "open the camera" to "open camera", "open notifications" to "show notifications",
             "zoom in" to "zoom in",
@@ -459,7 +459,8 @@ class PhraseGrammarTest {
         "show me the previous tab" to sem(false, "tab"),
         // one ordinary item keeps the plain nav phrase and its screen tie-break
         "next video" to nav("next"), "previous video" to nav("the one before"), "show me the next one" to nav("next"),
-        "next one" to nav("next"), "the one before" to nav("the one before"), "go back one" to nav("the one before"),
+        "next one" to SpeechCommand.Followup(FollowKind.OTHER, null, "next one", nav("next")),
+        "the one before" to nav("the one before"), "go back one" to nav("the one before"),
     ))
 
     @Test fun swipeThroughFillersCorrectionsAndChatter() = check(listOf(
@@ -671,5 +672,37 @@ class PhraseGrammarTest {
         assertEquals(SpeechCommand.Timer(90), parse("timer for one minute thirty"))
         assertEquals(SpeechCommand.Timer(900), parse("set a timer for ten, no, fifteen minutes"))
         assertEquals(nav("scroll down"), parse("scroll scroll down"))
+    }
+
+    @Test fun followUpPhrasesAreExactAndBeatTheNormalParse() {
+        fun fu(s: String, c: PhraseGrammar.Context = ctx) = parse(s, c) as? SpeechCommand.Followup
+        // retry / other / undo / direction
+        assertEquals(FollowKind.RETRY, fu("try again")?.kind); assertEquals("try again", fu("try again")?.said)
+        assertEquals(FollowKind.RETRY, fu("again")?.kind); assertEquals(FollowKind.RETRY, fu("once more")?.kind)
+        assertEquals(FollowKind.OTHER, fu("the other one")?.kind); assertEquals(FollowKind.OTHER, fu("other one")?.kind)
+        assertEquals(FollowKind.OTHER, fu("not that one")?.kind); assertEquals(FollowKind.OTHER, fu("the next one")?.kind)
+        assertEquals(FollowKind.OTHER, fu("next one")?.kind)
+        assertEquals(Dir.BELOW, fu("the one below")?.dir); assertEquals(Dir.ABOVE, fu("the one above")?.dir)
+        assertEquals(Dir.LEFT, fu("the one to the left")?.dir); assertEquals(Dir.LEFT, fu("the one on the left")?.dir)
+        assertEquals(Dir.RIGHT, fu("the one on the right")?.dir); assertEquals(Dir.RIGHT, fu("the one to the right")?.dir)
+        assertEquals(FollowKind.UNDO, fu("undo")?.kind); assertEquals(FollowKind.UNDO, fu("undo that")?.kind)
+        // lead phrases / softeners / politeness tails other than "again", and self-corrections
+        assertEquals(FollowKind.RETRY, fu("please try again")?.kind)
+        assertEquals(FollowKind.RETRY, fu("try again please")?.kind)
+        assertEquals(FollowKind.RETRY, fu("ok once more")?.kind)
+        assertEquals(FollowKind.OTHER, fu("no, the other one")?.kind)
+        assertEquals(FollowKind.OTHER, fu("no wait, not that one")?.kind)
+        // the normal parse is the fallback ("the next one" -> its current parse)
+        assertEquals(nav("next"), fu("next one")?.fallback)
+        // not follow-ups
+        assertEquals(nav("scroll down"), parse("scroll down again"))     // "again" stripped as today
+        assertEquals(nav("go back"), parse("go back"))                    // back is navigation, not undo
+        assertNull(fu("scroll down again")); assertNull(fu("try the other tab")); assertNull(fu("go back"))
+        // cursor mode still matches a follow-up (a bare "undo" is the follow-up, not an element name)
+        val cursor = ctx.copy(cursor = true)
+        assertEquals(FollowKind.UNDO, fu("undo", cursor)?.kind)
+        assertEquals(FollowKind.RETRY, fu("try again", cursor)?.kind)
+        // a user phrase rule wins over the follow-up
+        assertEquals(SpeechCommand.Phrase("try again", "user phrase rule"), parse("try again", ctx.copy(userPhrases = setOf("try again"))))
     }
 }
