@@ -13,10 +13,12 @@ import kotlin.math.roundToInt
  *
  * - [TrainPlan]: the cells. A contour (rise, fall, arch, dip) = hum|whistle x low|high start x slow|quick, 8 takes;
  *   flat = hum|whistle x low|high note x short|long, 8 takes; pop, click, hiss = soft|loud x 2 takes, 4. 52 in all.
- * - [TrainJudge]: one take against its cell. It must be ONE sound, carry a fingerprint, get the prompted label, and
- *   (contours) be the prompted tone (whistle = median f0 >= 600 Hz, the extractor's whistle_min_hz) and speed.
+ * - [TrainJudge]: one take against its cell. It must be ONE sound and carry a fingerprint; the rest is the tolerant
+ *   grade ([ShapeGrade]: start note, shape, length, hum/whistle, ...; near counts as a pass). A passing take the
+ *   extractor labelled otherwise is stored with `label_mismatch` and held out of Personal until train_confirm.
  * - [GestureTrainer]: the session. A failed take stops with the reason and waits for RETRY or SKIP (and, when only
- *   the label is wrong, KEEP ANYWAY, logged). Nothing is skipped or recorded again without the user.
+ *   the shape missed, KEEP ANYWAY, logged). A pass moves on by itself after [GestureTrainer.AUTO_ADVANCE_MS];
+ *   train_goto (the header arrows) moves anywhere in the plan.
  * Pure JVM: the service is the [TrainHost].
  */
 
@@ -93,8 +95,9 @@ data class TrainHeard(val labels: List<String>, val lines: List<String>, val dur
     val line get() = lines.firstOrNull()
 }
 
-/** The judgement of one take: [reasons] empty = accepted. */
-data class TrainVerdict(val reasons: List<Pair<String, String>>, val canKeep: Boolean, val heard: Map<String, Any?>) {
+/** The judgement of one take: [reasons] empty = accepted. [checks] is the tolerant grade (ShapeGrade). */
+data class TrainVerdict(val reasons: List<Pair<String, String>>, val canKeep: Boolean, val heard: Map<String, Any?>,
+                        val checks: List<ShapeGrade.Check> = emptyList()) {
     val ok get() = reasons.isEmpty()
     val reason get() = reasons.joinToString(" ") { it.second }
 }
@@ -137,7 +140,7 @@ object TrainJudge {
 
     private fun secs(ms: Long) = "%.1f s".format(java.util.Locale.ROOT, ms / 1000.0)
 
-    fun judge(cell: TrainPlan.Cell, h: TrainHeard): TrainVerdict {
+    fun judge(cell: TrainPlan.Cell, h: TrainHeard, scale: ShapeGrade.Scale? = null): TrainVerdict {
         val g = cell.gesture
         val f = h.features
         val f0 = f0Hz(f)
@@ -147,7 +150,6 @@ object TrainJudge {
             "tone" to tone(f, h.line), "loudness" to h.line?.let { SoundLine(it).loudness },
             "pitch16" to f?.pitch16?.toList(), "shape" to h.label?.let { TrainPlan.SHAPE[it] },
         )
-        val reasons = mutableListOf<Pair<String, String>>()
         if (h.labels.isEmpty()) return TrainVerdict(listOf("nothing" to "Heard nothing."), false, heard)
         if (h.labels.size > 1) {
             val seq = h.labels.joinToString(" then ")
@@ -155,34 +157,59 @@ object TrainJudge {
         }
         if (f == null) return TrainVerdict(listOf("features" to "No fingerprint came with the sound, so it cannot be stored (an older Canti firmware?)."), false, heard)
         val label = h.label!!
-        if (label != g) reasons += "label" to when {
-            label == "unknown" -> "Canti did not count that as a gesture (too quiet, too short, or media playing): ${wanted(g)}."
-            else -> "Heard ${heardShape(label)}: ${wanted(g)}."
-        }
-        if (g in TrainPlan.CONTOURS) {
-            val want = cell.tags["tone"]
-            val got = tone(f, h.line)
-            if (want != null && label == g) when {
-                got == null -> reasons += "tone" to "No clear pitch: ${if (want == "hum") "hum it with your lips closed" else "whistle it"}."
-                got != want -> reasons += "tone" to if (want == "whistle")
-                    "Heard a hum (about ${f0?.roundToInt() ?: "?"} Hz): a whistle is ${WHISTLE_MIN_HZ.roundToInt()} Hz or higher. Whistle it."
-                    else "Heard a whistle (about ${f0?.roundToInt() ?: "?"} Hz): hum it with your lips closed, below ${WHISTLE_MIN_HZ.roundToInt()} Hz."
+        if (label == "unknown") return TrainVerdict(listOf("label" to "Canti did not count that as a gesture (too quiet, too short, or media playing): ${wanted(g)}."), false, heard)
+
+        // The tolerant grade (ShapeGrade): a near miss passes; only a clear miss fails. The heard label is no longer
+        // checked directly — a passing take whose label differs is stored with `label_mismatch` (confirmed later).
+        val start = if (g in TrainPlan.DISCRETE) "none" else cell.tags["pitch"] ?: "none"
+        val speed = cell.tags["speed"] ?: cell.tags["length"]
+        val want = ShapeGrade.Want(listOf(g), start, speed, cell.tags["tone"] ?: "any")
+        val heardS = ShapeGrade.Heard(h.labels, f.pitch16.toList(), f0, startHz(f), h.durMs,
+            h.line?.let { SoundLine(it).loudness }, tone(f, h.line))
+        val checks = ShapeGrade.grade(want, heardS, scale)
+        val misses = checks.filter { it.state == "miss" }
+        val reasons = mutableListOf<Pair<String, String>>()
+        if (misses.isNotEmpty()) reasons += missReason(misses.first(), cell, label, f0, h.durMs)
+        // Keep anyway: a take that misses ONLY the shape (the direction / label family) can still be stored as the
+        // user's own version — a contour class needs a pitch track to hold it.
+        val canKeep = misses.size == 1 && misses[0].id == "SHAPE" && (g !in TrainPlan.CONTOURS || f.pitched)
+        return TrainVerdict(reasons, canKeep, heard, checks)
+    }
+
+    /** The "next step" sentence for the first miss, keeping the reason texts. */
+    private fun missReason(miss: ShapeGrade.Check, cell: TrainPlan.Cell, label: String, f0: Double?, dur: Long?): Pair<String, String> {
+        val g = cell.gesture
+        return when (miss.id) {
+            "SHAPE" -> if (label != g) "shape" to "Heard ${heardShape(label)}: ${wanted(g)}."
+                else "shape" to "That was not ${wanted(g)}."
+            "SOUND" -> {
+                val want = cell.tags["tone"]
+                "tone" to when {
+                    // a low voice: under the extractor's f0 floor (75 Hz) a hum has no pitch at all
+                    f0 == null && want == "hum" && cell.tags["pitch"] == "low" ->
+                        "No clear pitch: hum it with your lips closed, a little above your very lowest note."
+                    f0 == null -> "No clear pitch: ${if (want == "hum") "hum it with your lips closed" else "whistle it"}."
+                    want == "whistle" -> "Heard a hum (about ${f0.roundToInt()} Hz): a whistle is ${WHISTLE_MIN_HZ.roundToInt()} Hz or higher. Whistle it."
+                    else -> "Heard a whistle (about ${f0.roundToInt()} Hz): hum it with your lips closed, below ${WHISTLE_MIN_HZ.roundToInt()} Hz."
+                }
             }
-            val speed = cell.tags["speed"] ?: cell.tags["length"]
-            val d = h.durMs
-            if (speed != null && d != null && label == g) {
-                val word = speed.uppercase()
+            "LENGTH" -> {
+                val speed = cell.tags["speed"] ?: cell.tags["length"]
                 val what = if (g == "flat") "flat note" else g
-                if ((speed == "quick" || speed == "short") && d > QUICK_MAX_MS)
-                    reasons += "speed" to "It took ${secs(d)}: a $word $what takes about half a second (at most ${secs(QUICK_MAX_MS)})."
-                if ((speed == "slow" || speed == "long") && d < SLOW_MIN_MS)
-                    reasons += "speed" to "It took ${secs(d)}: a $word $what takes about 1.5 s (at least ${secs(SLOW_MIN_MS)})."
+                "speed" to when {
+                    speed == "quick" || speed == "short" -> "It took ${secs(dur ?: 0)}: a ${speed.uppercase()} $what takes about half a second (at most ${secs(QUICK_MAX_MS)})."
+                    speed == "slow" || speed == "long" -> "It took ${secs(dur ?: 0)}: a ${speed.uppercase()} $what takes about 1.5 s (at least ${secs(SLOW_MIN_MS)})."
+                    else -> "It took ${secs(dur ?: 0)}: keep it under 4 s."
+                }
             }
+            "PITCH" -> "pitch" to when (cell.tags["pitch"]) {
+                "low" -> "It started too high: start LOW, near the bottom of your range."
+                "high" -> "It started too low: start HIGH, near the top of your range."
+                else -> "It started far from your usual note."
+            }
+            "LOUD" -> "loud" to "Too quiet for Canti: a little louder."
+            else -> miss.id.lowercase() to miss.label
         }
-        // Keep anyway: only a wrong label (that is how the store learns the user's own version), and only a sound the
-        // class can hold (a contour class needs the pitch track).
-        val canKeep = reasons.isNotEmpty() && reasons.all { it.first == "label" } && (g !in TrainPlan.CONTOURS || f.pitched)
-        return TrainVerdict(reasons, canKeep, heard)
     }
 }
 
@@ -200,6 +227,9 @@ interface TrainHost : Scheduler {
     fun liveTrace(): Boolean
     fun ticks(on: Boolean)
     fun profile(): String
+    /** The user's scale for the current sound source and [tone] (a saved calibration profile: the voice range for
+     *  `hum`, the whistle range for `whistle`), or null. */
+    fun scale(tone: String = "hum"): ShapeGrade.Scale? = null
     /** The enrollment store of [source] (the live one for the current source). */
     fun store(source: String): EnrollmentStore
     /** Changes [source]'s store and persists it (IllegalArgumentException with a reason on failure). */
@@ -253,9 +283,15 @@ class GestureTrainer(private val host: TrainHost) {
         const val IDLE_MS = 5 * 60_000L
         const val TRACE_MAX = 250            // 5 s of 20 ms ticks
         const val PUSH_MS = 100L
+        const val TICK_MS = 20               // one live tick
+        /** Auto-advance this long after a pass (the next undone cell), unless a command cancelled it. */
+        const val AUTO_ADVANCE_MS = 1200L
     }
 
-    private inner class Session(val source: String, val gesture: String, val queue: List<TrainPlan.Cell>) {
+    private inner class Session(val source: String, var gesture: String, var queue: List<TrainPlan.Cell>) {
+        /** The user's scales (voice, whistle), read once per round. */
+        val scales: Map<String, ShapeGrade.Scale?> = listOf("hum", "whistle").associateWith { host.scale(it) }
+        fun scaleOf(cell: TrainPlan.Cell?) = scales[if (cell?.tags?.get("tone") == "whistle") "whistle" else "hum"]
         var index = 0
         var state = "ready"
         var verdict: TrainVerdict? = null
@@ -264,9 +300,11 @@ class GestureTrainer(private val host: TrainHost) {
         var firstDur: Long? = null; var firstFeatures: SoundFeatures? = null
         val trace = ArrayDeque<Double?>()
         var levelDb: Double? = null
+        var liveChecks: List<ShapeGrade.Check> = emptyList()
         val passed = mutableListOf<String>(); val skipped = mutableListOf<String>(); val kept = mutableListOf<String>()
         var startedAt = 0L
         var cancelTimer: (() -> Unit)? = null
+        var autoAdvance: (() -> Unit)? = null
         val cell get() = queue.getOrNull(index)
     }
 
@@ -283,6 +321,8 @@ class GestureTrainer(private val host: TrainHost) {
     /** One UI / socket command; answers the status map (with `error` when refused). Main thread. */
     fun command(method: String, args: Map<String, Any?>): Map<String, Any?> {
         lastCmdAt = host.now()
+        // any command (other than a passive status read) cancels a pending auto-advance
+        if (method != "train_status") { s?.autoAdvance?.invoke(); s?.autoAdvance = null }
         val src = (args["source"] as? String)
         val err = try {
             when (method) {
@@ -294,6 +334,11 @@ class GestureTrainer(private val host: TrainHost) {
                 "train_skip" -> skip()
                 "train_keep" -> keep()
                 "train_next" -> next(args["record"] as? Boolean ?: true)
+                "train_goto" -> goto(args["gesture"] as? String ?: throw IllegalArgumentException("train_goto needs {gesture}"),
+                    args["cell"] as? String ?: throw IllegalArgumentException("train_goto needs {cell}"), src)
+                "train_confirm" -> confirm(src ?: host.source(),
+                    (args["id"] as? Number)?.toLong() ?: throw IllegalArgumentException("train_confirm needs {id}"),
+                    args["keep"] as? Boolean ?: throw IllegalArgumentException("train_confirm needs {keep}"))
                 "train_cancel" -> cancel("ui")
                 "train_delete" -> delete(src ?: host.source(), args["gesture"] as? String ?: throw IllegalArgumentException("train_delete needs {gesture}"),
                     args["cell"] as? String)
@@ -341,7 +386,7 @@ class GestureTrainer(private val host: TrainHost) {
         requireNotNull(c.cell) { "no take left in this round" }
         c.cancelTimer?.invoke(); c.cancelTimer = null
         c.labels.clear(); c.lines.clear(); c.firstDur = null; c.firstFeatures = null; c.trace.clear(); c.levelDb = null
-        c.verdict = null; c.heard = null
+        c.liveChecks = emptyList(); c.verdict = null; c.heard = null
         host.blocker()?.let { why ->
             c.state = "failed"
             c.verdict = TrainVerdict(listOf("blocked" to why), false, emptyMap())
@@ -389,10 +434,76 @@ class GestureTrainer(private val host: TrainHost) {
         advance(c, record)
     }
 
+    /** train_goto: switch the current take to that cell (in-flight take dropped, a stored take stays). With no round
+     *  open (the hub's rows) it opens one on that gesture. */
+    private fun goto(gesture: String, cellId: String, source: String?) {
+        require(gesture in TrainPlan.GESTURES) { "gesture must be one of ${TrainPlan.GESTURES}" }
+        val cell = TrainPlan.cell(gesture, cellId)
+        host.blocker()?.let { why -> throw IllegalArgumentException(why) }
+        val c = s ?: open(gesture, source)
+        if (c.gesture != gesture) switchGesture(c, gesture)
+        dropInFlight(c)
+        val idx = c.queue.indexOfFirst { it.id == cellId }
+        c.index = if (idx >= 0) idx else { c.queue = c.queue + cell; c.queue.size - 1 }   // a done cell: redo it
+        c.state = "ready"
+        host.log("event" to "goto", "gesture" to c.gesture, "cell" to cell.id, "source" to c.source)
+    }
+
+    /** A round for train_goto when none is open: [gesture]'s missing cells (maybe none: the goto adds its cell). */
+    private fun open(gesture: String, source: String?): Session {
+        val cur = host.source()
+        require(source == null || source == cur) { "the current sound source is ${srcName(cur)}: switch to ${srcName(source!!)} to train it" }
+        val c = Session(cur, gesture, emptyList())
+        switchGesture(c, gesture)
+        s = c
+        host.ticks(host.liveTrace())
+        host.log("event" to "start", "source" to cur, "gesture" to gesture, "cells" to c.queue.size, "by" to "goto")
+        return c
+    }
+
+    /** train_goto crossing a gesture boundary: re-open the round for the new gesture (stored takes stay). */
+    private fun switchGesture(c: Session, gesture: String) {
+        val st = host.store(c.source)
+        val cls = st.find(gesture)
+        require(cls == null || cls.kind == EnrollmentStore.GESTURE) { "'$gesture' is already a ${cls!!.kind} class in this store" }
+        val done = cls?.examples?.mapNotNull { it.cell }?.toSet() ?: emptySet()
+        c.gesture = gesture
+        c.queue = TrainPlan.cells(gesture).filter { it.id !in done }
+        c.index = 0
+        c.passed.clear(); c.skipped.clear(); c.kept.clear()
+    }
+
+    /** Drop the in-flight take (a stored take stays); the next record starts fresh. */
+    private fun dropInFlight(c: Session) {
+        c.cancelTimer?.invoke(); c.cancelTimer = null
+        c.autoAdvance?.invoke(); c.autoAdvance = null
+        c.labels.clear(); c.lines.clear(); c.firstDur = null; c.firstFeatures = null; c.trace.clear(); c.levelDb = null
+        c.liveChecks = emptyList(); c.verdict = null; c.heard = null
+    }
+
+    /** train_confirm {id, keep}: keep a label-mismatched take (confirmed) or delete it (reject). Only a take stored with
+     *  `label_mismatch` can be addressed: an example stored before ids has none, and must never be hit by id -1. */
+    private fun confirm(src: String, id: Long, keep: Boolean) {
+        require(src in EnrollmentStore.SOURCES) { "source must be one of ${EnrollmentStore.SOURCES}" }
+        fun EnrollExample.isIt() = meta?.let { m -> m.optBoolean("label_mismatch") && m.optLong("id", -1) == id } == true
+        require(id >= 0 && host.store(src).classes.any { cls -> cls.examples.any { it.isIt() } }) { "no stored take with id $id to confirm" }
+        host.change(src, "train ${if (keep) "confirm" else "reject"} $id") { s2 ->
+            for (cls in s2.classes) for (i in cls.examples.indices) if (cls.examples[i].isIt()) {
+                if (keep) cls.examples[i].meta!!.put("confirmed", true) else s2.delete(cls.name, i)
+                return@change
+            }
+        }
+        host.log("event" to "confirm", "id" to id, "keep" to keep, "source" to src)
+    }
+
     private fun advance(c: Session, record: Boolean) {
         c.cancelTimer?.invoke(); c.cancelTimer = null
-        c.index++
-        c.verdict = null; c.heard = null; c.trace.clear()
+        c.verdict = null; c.heard = null; c.trace.clear(); c.liveChecks = emptyList()
+        // the next undone cell after this one, then one before it that the arrows jumped over; a skipped cell stays
+        // skipped for this round
+        val done = doneCells(host.store(c.source), c.gesture)
+        val open = { i: Int -> c.queue[i].id !in done && c.queue[i].id !in c.skipped }
+        c.index = ((c.index + 1 until c.queue.size) + (0 until minOf(c.index, c.queue.size))).firstOrNull(open) ?: c.queue.size
         if (c.cell == null) {
             c.state = "done"
             host.log("event" to "done", "gesture" to c.gesture, "source" to c.source, "passed" to c.passed.size,
@@ -409,6 +520,7 @@ class GestureTrainer(private val host: TrainHost) {
     private fun finish(by: String) {
         val c = s ?: return
         c.cancelTimer?.invoke()
+        c.autoAdvance?.invoke(); c.autoAdvance = null
         host.log("event" to "end", "by" to by, "gesture" to c.gesture, "source" to c.source, "passed" to c.passed.size,
             "kept" to c.kept.size, "skipped" to c.skipped.size, "state" to c.state)
         s = null
@@ -465,7 +577,7 @@ class GestureTrainer(private val host: TrainHost) {
         val h = TrainHeard(c.labels.toList(), c.lines.toList(), c.firstDur, c.firstFeatures)
         c.heard = h
         val cell = c.cell!!
-        val v = TrainJudge.judge(cell, h)
+        val v = TrainJudge.judge(cell, h, c.scaleOf(cell))
         c.verdict = v
         if (!v.ok) { fail(c, v); return }
         try {
@@ -477,6 +589,12 @@ class GestureTrainer(private val host: TrainHost) {
         c.state = "passed"
         host.log("event" to "take", "gesture" to c.gesture, "cell" to cell.id, "result" to "passed", "label" to h.label,
             "dur_ms" to h.durMs, "f0_hz" to v.heard["f0_hz"], "source" to c.source)
+        // auto-advance: after a beat the next undone cell starts (as next(record=true)), unless a command cancels it
+        c.autoAdvance = host.schedule(AUTO_ADVANCE_MS) {
+            c.autoAdvance = null
+            // pushed: nothing else would tell the screen (the Pico sends no live ticks)
+            if (s === c && c.state == "passed") { advance(c, record = true); pushSoon(force = true) }
+        }
         pushSoon(force = true)
     }
 
@@ -494,19 +612,28 @@ class GestureTrainer(private val host: TrainHost) {
         val h = c.heard!!
         val f = h.features!!
         val v = c.verdict!!
-        val meta = JSONObject().put("train", TrainPlan.VERSION).put("cell", cell.id)
+        val mismatch = h.label != cell.gesture
+        // unique in the store (train_confirm addresses a take by it), and still the store time in ms
+        val id = maxOf(host.wallMs(), maxId(host.store(c.source)) + 1)
+        val meta = JSONObject().put("train", TrainPlan.VERSION).put("cell", cell.id).put("id", id)
         cell.tags.forEach { (k, x) -> meta.put(k, x) }
         meta.put("heard", JSONObject().put("label", h.label).put("dur_ms", h.durMs ?: JSONObject.NULL)
             .put("f0_hz", v.heard["f0_hz"] ?: JSONObject.NULL).put("start_hz", v.heard["start_hz"] ?: JSONObject.NULL)
             .put("tone", v.heard["tone"] ?: JSONObject.NULL).put("loudness", v.heard["loudness"] ?: JSONObject.NULL))
         if (kept) meta.put("kept", true)
-        meta.put("at_ms", host.wallMs())
+        // a take whose extractor label differs from the prompted gesture: stored, but held until the user confirms it
+        // (train_confirm); Personal matching and relabel skip it meanwhile.
+        if (mismatch) { meta.put("label_mismatch", true); meta.put("confirmed", false) }
+        meta.put("at_ms", id)
         host.change(c.source, "train ${cell.gesture} ${cell.id}${if (kept) " (kept anyway)" else ""}") { st ->
             st.find(cell.gesture)?.examples?.indexOfFirst { it.cell == cell.id }?.takeIf { it >= 0 }?.let { st.delete(cell.gesture, it) }
             st.add(EnrollmentStore.GESTURE, cell.gesture, listOf(f.withMeta(meta)))
         }
         c.passed += cell.id
     }
+
+    private fun maxId(st: EnrollmentStore): Long =
+        st.classes.maxOfOrNull { cls -> cls.examples.maxOfOrNull { it.meta?.optLong("id", -1) ?: -1L } ?: -1L } ?: -1L
 
     // --- live trace -----------------------------------------------------------------------------------------------
 
@@ -516,7 +643,15 @@ class GestureTrainer(private val host: TrainHost) {
         if (c.state != "recording") return
         c.trace.addLast(f0Hz?.takeIf { it > 0 }); while (c.trace.size > TRACE_MAX) c.trace.removeFirst()
         c.levelDb = levelDb
+        c.cell?.let { c.liveChecks = ShapeGrade.live(cellWant(it), c.trace.toList(), TICK_MS, c.scaleOf(it)) }
         pushSoon(force = false)
+    }
+
+    /** The wanted shape of a cell, for the tolerant grade (ShapeGrade). */
+    private fun cellWant(cell: TrainPlan.Cell): ShapeGrade.Want {
+        val g = cell.gesture
+        return ShapeGrade.Want(listOf(g), if (g in TrainPlan.DISCRETE) "none" else cell.tags["pitch"] ?: "none",
+            cell.tags["speed"] ?: cell.tags["length"], cell.tags["tone"] ?: "any")
     }
 
     private fun pushSoon(force: Boolean) {
@@ -544,6 +679,35 @@ class GestureTrainer(private val host: TrainHost) {
 
     private fun doneCount(st: EnrollmentStore) = TrainPlan.GESTURES.sumOf { doneCells(st, it).size }
 
+    /** The global index of a cell in the flattened plan (TrainPlan order). */
+    private fun globalIndex(gesture: String, cellId: String): Int {
+        var base = 0
+        for (g in TrainPlan.GESTURES) {
+            if (g == gesture) return base + TrainPlan.cells(g).indexOfFirst { it.id == cellId }
+            base += TrainPlan.cells(g).size
+        }
+        return -1
+    }
+
+    private fun checkMap(c: ShapeGrade.Check) = linkedMapOf<String, Any?>(
+        "id" to c.id, "label" to c.label, "state" to c.state, "value" to c.value, "want" to c.want)
+
+    private fun scaleMap(s: ShapeGrade.Scale?) = s?.let {
+        linkedMapOf<String, Any?>("low_hz" to it.loHz, "home_hz" to it.homeHz, "high_hz" to it.hiHz)
+    }
+
+    /** The wanted shape of the current cell for the ShapePlot (contract B `expect`). */
+    private fun expectMap(cell: TrainPlan.Cell): Map<String, Any?> {
+        val g = cell.gesture
+        return linkedMapOf<String, Any?>(
+            "sequence" to listOf(g),
+            "start" to (if (g in TrainPlan.DISCRETE) "none" else cell.tags["pitch"] ?: "none"),
+            "span_st" to 4, "tol_st" to 1.5,
+            "dur_s" to ShapeGrade.wantedDurS(cell.tags["speed"] ?: cell.tags["length"]),
+            "gap_s" to null,
+        )
+    }
+
     /** The `train_status` map (PROTOCOL.md "Gesture training"). [source]: whose cards (default the current one). */
     fun status(source: String?): Map<String, Any?> {
         val cur = host.source()
@@ -562,10 +726,28 @@ class GestureTrainer(private val host: TrainHost) {
                 "cells" to cells.map { c -> linkedMapOf<String, Any?>("id" to c.id, "prompt" to c.prompt, "done" to (c.id in done), "tags" to c.tags) },
             )
         }
+        // Takes stored with a label the user has not confirmed yet (the review screen's "sounded like X, keep as Y?").
+        val unconfirmed = mutableListOf<Map<String, Any?>>()
+        for (g in TrainPlan.GESTURES) {
+            val cls = st.find(g)?.takeIf { it.kind == EnrollmentStore.GESTURE } ?: continue
+            for ((i, ex) in cls.examples.withIndex()) {
+                val m = ex.meta ?: continue
+                if (m.optBoolean("label_mismatch") && !m.optBoolean("confirmed"))
+                    unconfirmed += linkedMapOf("id" to m.optLong("id", -1), "gesture" to g,
+                        "heard" to m.optJSONObject("heard")?.optString("label"), "pos" to i)
+            }
+        }
         val c = s
         val session = c?.let {
             val cell = it.cell
             val v = it.verdict
+            // 1-based like calib_status pos (the pager shows i/n); gi is the 0-based place in the whole plan
+            val gi = cell?.let { cl -> globalIndex(cl.gesture, cl.id) } ?: -1
+            val pos = cell?.let { cl ->
+                linkedMapOf<String, Any?>("i" to gi + 1, "n" to TrainPlan.TOTAL,
+                    "gesture_i" to TrainPlan.cells(cl.gesture).indexOfFirst { x -> x.id == cl.id } + 1,
+                    "gesture_n" to TrainPlan.cells(cl.gesture).size)
+            }
             linkedMapOf<String, Any?>(
                 "source" to it.source, "gesture" to it.gesture, "state" to it.state,
                 "cell" to cell?.id, "prompt" to cell?.prompt, "hint" to cell?.hint, "tags" to cell?.tags,
@@ -578,7 +760,11 @@ class GestureTrainer(private val host: TrainHost) {
                 "heard_n" to it.labels.size,
                 "left_ms" to if (it.state == "recording" && it.labels.isEmpty()) maxOf(0L, TAKE_TIMEOUT_MS - (host.now() - it.startedAt)) else null,
                 "live" to linkedMapOf("trace_hz" to it.trace.toList(), "level_db" to it.levelDb?.let { d -> Math.round(d * 10) / 10.0 },
-                    "pitch_hz" to it.trace.lastOrNull()?.let { h -> Math.round(h * 10) / 10.0 }),
+                    "pitch_hz" to it.trace.lastOrNull()?.let { h -> Math.round(h * 10) / 10.0 },
+                    "checks" to it.liveChecks.map(::checkMap)),
+                "result" to (v?.checks?.takeIf { x -> x.isNotEmpty() }?.let { x -> linkedMapOf<String, Any?>("checks" to x.map(::checkMap)) }),
+                "expect" to (cell?.let(::expectMap)),
+                "pos" to pos, "can_prev" to (gi > 0), "can_next" to (gi in 0 until TrainPlan.TOTAL - 1),
                 "passed" to it.passed.toList(), "skipped" to it.skipped.toList(), "kept" to it.kept.toList(),
             )
         }
@@ -586,6 +772,8 @@ class GestureTrainer(private val host: TrainHost) {
             "active" to (c != null), "source" to src, "current_source" to cur, "profile" to host.profile(),
             "live_trace" to host.liveTrace(), "blocked" to host.blocker(), "blocked_action" to host.blockerAction(),
             "done" to doneCount(st), "total" to TrainPlan.TOTAL,
+            // the current cell's scale (the whistle range for a whistle cell), else the voice's
+            "scale" to scaleMap(if (c != null) c.scaleOf(c.cell) else host.scale()), "unconfirmed" to unconfirmed,
             "gestures" to gestures, "session" to session, "sources" to progress(),
         )
     }

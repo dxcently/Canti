@@ -1,5 +1,6 @@
 package ai.vox.companion.joystick
 
+import ai.vox.companion.ShapeGrade
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
@@ -58,6 +59,8 @@ data class JoyProfile(
     /** Derived from the above when saved (the live gate is derived again from the examples with the current spec). */
     val levelGate: LevelGate? = null,
     val clickPop: ClickPopRule? = null,
+    /** calib_save ran (the run is complete); per-step saves leave it false. */
+    val complete: Boolean = false,
     /** The format version it was loaded from (1 = before calibration v2). */
     val loadedVersion: Int = VERSION,
 ) {
@@ -81,6 +84,7 @@ data class JoyProfile(
         for (v in JoyCalibration.VOWELS) vowels.put(v, JSONObject().put("acc", o(vowelAcc(v))))
         return JSONObject()
             .put("source", source).put("version", VERSION).put("saved_at_ms", savedAtMs)
+            .put("complete", complete)
             .put("home_hz", o(homeSt?.let { PyFmt.round(JMath.hz(it), 1) }))
             .put("range_lo_hz", o(loSt?.let { PyFmt.round(JMath.hz(it), 1) }))
             .put("range_hi_hz", o(hiSt?.let { PyFmt.round(JMath.hz(it), 1) }))
@@ -166,7 +170,7 @@ data class JoyProfile(
                 obj("level_gate")?.let { g -> LevelGate(g.getDouble("min_snr_db"), g.getDouble("min_level_dbfs"), g.optString("from", "default"),
                     g.optInt("n", 0), if (g.has("weakest_snr_db")) g.getDouble("weakest_snr_db") else null,
                     if (g.has("weakest_level_dbfs")) g.getDouble("weakest_level_dbfs") else null) },
-                obj("click_pop")?.let(ClickPopRule::fromJson), j.optInt("version", 1))
+                obj("click_pop")?.let(ClickPopRule::fromJson), j.optBoolean("complete", false), j.optInt("version", 1))
         }
     }
 }
@@ -198,6 +202,8 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         const val POPS_NEED = 3
         const val VOWEL_FRAMES = 80
         const val VOWEL_FRAMES_MIN = 30
+        /** The live pitch trace keeps this many ticks (5 s of 20 ms ticks). */
+        const val TRACE_MAX = 250
 
         /** joystick.Session.steady: the ticks in runs of >= [run] whose pitch moves <= [step] st per tick (NaN =
          *  unvoiced). */
@@ -233,8 +239,12 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     var reason: String? = null; private set
     /** The steps finished (measured or skipped) in this run. */
     val finished = LinkedHashSet<String>()
+    /** Every finish (measured or skipped) so far, a redo of a finished step too: the per-step save watches it. */
+    var finishCount = 0; private set
     var tNow = 0.0; private set
     var lastTick: Tick? = null; private set
+    /** The live pitch trace (the last ~5 s of 20 ms ticks: Hz when voiced, null when not). */
+    private val trace = ArrayDeque<Double?>()
     /** The pop step's detector (the spec's thresholds; pushed every tick, as the prototype's). */
     val pd = PopDetector(spec.pop)
     private val log = ArrayList<String>()
@@ -308,6 +318,8 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     private fun begin(s: String, announce: Boolean) {
         state = "waiting"
         clearSteps()
+        trace.clear()                                   // the live plot and checks are this step's
+
         val say: (String) -> Unit = { if (announce) this.say(it) }
         when (s) {
             "hum" -> { su = Su(tNow); say("HOME: hum 'mm' relaxed for 3 s, the note that comes out without thinking") }
@@ -349,7 +361,7 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         if (s in setOf("pops", "clicks", "hiss", "room")) derive()
         mark(s, true)
         clearSteps(); reason = null
-        finished += s
+        finished += s; finishCount++
         say("${name(s)}: skipped, its defaults stay")
         // the run's next unfinished step after this one; never a wrap round, never a step outside the run
         val next = steps.drop(steps.indexOf(s) + 1).firstOrNull { it !in finished }
@@ -388,7 +400,7 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     private fun succeed() {
         clearSteps()
         mark(step, false)
-        finished += step
+        finished += step; finishCount++
         state = if (remaining.isEmpty()) "done" else "step_done"
     }
 
@@ -407,6 +419,7 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         val first = lastTick == null
         tNow = tk.tMs
         lastTick = tk
+        trace.addLast(if (tk.voiced) tk.f0 else null); while (trace.size > TRACE_MAX) trace.removeFirst()
         if (first && (state == "waiting" || state == "recording")) begin(step, false)
         pd.push(tk)
         if (state != "waiting" && state != "recording") return
@@ -720,13 +733,49 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         else -> null
     }
 
+    /** The user's scale for the tolerant grade, from the draft (nulls where a step has not measured yet); during the
+     *  whistle step the whistle range (a whistle is judged against a voice's notes never). */
+    fun scale(): ShapeGrade.Scale? {
+        if (step == "whistle") return draft.whistle?.let { w -> ShapeGrade.Scale(JMath.hz(w.loSt), JMath.hz(w.homeSt), JMath.hz(w.hiSt)) }
+        val lo = draft.loSt?.let(JMath::hz); val home = draft.homeSt?.let(JMath::hz); val hi = draft.hiSt?.let(JMath::hz)
+        return if (lo != null || home != null || hi != null) ShapeGrade.Scale(lo, home, hi) else null
+    }
+
+    /** The wanted shape of a pitched step, for the live grade (contract C `expect` / `live.checks`). The glides go
+     *  lowest to highest AND BACK (their prompts): an arch from low, not a rise; the lengths are the steps' own. */
+    fun wantFor(step: String): ShapeGrade.Want? = when (step) {
+        "hum" -> ShapeGrade.Want(listOf("flat"), "home", null, "hum", durS = HOME_MIN_MS / 1000)
+        "glide" -> ShapeGrade.Want(listOf("arch"), "low", null, "hum", durS = RANGE_MS / 1000)
+        "whistle" -> ShapeGrade.Want(listOf("arch"), "low", null, "whistle", durS = spec.whistleGlideMs / 1000)
+        else -> null
+    }
+
+    /** The `expect` map for a step (contract B), or null for a step with no pitched shape. */
+    fun expectFor(step: String): Map<String, Any?>? {
+        val w = wantFor(step) ?: return null
+        return linkedMapOf<String, Any?>("sequence" to w.sequence, "start" to w.start, "span_st" to 4, "tol_st" to 1.5,
+            "dur_s" to ShapeGrade.wantedDurS(w), "gap_s" to w.gapS, "tone" to w.tone)
+    }
+
+    /** The hub's one-word result for a step: "ok", "skipped", or "·" (not done yet). */
+    fun resultWord(s: String): String = when {
+        s in draft.skipped -> "skipped"
+        s !in draft.missingSteps -> "ok"
+        else -> "·"
+    }
+
     /** The calib_status map (the contract in android/PROTOCOL.md). [calibrated]: this source has a saved profile. */
     fun status(calibrated: Boolean, liveMover: Mover? = null): Map<String, Any?> {
         val tk = lastTick
         val w = if (tk != null && tk.voiced) (liveMover ?: Mover(spec, 1.0, 1.0, draft.centroids)).vowelWeights(tk.f1, tk.f2) else null
         val best = w?.maxByOrNull { it.value }
+        val liveChecks = wantFor(step)?.let { ShapeGrade.live(it, trace.toList(), 20, scale()) } ?: emptyList()
         val live = mapOf("voiced" to (tk?.voiced == true), "pitch_hz" to tk?.takeIf { it.voiced }?.f0,
-            "level_db" to tk?.db, "vowel" to best?.key, "vowel_conf" to best?.value)
+            "level_db" to tk?.db, "vowel" to best?.key, "vowel_conf" to best?.value,
+            "trace_hz" to trace.toList(),
+            "checks" to liveChecks.map { c -> mapOf("id" to c.id, "label" to c.label, "state" to c.state, "value" to c.value, "want" to c.want) })
+        val pos = linkedMapOf<String, Any?>("i" to (STEPS.indexOf(step) + 1), "n" to STEPS.size)
+        val hub = STEPS.map { s -> linkedMapOf<String, Any?>("id" to s, "done" to (s !in draft.missingSteps), "result_word" to resultWord(s)) }
         return linkedMapOf(
             "active" to true, "source" to source, "step" to step, "state" to state,
             "prompt" to prompts[step], "sub" to sub(), "progress" to progress(),
@@ -739,6 +788,8 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
                 "hiss_need" to spec.hissStep.ask),
             "step_done" to stepDone, "reason" to reason, "skipped" to draft.skipped.filter { it in steps },
             "steps" to steps.toList(), "remaining" to remaining,
+            "expect" to expectFor(step), "scale" to scale()?.let { s -> mapOf("low_hz" to s.loHz, "home_hz" to s.homeHz, "high_hz" to s.hiHz) },
+            "pos" to pos, "hub" to hub,
             "result" to if (finished.isNotEmpty()) draft.toJson() else null, "calibrated" to calibrated,
         )
     }

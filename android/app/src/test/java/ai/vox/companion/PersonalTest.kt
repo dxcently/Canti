@@ -361,4 +361,27 @@ class PersonalTest {
         val seq = Profile.parse(JSONObject("""{"global": [{"phrase": ["click", "my:meow"], "action": "home"}]}"""))
         assertTrue(listOf("click", "my:meow") in seq.boundSequences("x", "gesture"))
     }
+
+    /** E9: a training take with a mismatched label is held out of matching and relabel until the user confirms it. */
+    @Test fun unconfirmedTakesAreSkippedUntilConfirmed() {
+        val st = EnrollmentStore("default")
+        val ok = JSONObject().put("cell", "soft-1")
+        val un = JSONObject().put("cell", "soft-2").put("label_mismatch", true).put("confirmed", false)
+        st.add("gesture", "pop", listOf(
+            feat(1.0, 1.0, 1.0).withMeta(ok), feat(1.1, 1.1, 1.1).withMeta(ok), feat(1.2, 1.2, 1.2).withMeta(un)))
+        val cls = st.find("pop")!!
+        assertTrue(cls.examples[2].unconfirmed)
+        assertEquals(2, cls.confirmed.size)
+        assertFalse(cls.active)                                          // 3 examples, but only 2 confirmed
+        assertEquals("skipped", Matcher(st, 1.5).match(feat(1.05, 1.05, 1.05)).result)
+        // held back after a restart too: the flag survives the store file (toJson / fromJson)
+        val reloaded = EnrollmentStore.fromJson(JSONObject(st.toJson().toString()))
+        assertTrue(reloaded.find("pop")!!.examples[2].unconfirmed); assertFalse(reloaded.find("pop")!!.active)
+        assertEquals("skipped", Matcher(reloaded, 1.5).match(feat(1.05, 1.05, 1.05)).result)
+        // confirm (train_confirm keep): the take now takes part in matching
+        cls.examples[2].meta!!.put("confirmed", true)
+        assertFalse(cls.examples[2].unconfirmed)
+        assertEquals(3, cls.confirmed.size); assertTrue(cls.active)
+        assertEquals("gesture", Matcher(st, 1.5).match(feat(1.05, 1.05, 1.05)).result)
+    }
 }

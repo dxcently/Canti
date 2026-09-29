@@ -26,7 +26,7 @@ import org.json.JSONObject
  *   0.5..2.0, default 0.9); `setCursorSettings {cursor_speed?, cursor_pitch_sens?}` stores (clamped) and answers the same.
  *   `levelGateSettings` answers `{level_gate, level_gate_offset_db}` (calibration v2's level gate: on / off, and the
  *   offset -10..10 dB, + = stricter); `setLevelGateSettings {level_gate?, level_gate_offset_db?}` stores and answers the same.
- *   The joystick calibration (VoiceJoystick): `calib_start {source, steps?}`, `calib_step {step}`, `calib_redo {step}`,
+ *   The joystick calibration (VoiceJoystick): `calib_start {source, steps?, resume?}`, `calib_step {step}`, `calib_redo {step}`,
  *   `calib_retry`, `calib_skip`, `calib_save`, `calib_cancel`, `calib_status` answer the calib_status map; `calib_get
  *   {source}` the saved profile or null. To a running UI, Kotlin calls `openRoute {route}` (`pair`, `calibrate`) and
  *   `calib_status {map}` (about every 100 ms while a calibration runs, and after every command) on the same channel.
@@ -195,7 +195,8 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
     // --- [train] gesture training (GestureTraining.kt; PROTOCOL.md "Gesture training") ---------------------------------
     // Its own method channel `ai.vox/train`, so the Dart side (train_screen.dart) owns its handler: the methods
     // train_status {source?}, train_start {gesture, cell?, source?}, train_record, train_retry, train_skip, train_keep,
-    // train_next {record?}, train_cancel, train_delete {gesture, cell?, source?} answer the train_status map (with
+    // train_next {record?}, train_goto {gesture, cell, source?}, train_confirm {id, keep, source?}, train_cancel,
+    // train_delete {gesture, cell?, source?} answer the train_status map (with
     // `error` when refused, or {service: false} with the service off); Kotlin calls `train_status {map}` on it on every
     // change and about every 100 ms while a take records.
     // Plain vals, set up in declaration order: the init block that uses them must come after them (a `by lazy` declared

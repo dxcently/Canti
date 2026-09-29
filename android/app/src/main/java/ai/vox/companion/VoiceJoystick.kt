@@ -7,6 +7,8 @@ import ai.vox.companion.audio.MicSettings
 import ai.vox.companion.audio.PhoneMicSource
 import ai.vox.companion.audio.VxNative
 import ai.vox.companion.joystick.CalibV2
+import ai.vox.companion.joystick.CalibPrefs
+import ai.vox.companion.joystick.CalibSaves
 import ai.vox.companion.joystick.Element
 import ai.vox.companion.joystick.JoyCalibration
 import ai.vox.companion.joystick.JoyIndicators
@@ -181,7 +183,7 @@ class VoiceJoystick(
             for (ev in mover.events) onEvent(ev.kind, ev)
             mover.events.clear()
         }
-        if (cal != null) calibChanged(false)
+        if (cal != null) { checkStepDone(); calibChanged(false) }
         else if (on) draw(jump = false)
     }
 
@@ -302,6 +304,17 @@ class VoiceJoystick(
 
     private var calib: JoyCalibration? = null
     private var calibError: String? = null
+    /** The saved profiles and the per-step saves (contract C). commit(), not apply(): a step's save must survive an app
+     *  kill right after it (a few KB, a handful of times per run). */
+    private val saves = CalibSaves(object : CalibPrefs {
+        override fun get(key: String): String? = prefs.getString(key, null)
+        override fun put(entries: Map<String, String?>) {
+            val e = prefs.edit()
+            entries.forEach { (k, v) -> if (v == null) e.remove(k) else e.putString(k, v) }
+            if (!e.commit()) EventLog.ev("error", "where" to "calibration save", "error" to "prefs commit failed")
+        }
+    }) { what, e -> EventLog.ev("error", "where" to what, "error" to e.toString()) }
+
     private val calibPush = object : Runnable {
         override fun run() {
             if (calib == null) return
@@ -327,8 +340,16 @@ class VoiceJoystick(
     /** A calibration run started or ended (the service redraws the badge: the paused face while one runs). Main thread. */
     var onCalibChanged: (() -> Unit)? = null
 
-    fun load(src: String): JoyProfile? = prefs.getString("calib_$src", null)?.let {
-        try { JoyProfile.fromJson(JSONObject(it)) } catch (e: Exception) { EventLog.ev("error", "where" to "joystick profile", "error" to e.toString()); null }
+    fun load(src: String): JoyProfile? = saves.load(src)
+
+    /** A step finished (measured or skipped, a redo too): merge it into the saved profile at once (unfinished steps keep
+     *  their saved values) with the progress, and apply it. Called from the tick loop and after a skip. */
+    private fun checkStepDone() {
+        val c = calib ?: return
+        if (!saves.check(c, System.currentTimeMillis())) return
+        EventLog.ev("calib", "event" to "progress", "source" to c.source, "done_steps" to saves.doneSteps(c).joinToString(" "),
+            "step" to c.step, "state" to c.state)
+        if (c.source == source) { loadProfile(); mic?.extractorJson = VxNative.overridesJson(profile?.extractor) }
     }
 
     /** One command from the UI or the debug socket -> the calib_status map (calib_get: the profile map, or null). */
@@ -358,10 +379,6 @@ class VoiceJoystick(
                 }
                 "calib_start" -> {
                     val src = args["source"] as? String ?: throw IllegalArgumentException("calib_start needs {source}")
-                    require(src in listOf(MicSettings.PHONE, MicSettings.USB, MicSettings.PICO)) { "source must be phone | usb | pico" }
-                    require(src != MicSettings.PICO) { "the Pico's mic can't be calibrated yet (phone and USB mics only)" }
-                    require(src == source) { "the sound source is $source, not $src: switch to it first" }
-                    require(mic?.capturing == true) { "the mic is off (${mic?.state ?: "no mic source"}): resume Canti first" }
                     // calibration v2: an optional ordered subset of the steps (a list, or a JSON array from the debug socket)
                     val steps = when (val a = args["steps"]) {
                         null, JSONObject.NULL -> null
@@ -369,15 +386,13 @@ class VoiceJoystick(
                         is org.json.JSONArray -> (0 until a.length()).map { a.optString(it) }
                         else -> throw IllegalArgumentException("steps must be a list of ${JoyCalibration.STEPS.joinToString(" | ")}")
                     }
-                    calib = JoyCalibration(spec, src, load(src), steps)
-                    applyTicks(); applyGate()
-                    main.removeCallbacks(calibPush); main.postDelayed(calibPush, PUSH_MS)
-                    EventLog.ev("calib", "event" to "start", "source" to src, "steps" to calib?.steps?.joinToString(" "))
-                    onCalibChanged?.invoke()
+                    startCalib(src, steps, args["resume"] as? Boolean)
                 }
                 "calib_step", "calib_redo" -> {
-                    val c = calib ?: throw IllegalStateException("no calibration running (calib_start first)")
                     val step = args["step"] as? String ?: throw IllegalArgumentException("$method needs {step: ${JoyCalibration.STEPS.joinToString(" | ")}}")
+                    require(step in JoyCalibration.STEPS) { "step must be one of ${JoyCalibration.STEPS}" }
+                    // no run open (the hub's rows, or after a cancel): open one on the current source first (resumed)
+                    val c = calib ?: startCalib(args["source"] as? String ?: source, null, null)
                     // calib_step of the step already waiting or recording is a no-op (it would throw away what it heard)
                     if (method == "calib_redo") c.startStep(step, null, force = true)
                     else if (c.step != step || (c.state != "waiting" && c.state != "recording")) c.startStep(step)
@@ -389,12 +404,12 @@ class VoiceJoystick(
                     val s = c.step
                     c.skip()
                     applyTicks()
+                    checkStepDone()
                     EventLog.ev("calib", "event" to "skip", "step" to s, "next" to c.step, "state" to c.state)
                 }
                 "calib_save" -> {
                     val c = calib ?: throw IllegalStateException("no calibration running")
-                    val p = c.draft.copy(savedAtMs = System.currentTimeMillis())
-                    prefs.edit().putString("calib_${p.source}", p.toJson().toString()).apply()
+                    val p = saves.complete(c, System.currentTimeMillis())
                     EventLog.ev("calib", "event" to "save", "source" to p.source, "skipped" to p.skipped.joinToString(" "),
                         "steps" to c.finished.joinToString(" "))
                     calibEnd()
@@ -413,6 +428,22 @@ class VoiceJoystick(
             if (method == "calib_start") EventLog.ev("calib", "event" to "refused", "reason" to e.message, "source" to args["source"])
         } catch (e: IllegalStateException) { calibError = e.message }
         return calibStatus()
+    }
+
+    /** calib_start (and a calib_step with no run open): a new run on [src]'s saved profile, resumed from the saved
+     *  progress unless [steps] is given or [resume] is false (default: progress under 24 h old). */
+    private fun startCalib(src: String, steps: List<String>?, resume: Boolean?): JoyCalibration {
+        require(src in listOf(MicSettings.PHONE, MicSettings.USB, MicSettings.PICO)) { "source must be phone | usb | pico" }
+        require(src != MicSettings.PICO) { "the Pico's mic can't be calibrated yet (phone and USB mics only)" }
+        require(src == source) { "the sound source is $source, not $src: switch to it first" }
+        require(mic?.capturing == true) { "the mic is off (${mic?.state ?: "no mic source"}): resume Canti first" }
+        val c = saves.start(spec, src, steps, resume, System.currentTimeMillis())
+        calib = c
+        applyTicks(); applyGate()
+        main.removeCallbacks(calibPush); main.postDelayed(calibPush, PUSH_MS)
+        EventLog.ev("calib", "event" to "start", "source" to src, "steps" to c.steps.joinToString(" "), "resume" to saves.resumed)
+        onCalibChanged?.invoke()
+        return c
     }
 
     private fun calibEnd() {
@@ -444,8 +475,11 @@ class VoiceJoystick(
 
     private fun idleStatus(): Map<String, Any?> {
         val p = load(source)
+        // where calib_start {resume: true} picks up (after a cancel, a restart, an app kill), or null
+        val resume = saves.resume(source)
         return linkedMapOf("active" to false, "source" to source, "state" to null,
             "calibrated" to calibrated(), "skipped" to (p?.skipped ?: emptyList<String>()), "error" to calibError,
+            "resume" to resume,
             // calibration v2: a profile saved before it (or partly) lacks steps; the UI offers to calibrate them
             "needs_recalibration" to (p?.needsRecalibration ?: false), "missing_steps" to (p?.missingSteps ?: emptyList<String>()))
     }

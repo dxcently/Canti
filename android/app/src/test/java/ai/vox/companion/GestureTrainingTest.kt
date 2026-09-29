@@ -17,17 +17,25 @@ class GestureTrainingTest {
     // --- fixtures ------------------------------------------------------------------------------------------------------
 
     private fun fp(f0Hz: Double?, dim: Int = 24) = DoubleArray(dim) { i -> if (i == 0) (if (f0Hz == null) -3.0 else ln(f0Hz / 100) / ln(2.0)) else 0.1 * i }
-    private val rising = DoubleArray(16) { it * 0.4 }
+    private val rising = DoubleArray(16) { it * 0.4 }                          // 0..6 st (rise)
+    private val falling = DoubleArray(16) { (15 - it) * 0.4 }                  // 6..0 st (fall)
+    private val arching = DoubleArray(16) { i -> if (i < 8) i * 0.5 else (15 - i) * 0.5 }   // up then down
+    private val dipping = DoubleArray(16) { i -> if (i < 8) -i * 0.5 else -(15 - i) * 0.5 }  // down then up
+    private val flatTrack = DoubleArray(16) { 0.0 }
+    private fun pitchFor(label: String): DoubleArray = when (label) {
+        "rise" -> rising; "fall" -> falling; "arch" -> arching; "dip" -> dipping; "flat" -> flatTrack
+        else -> DoubleArray(0)
+    }
     private fun feats(f0Hz: Double?, pitch: DoubleArray = rising) = SoundFeatures(fp(f0Hz), "fp1", pitch)
     private fun line(label: String, like: String = "hum") = when (label) {
         in TrainPlan.CONTOURS -> "hum that ${Vocab.CONTOURS[label]}; pitch change large (over 4 semitones); duration medium (400-1000 ms); tone clear tone; loudness normal; sounds like $like"
         else -> "${Vocab.DISCRETE[label] ?: "unknown"}; instant sound; loudness normal; sounds like mouth sound"
     }
 
-    private fun heard(label: String, f0: Double? = 200.0, dur: Long? = 500, pitch: DoubleArray = rising, n: Int = 1) =
-        TrainHeard(List(n) { label }, List(n) { line(label) }, dur, feats(f0, if (label in TrainPlan.CONTOURS) pitch else DoubleArray(0)))
+    private fun heard(label: String, f0: Double? = 200.0, dur: Long? = 500, pitch: DoubleArray? = null, n: Int = 1) =
+        TrainHeard(List(n) { label }, List(n) { line(label) }, dur, feats(f0, if (label in TrainPlan.CONTOURS) pitch ?: pitchFor(label) else DoubleArray(0)))
 
-    private fun msg(label: String, f0: Double? = 200.0, dur: Long = 500, features: SoundFeatures? = feats(f0, if (label in TrainPlan.CONTOURS) rising else DoubleArray(0))) =
+    private fun msg(label: String, f0: Double? = 200.0, dur: Long = 500, features: SoundFeatures? = feats(f0, if (label in TrainPlan.CONTOURS) pitchFor(label) else DoubleArray(0))) =
         FeatureMessage(id = 1, mode = "gesture", armed = true, sounds = listOf(line(label)), sequence = listOf(label), phrase = null,
             timing = listOf(Stamp(1000, 1000 + dur)), features = listOf(features))
 
@@ -59,9 +67,12 @@ class GestureTrainingTest {
         override fun liveTrace() = src != "pico"
         override fun ticks(on: Boolean) { ticksOn = on }
         override fun profile() = "default"
+        val scales = mutableMapOf<String, ShapeGrade.Scale?>()
+        override fun scale(tone: String) = scales[tone]
+        var wall = 1_790_000_000_000L
+        override fun wallMs() = ++wall
         override fun store(source: String) = stores.getOrPut(source) { EnrollmentStore("default", source) }
         override fun change(source: String, what: String, change: (EnrollmentStore) -> Unit) = change(store(source))
-        override fun wallMs() = 1_790_000_000_000L
         override fun log(vararg fields: Pair<String, Any?>) { logs += fields.toMap() }
         override fun push(status: Map<String, Any?>) { pushes += status }
     }
@@ -118,8 +129,8 @@ class GestureTrainingTest {
         assertFalse("only a wrong label can be kept", w.canKeep)
         val h = TrainJudge.judge(TrainPlan.cell("fall", "hum-high-slow"), heard("fall", 900.0, 1500))
         assertTrue(h.reason, h.reason.startsWith("Heard a whistle (about 900 Hz)"))
-        val q = TrainJudge.judge(TrainPlan.cell("dip", "hum-low-quick"), heard("dip", 200.0, 1400))
-        assertEquals("It took 1.4 s: a QUICK dip takes about half a second (at most 1.0 s).", q.reason)
+        val q = TrainJudge.judge(TrainPlan.cell("dip", "hum-low-quick"), heard("dip", 200.0, 1500))
+        assertEquals("It took 1.5 s: a QUICK dip takes about half a second (at most 1.0 s).", q.reason)
         val s = TrainJudge.judge(TrainPlan.cell("flat", "hum-low-long"), heard("flat", 200.0, 500))
         assertEquals("It took 0.5 s: a LONG flat note takes about 1.5 s (at least 0.8 s).", s.reason)
         // no f0 in the fingerprint: the line's `sounds like` decides
@@ -360,5 +371,158 @@ class GestureTrainingTest {
         try { SoundFeatures.parse(o, "e"); throw AssertionError("expected a rejection") } catch (e: IllegalArgumentException) {
             assertTrue(e.message!!.contains("over"))
         }
+    }
+
+    // --- the tolerant grade and the new ops ----------------------------------------------------------------------------
+
+    @Test fun aLabelMismatchWithAGoodShapeIsStoredAndHeldUntilConfirmed() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise")); t.command("train_record", emptyMap())
+        // a good rise (pitch16 rising), but the extractor heard "arch": stored with label_mismatch, not confirmed
+        t.onSounds(msg("arch", 180.0, 1400, features = feats(180.0, rising))); h.advance(GestureTrainer.SETTLE_MS)
+        assertEquals("passed", session(t.status(null))["state"])
+        val ex = h.store("phone").find("rise")!!.examples.single()
+        assertTrue(ex.meta!!.getBoolean("label_mismatch")); assertFalse(ex.meta!!.getBoolean("confirmed"))
+        assertEquals("arch", ex.meta!!.getJSONObject("heard").getString("label"))
+        val id = ex.meta!!.getLong("id")
+        @Suppress("UNCHECKED_CAST")
+        val un = t.status(null)["unconfirmed"] as List<Map<String, Any?>>
+        assertEquals(1, un.size)
+        assertEquals(id.toLong(), (un[0]["id"] as Number).toLong()); assertEquals("rise", un[0]["gesture"]); assertEquals("arch", un[0]["heard"])
+        // confirm: it now takes part in matching (meta.confirmed true), and leaves the review list
+        t.command("train_confirm", mapOf("id" to id, "keep" to true))
+        assertTrue(h.store("phone").find("rise")!!.examples.single().meta!!.getBoolean("confirmed"))
+        assertEquals(0, (t.status(null)["unconfirmed"] as List<*>).size)
+    }
+
+    @Test fun aRejectedUnconfirmedTakeIsDeleted() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise")); t.command("train_record", emptyMap())
+        t.onSounds(msg("arch", 180.0, 1400, features = feats(180.0, rising))); h.advance(GestureTrainer.SETTLE_MS)
+        val id = h.store("phone").find("rise")!!.examples.single().meta!!.getLong("id")
+        t.command("train_confirm", mapOf("id" to id, "keep" to false))
+        assertNull(h.store("phone").find("rise"))   // the class goes when its last example is deleted
+    }
+
+    @Test fun trainGotoDropsOnlyTheInFlightTake() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise")); t.command("train_record", emptyMap())
+        t.onSounds(msg("rise", 180.0, 1400)); h.advance(GestureTrainer.SETTLE_MS)
+        assertEquals("passed", session(t.status(null))["state"])
+        t.command("train_next", emptyMap())                       // records the next cell
+        assertEquals("recording", session(t.status(null))["state"])
+        t.onTick(180.0, -30.0)                                    // in-flight data, not yet a sound
+        val st = t.command("train_goto", mapOf("gesture" to "rise", "cell" to "hum-high-slow"))
+        assertNull(st["error"])
+        assertEquals("hum-high-slow", session(st)["cell"]); assertEquals("ready", session(st)["state"])
+        // the stored take stays, the in-flight one is dropped (not stored)
+        assertEquals(1, h.store("phone").find("rise")!!.examples.size)
+        assertEquals("hum-low-slow", h.store("phone").find("rise")!!.examples[0].cell)
+        // crossing a gesture boundary
+        val st2 = t.command("train_goto", mapOf("gesture" to "fall", "cell" to "hum-low-slow"))
+        assertEquals("fall", session(st2)["gesture"]); assertEquals("hum-low-slow", session(st2)["cell"])
+    }
+
+    @Test fun autoAdvanceStartsTheNextUndoneCellAfterAPass() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise")); t.command("train_record", emptyMap())
+        t.onSounds(msg("rise", 180.0, 1400)); h.advance(GestureTrainer.SETTLE_MS)
+        assertEquals("passed", session(t.status(null))["state"])
+        h.advance(GestureTrainer.AUTO_ADVANCE_MS)
+        assertEquals("recording", session(t.status(null))["state"])
+        assertEquals("hum-low-quick", session(t.status(null))["cell"])
+    }
+
+    @Test fun autoAdvanceIsCancelledByACommand() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise")); t.command("train_record", emptyMap())
+        t.onSounds(msg("rise", 180.0, 1400)); h.advance(GestureTrainer.SETTLE_MS)
+        assertEquals("passed", session(t.status(null))["state"])
+        // a dock command (goto) cancels the pending auto-advance
+        t.command("train_goto", mapOf("gesture" to "rise", "cell" to "whistle-low-slow"))
+        assertEquals("whistle-low-slow", session(t.status(null))["cell"])
+        h.advance(5_000)
+        assertEquals("ready", session(t.status(null))["state"])
+        assertEquals("whistle-low-slow", session(t.status(null))["cell"])
+    }
+
+    @Test fun statusHasExpectPosAndPrevNext() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise"))
+        val s = session(t.status(null))
+        @Suppress("UNCHECKED_CAST")
+        val expect = s["expect"] as Map<String, Any?>
+        assertEquals(listOf("rise"), expect["sequence"]); assertEquals("low", expect["start"])
+        assertEquals(4, expect["span_st"]); assertEquals(1.5, expect["tol_st"])
+        @Suppress("UNCHECKED_CAST")
+        val pos = s["pos"] as Map<String, Any?>
+        assertEquals(1, pos["i"]); assertEquals(TrainPlan.TOTAL, pos["n"]); assertEquals(1, pos["gesture_i"]); assertEquals(8, pos["gesture_n"])
+        assertEquals(false, s["can_prev"]); assertEquals(true, s["can_next"])
+    }
+
+    /** Auto-advance goes to the next UNDONE cell, wrapping to one the arrows jumped over, and pushes it (a Pico source
+     *  sends no ticks, so nothing else would tell the screen). */
+    @Test fun autoAdvanceFindsTheNextUndoneCellAndPushesIt() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise"))
+        t.command("train_goto", mapOf("gesture" to "rise", "cell" to "whistle-high-quick"))   // the last cell
+        t.command("train_record", emptyMap())
+        t.onSounds(msg("rise", 1200.0, 500)); h.advance(GestureTrainer.SETTLE_MS)
+        assertEquals("passed", session(t.status(null))["state"])
+        h.pushes.clear()
+        h.advance(GestureTrainer.AUTO_ADVANCE_MS)
+        assertEquals("hum-low-slow", session(t.status(null))["cell"])           // wrapped to the first undone cell
+        assertEquals("recording", session(h.pushes.last())["state"])
+    }
+
+    /** An auto-advance of a round that ended (train_cancel, the background) does nothing. */
+    @Test fun autoAdvanceNeverOutlivesItsRound() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        t.command("train_start", mapOf("gesture" to "rise")); t.command("train_record", emptyMap())
+        t.onSounds(msg("rise", 180.0, 1400)); h.advance(GestureTrainer.SETTLE_MS)
+        t.cancel("app background")
+        h.advance(GestureTrainer.AUTO_ADVANCE_MS)
+        assertFalse(t.active); assertTrue(h.tasks.isEmpty())
+    }
+
+    /** train_goto with no round open (the hub's rows) opens one on that cell; refused while blocked. */
+    @Test fun trainGotoOpensARoundFromTheHub() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        h.block = "Canti is paused."
+        assertEquals("Canti is paused.", t.command("train_goto", mapOf("gesture" to "fall", "cell" to "whistle-low-slow"))["error"])
+        assertFalse(t.active)
+        h.block = null
+        val st = t.command("train_goto", mapOf("gesture" to "fall", "cell" to "whistle-low-slow"))
+        assertNull(st["error"])
+        assertEquals("fall", session(st)["gesture"]); assertEquals("whistle-low-slow", session(st)["cell"]); assertEquals("ready", session(st)["state"])
+        assertEquals(13, (session(st)["pos"] as Map<*, *>)["i"])                // rise 8 + fall's 5th cell
+    }
+
+    /** train_confirm addresses only a take stored with label_mismatch: never a legacy example (no id) or a plain one. */
+    @Test fun trainConfirmRefusesOtherExamples() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        h.store("phone").add(EnrollmentStore.GESTURE, "rise", listOf(feats(180.0).withMeta(JSONObject().put("cell", "hum-low-slow"))))
+        assertNotNull(t.command("train_confirm", mapOf("id" to -1, "keep" to false))["error"])
+        t.command("train_start", mapOf("gesture" to "rise")); t.command("train_record", emptyMap())
+        t.onSounds(msg("rise", 180.0, 500)); h.advance(GestureTrainer.SETTLE_MS)   // hum-low-quick, label agrees
+        val id = h.store("phone").find("rise")!!.examples.last().meta!!.getLong("id")
+        assertNotNull(t.command("train_confirm", mapOf("id" to id, "keep" to false))["error"])
+        assertEquals(2, h.store("phone").find("rise")!!.examples.size)
+    }
+
+    /** A whistle cell is judged on the whistle range: a low whistle start is far above the voice's home. */
+    @Test fun aWhistleCellUsesTheWhistleScale() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        h.scales["hum"] = ShapeGrade.Scale(80.0, 110.0, 160.0)
+        h.scales["whistle"] = ShapeGrade.Scale(800.0, 1100.0, 1600.0)
+        t.command("train_goto", mapOf("gesture" to "rise", "cell" to "whistle-low-slow"))
+        t.command("train_record", emptyMap())
+        t.onSounds(msg("rise", 1000.0, 1400)); h.advance(GestureTrainer.SETTLE_MS)   // starts ~840 Hz
+        val s = session(t.status(null))
+        assertEquals("passed", s["state"])
+        @Suppress("UNCHECKED_CAST")
+        val pitch = ((s["result"] as Map<String, Any?>)["checks"] as List<Map<String, Any?>>).first { it["id"] == "PITCH" }
+        assertEquals("ok", pitch["state"])
+        assertEquals(1100.0, (t.status(null)["scale"] as Map<*, *>)["home_hz"])
     }
 }
