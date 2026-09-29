@@ -29,6 +29,7 @@ MAX_OPTIONS = 40
 MAX_LABEL_CHARS = 60
 CONTAINER_SHARE = 0.5
 LIST_CLASSES = {"RecyclerView", "ListView", "GridView"}
+INDENT_DP = 16   # Targets.INDENT_DP: the indentation threshold in dp on the app's 411-dp design width (see indent_parents)
 
 
 @dataclass
@@ -432,19 +433,89 @@ def option_text(t: dict) -> str:
     return f"{t['label']}{ctx} ({t['role']}, {t['position']}{rank})"
 
 
+def cap_context(s: str) -> str:
+    """Cap a context the same way row_text does (MAX_CONTEXT_CHARS, ellipsis)."""
+    return s if len(s) <= MAX_CONTEXT_CHARS else s[:MAX_CONTEXT_CHARS - 3].rstrip() + "..."
+
+
+def indent_parents(kept: list[dict], w: int) -> dict:
+    """jl10 (mirror of Targets.indentParents / vox.option_format.indent_context): index -> parent label for indented
+    list rows. Only a "list item" may take a parent, and the parent must also be a "list item" (a). The parent is the
+    nearest preceding kept row in reading order (top, then left) in the SAME immediate parent node, indented at least
+    round(16 * w / 411) px and strictly above it (b, d). The immediate parent must pass the list test (class / rows /
+    cols, or the child is a collection item), falling back to >= 3 kept list items (b); a grid container gets none (i).
+    A parent whose label is generic or equals the child's is skipped, taking the next nearest (c)."""
+    indent = round(INDENT_DP * w / 411)
+    is_row = [t["role"] == "list item" for t in kept]
+
+    def container_ok(i):
+        p = kept[i].get("_parent")
+        if p is None:
+            return False
+        if kept[i].get("_collection_item"):
+            return True
+        if p.short_cls in LIST_CLASSES or p.rows > 0 or p.cols > 0:
+            return True
+        return sum(1 for j in range(len(kept)) if is_row[j] and kept[j].get("_parent") is p) >= 3
+
+    def is_grid(i):
+        p = kept[i].get("_parent")
+        if p is None:
+            return False
+        rows = [j for j in range(len(kept)) if is_row[j] and kept[j].get("_parent") is p]
+        for a in range(len(rows)):
+            for b in range(a + 1, len(rows)):
+                ia, ib = kept[rows[a]], kept[rows[b]]
+                if _v_overlap(ia["bounds"][1], ia["bounds"][3], ib["bounds"][1], ib["bounds"][3]) and ia["bounds"][0] != ib["bounds"][0]:
+                    return True
+        return False
+
+    order = sorted(range(len(kept)), key=lambda i: (kept[i]["bounds"][1], kept[i]["bounds"][0], i))
+    pos = {i: k for k, i in enumerate(order)}
+    out = {}
+    for i, t in enumerate(kept):
+        if not is_row[i] or not container_ok(i) or is_grid(i):
+            continue
+        p = kept[i].get("_parent")
+        if p is None:
+            continue
+        left = t["bounds"][0]
+        parent_row = None
+        for k in range(pos[i] - 1, -1, -1):
+            j = order[k]
+            if not is_row[j] or kept[j].get("_parent") is not p:
+                continue
+            u = kept[j]
+            if u["bounds"][0] <= left - indent and u["bounds"][1] < t["bounds"][1]:
+                lbl = u["label"].lower()
+                if lbl in GENERIC_LABELS or lbl == t["label"].lower():
+                    continue
+                parent_row = j
+                break
+        if parent_row is not None:
+            out[i] = cap_context(kept[parent_row]["label"])
+    return out
+
+
 def decorate(kept: list[dict], w: int, h: int, fmt: str = "v1") -> None:
-    """Targets.decorate: context, rank and the last-resort repeat number, in place (kept: reading order). Format "v1"
-    (the default): no context or rank, only the repeat number on options that would be identical."""
+    """Targets.decorate: context, rank, the tree parent and the last-resort repeat number, in place (kept: reading
+    order). "v1" (default): no context or rank, only the repeat number on identical options. "v2": row context and rank.
+    "v2i": v2 plus the indented-list tree context (a sub-row's parent), which also stays on `parent` for every format."""
     counts: dict = {}
     for t in kept:
         counts[t["label"].lower()] = counts.get(t["label"].lower(), 0) + 1
     cx = lambda t: (t["bounds"][0] + t["bounds"][2]) // 2  # noqa: E731
+    v2 = fmt in ("v2", "v2i")
+    parents = indent_parents(kept, w)   # the tree parent, always available (even v1)
     for t in kept:
         t["context"], t["rank"] = None, None
-    for i, t in enumerate(kept if fmt == "v2" else []):
+    for i, t in enumerate(kept if v2 else []):
         l, tp, r, b = t["bounds"]
         low = t["label"].lower()
-        t["context"] = t["_row"] if (t["role"] == "switch" or low in GENERIC_LABELS or counts[low] >= 2) else None
+        existing = t["_row"] if (t["role"] == "switch" or low in GENERIC_LABELS or counts[low] >= 2) else None
+        t["context"] = existing
+        if fmt == "v2i" and not existing:   # the existing v2 rule wins over the tree parent
+            t["context"] = parents.get(i)
         col = [j for j, u in enumerate(kept) if u["role"] == t["role"] and
                (min(r, u["bounds"][2]) - max(l, u["bounds"][0])) > 0 and
                2 * (min(r, u["bounds"][2]) - max(l, u["bounds"][0])) >= min(r - l, u["bounds"][2] - u["bounds"][0])]
@@ -463,6 +534,8 @@ def decorate(kept: list[dict], w: int, h: int, fmt: str = "v1") -> None:
         else:
             rank = None
         t["rank"] = rank
+    for i, t in enumerate(kept):
+        t["parent"] = parents.get(i)
     groups: dict = {}
     for i, t in enumerate(kept):
         groups.setdefault(option_text(t), []).append(i)
@@ -486,8 +559,9 @@ def _same_element(a: dict, b: dict) -> bool:
 
 
 def build(root: Node | None, w: int, h: int, covers=(), fmt: str = "v1") -> list[dict]:
-    """Targets in the app's reading order: [{label, role, position, context, rank, bounds, option}]. fmt: the option
-    format (OptionFormat.kt), "v1" (default, the original text) or "v2" (row context and rank)."""
+    """Targets in the app's reading order: [{label, role, position, context, rank, parent, bounds, option}]. fmt: the
+    option format (OptionFormat.kt), "v1" (default, the original text), "v2" (row context and rank) or "v2i" (v2 plus
+    the indented-list tree context)."""
     if root is None:
         return []
     found = []
@@ -518,7 +592,8 @@ def build(root: Node | None, w: int, h: int, covers=(), fmt: str = "v1") -> list
             parent = path[-1] if path else None
             lab, rl, pos = label(n), role(n, parent), POSITIONS[bucket(cx, cy, w, h)]
             found.append({"label": lab, "role": rl, "position": pos, "bounds": list(v),
-                          "_b": bucket(cx, cy, w, h), "_row": row_text(n, lab, path, w, h)})
+                          "_b": bucket(cx, cy, w, h), "_row": row_text(n, lab, path, w, h),
+                          "_parent": parent, "_collection_item": n.collection_item})
         path.append(n)
         for c in n.children:
             visit(c)
@@ -537,6 +612,8 @@ def build(root: Node | None, w: int, h: int, covers=(), fmt: str = "v1") -> list
     for t in out:
         t.pop("_b")
         t.pop("_row")
+        t.pop("_parent", None)
+        t.pop("_collection_item", None)
     return out
 
 
@@ -768,8 +845,8 @@ if __name__ == "__main__":
     ap.add_argument("--check", action="store_true", help="compare with the app's targets op on the current screen")
     ap.add_argument("--selftest", action="store_true", help="run the synthetic occlusion checks (no device)")
     ap.add_argument("--settle", type=float, default=2.5)
-    ap.add_argument("--option-format", choices=["v1", "v2"], default="v1",
-                    help="target option format (OptionFormat.kt): v1 (default, the original text) or v2 (row context and rank)")
+    ap.add_argument("--option-format", choices=["v1", "v2", "v2i"], default="v1",
+                    help="target option format (OptionFormat.kt): v1 (default), v2 (row context and rank) or v2i (v2 + indented-list tree context)")
     a = ap.parse_args()
     if a.selftest:
         _selftest()

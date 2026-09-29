@@ -113,6 +113,23 @@ object JoyIndicators {
         return Grid(w, h, c, (left - 1) * px, (top - 1) * px)
     }
 
+    /**
+     * Ink / paper / cell size (device px per art cell) for the pixel highlights (the snap brackets and the target
+     * choice): the cursor art's when present, else the default navy/mint palette at the default art's cell size, so the
+     * bracket geometry matches the snap either way. Pure JVM (Overlay, JoyIndicatorsTest).
+     */
+    class Palette(val ink: Int, val paper: Int, val cellPx: Int) {
+        companion object {
+            const val DEFAULT_INK = 0xFF1D2757.toInt()
+            const val DEFAULT_PAPER = 0xFFDDEBD3.toInt()
+            /** assets/joystick_cursor.json's art_px_dp (the default cursor's cell size when no art is loaded). */
+            const val DEFAULT_ART_PX_DP = 1.5238095238095237
+            fun of(art: CursorArt?, density: Float): Palette =
+                art?.let { Palette(it.ink, it.paper, it.cellPx(density)) }
+                    ?: Palette(DEFAULT_INK, DEFAULT_PAPER, max(1, Math.round(density * DEFAULT_ART_PX_DP).toInt()))
+        }
+    }
+
     /** assets/joystick_cursor.json. */
     class CursorArt(json: String) {
         private val o = JSONObject(json)

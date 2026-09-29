@@ -44,6 +44,26 @@ class TargetFormatTest {
         assertEquals(1250, tapped.top)
     }
 
+    /** jl10 indent-context parity: indent_parity.json (shared with vox/option_format.py --selftest) — v2i options
+     *  byte-for-byte and plain v2 unchanged; the tree parent is always on the target, not only in v2i. */
+    @Test fun indentParity() {
+        val fx = JSONObject(TargetFormatTest::class.java.classLoader!!.getResource("indent_parity.json")!!.readText())
+        val fw = fx.getInt("w"); val fh = fx.getInt("h")
+        val root = snap(fx.getJSONObject("root"))
+        fun want(key: String) = fx.getJSONArray(key).let { a -> (0 until a.length()).map { a.getString(it) } }
+        val v2 = Targets.build(root, fw, fh, format = OptionFormat.V2)
+        val v2i = Targets.build(root, fw, fh, format = OptionFormat.V2I)
+        val v1 = Targets.build(root, fw, fh)
+        assertEquals(want("options_v2").joinToString("\n"), Targets.options(v2).joinToString("\n"))
+        assertEquals(want("options").joinToString("\n"), Targets.options(v2i).joinToString("\n"))
+        // The tree parent is available on every target (even v1), while only v2i puts it in the model-facing context.
+        assertEquals(v2i.map { it.parent }, v1.map { it.parent })
+        assertEquals(v2i.map { it.parent }, v2.map { it.parent })
+        assertEquals(listOf("L06", "L06", "L06"), v1.filter { it.label in setOf("01 Vocabulary", "02 Grammar", "03 Reading") }.map { it.parent })
+        assertEquals(listOf("L07", "L07"), v1.filter { it.label in setOf("04 Listening", "05 Speaking") }.map { it.parent })
+        assertTrue("v2 must not carry the tree parent as its context", v2.all { it.context == null || it.parent == null || it.context != it.parent })
+    }
+
     /** The `targets` op's options_v1 / options_v2 (harvest): both fixtures from the same windows, with the parts. */
     @Test fun allFormatsForTheTargetsOp() {
         val all = Targets.allFormats(listOf(snap(fixture.getJSONObject("root")) to emptyList()), w, h)

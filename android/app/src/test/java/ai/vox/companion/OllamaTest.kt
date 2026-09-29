@@ -193,6 +193,32 @@ class OllamaTest {
         }
     }
 
+    @Test fun narrowingAnswerResolvesWithAFakeDecider() {
+        // The narrowing path narrowByModel -> onNarrowAnswer: the fake decider (EscalatingDecider's localTarget, the
+        // model stand-in) answers among the narrowed candidates, and Targets.resolve maps that answer to a tap / a
+        // renumber / not-on-screen, exactly as VoxService.onNarrowAnswer does.
+        val cands = listOf(
+            Target("01 Vocabulary", "list item", "left", 100, 100, 1000, 190, context = "L05"),
+            Target("01 Vocabulary", "list item", "left", 100, 300, 1000, 390, context = "L06"),
+            Target("01 Vocabulary", "list item", "left", 100, 500, 1000, 590, context = "L07"),
+        )
+        val opts = Targets.options(cands)
+        // A narrowing phrase ("lesson 6") left three "01 Vocabulary" candidates; the fake decider names the L06 child.
+        val esc = escalating(null, localTarget = { _, o -> ChoiceAnswer(o[1], mapOf(o[1] to 0.9), 0.9, 4L) })
+        val a = esc.pickTarget("state", opts)
+        assertEquals(opts[1], a.choice); assertFalse(a.unscored)
+        val tap = Targets.resolve(cands, a, 0.6)
+        assertTrue(tap.toString(), tap is Targets.Outcome.Tap)
+        assertEquals("L06", (tap as Targets.Outcome.Tap).target.context)
+        // Below min confidence: several remain (onNarrowAnswer re-highlights them), best first.
+        val low = ChoiceAnswer(opts[0], mapOf(opts[0] to 0.5, opts[1] to 0.45, opts[2] to 0.4), 0.5, 2L)
+        val choose = Targets.resolve(cands, low, 0.6)
+        assertTrue(choose.toString(), choose is Targets.Outcome.Choose)
+        assertEquals(listOf("L05", "L06", "L07"), (choose as Targets.Outcome.Choose).targets.map { it.context })
+        // The model says none: not on screen.
+        assertEquals(Targets.Outcome.NotOnScreen, Targets.resolve(cands, ChoiceAnswer(TargetVocab.NONE_OPTION, emptyMap(), 0.0, 1L), 0.6))
+    }
+
     @Test fun newerEventCancelsAndNeverWaits() {
         FakeOllama(delayMs = 5000, reply = { 200 to FakeOllama.chat("tap") }).use { f ->
             val esc = escalating(f, timeoutMs = 4000)

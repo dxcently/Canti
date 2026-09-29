@@ -729,7 +729,8 @@ Intent cursor mode (see below) adds its own chain, linked by `n`:
 listening{mode: cursor} → [asr] → msg{phrase} → target_state{n, app, text, options}
     → target_decision{n, choice, confidence, top, ms, server_ms, min_confidence, unscored}   (or {n, error})
     → target{n, result: "tap" | "choose" | "not on screen" | "no model (decider=rules)", ...}
-    → [choice{n, event: select | picked | ignored | cancelled, selected, option, why}] → exec/gesture/confirm as above
+    → [choice{n, event: select | picked | spoken_pick | spoken | narrowed | no_match | ignored | cancelled, selected, option, text, why}]
+    → exec/gesture/confirm as above
 ```
 
 Other events: `absorbed{sound, tail_of, gap_ms, clock}` (above), `mode`, `arm`, `listening`, `ignored{reason}`, `app`, `service`, `source`, `profile`, `screen`,
@@ -1139,7 +1140,7 @@ and a match on the screen: chatter never taps.
 | `like this post`, `like the video`, `like it`, `heart it`; `hit like`, `tap the like button` | like (the like button on screen, else the like action) | **always a confirm pop** (outward). `like this`, `like that`, any other phrase starting with `like` → filler, nothing happens |
 | `go back`, `back`, `go home`, `scroll up/down`, `go down`, `move up a bit`, a lone `down` / `up` (= scroll **only in a listen window a pop pop opened**, user decision; outside one, e.g. a future always-listening mic, it is `ignore` and needs a verb), `go back to the previous screen`, `hold on a second` (= pause), `next`, `previous`, `pause`, `open camera`, ... (variants → the `Vocab.PHRASES` phrase); `scroll down three times`, `next twice` | navigation (a count repeats only scrolls and next/previous, at most 5) | `RuleDecider` on the phrase (user phrase rules first, the screen tie-break for next/previous and play/pause: a video feed, Reels / Shorts / TikTok, flings vertically); never a model |
 | `open\|launch\|start\|go to\|go back to\|switch to\|return to <app>` | open app | launcher labels + aliases, fuzzy (`you tube`, `tick tock`, `net flicks`); `getLaunchIntentForPackage` in user 0. Two installed apps with the name (YouTube and a mod): the `app_prefer` one (default: RVX for YouTube; also applied when only the official app matched the name but RVX is installed), else the most recently used if usage access is already granted (Canti never asks for it), else the official package, else toast "which YouTube? ..." and nothing opens. A known app's name that is not installed (`open snapchat`): toast "no app called snapchat", `exec{action: open_app, name, ok: false, how: "not installed"}`, **never a tap**; `launch`/`switch to`/`go back to` + an unknown name never taps either |
-| `tap\|click\|press\|select <thing>`, or `open <thing>` that is no app | tap | `TargetMatcher` on the screen's targets: one clear match (≥ 0.85, 0.1 ahead) is tapped; weak or several are highlighted (rise/fall pick, pop taps, hiss cancels); none → the model's `target` question if the decider is not `rules`, else a toast |
+| `tap\|click\|press\|select <thing>`, or `open <thing>` that is no app | tap | `TargetMatcher` on the screen's targets: one clear match (≥ 0.85, 0.1 ahead) is tapped; weak or several are highlighted (numbered, rise/fall move, click taps, hiss cancels, speech narrows); none → the model's `target` question if the decider is not `rules`, else a toast |
 | `type <text>`, `write <text>` (only in a listen window) | type into the focused text box | *Typing by voice*, below; checked before the rest of the grammar on the best hypothesis, as the recognizer wrote it |
 | `dictate`, `start dictation` (only in a listen window) | dictation mode | *Typing by voice*, below |
 | anything else, in cursor mode | tap (a bare word such as `home` falls back to the command) | as above |
@@ -1204,7 +1205,10 @@ In cursor mode the user can name an on-screen element ("the subscriptions tab") 
    only to short hisses. Cursor mode never waits: a click taps at once.
 2. **Phrase.** From the phone's recognizer or a message's `phrase` (*Spoken phrases*). In cursor mode a phrase that is
    not a command names an element: it is matched by name first (`TargetMatcher`, no model); only when nothing on
-   screen matches, and the decider is not `rules`, it becomes a `target` question as below.
+   screen matches, and the decider is not `rules`, it becomes a `target` question as below. Matching treats "1" = "one"
+   = "01" = "first" (up to 20), abbreviates a letter + number ("lesson 6" ~ "L06"/"L6", "chapter 3" ~ "Ch3"/"C3",
+   "unit 2" ~ "U2", "l 6" ~ "L06"), and scores a query that names a row's label **and** its context (the nearest
+   indented parent, e.g. "01 Vocabulary · L06") above the label alone.
 3. **Options** (spec: the docstring of `finetune/vox/targets.py`; `Targets.kt`):
    - Nodes: visible, clickable or focusable, with the centre on screen. Not options: a scrollable non-clickable
      container, a focusable-only node covering more than half the screen, and a label-less focusable-only container
@@ -1236,13 +1240,21 @@ In cursor mode the user can name an on-screen element ("the subscriptions tab") 
    nothing tapped).
    - choice = NONE: toast **"not on screen"**.
    - confidence >= `target_min_confidence` (0.6): tap the element's centre (`tap_target`), confirmed as usual.
-   - otherwise: numbered highlights on the (up to) 3 most probable elements, #1 selected (orange). `rise` = next,
-     `fall` = previous (both wrap), `click` = tap the selected one, `hiss` = cancel. No input for `target_choose_ms`
-     (6000) cancels; each rise/fall restarts that timer. A mode change, disarm, reset or new phrase also cancels.
-     Other sounds are ignored while choosing; sounds failing the not-deliberate gate (talking etc.) are ignored.
+   - otherwise: numbered highlights on the (up to) 3 most probable elements, #1 selected, drawn like the cursor mode's
+     snap-to-element selection (corner brackets in the snap ink/paper, a number badge 1..N on each). `rise` = next,
+     `fall` = previous (both wrap), a **click** (a pop counts as a click) = tap the selected one, `hiss` = cancel. The mic also listens on
+     its own (the same listening window as `click click click`): a spoken **number** ("2", "two", "open 2", "the second one") taps that
+     candidate, "cancel"/"never mind" cancels, anything else narrows — re-ranking only the current candidates by the
+     phrase (label + context words, the same matcher rules). One clear winner is tapped, several remain shown
+     renumbered while it keeps listening, none matches → "no match, say a number" (the choice stays). A phrase that
+     names no candidate but parses to a concrete command ("go home") cancels the choice and runs normally; with a model
+     decider a narrowing phrase that leaves several goes to the model's `target` question with the phrase and the
+     remaining options. No input for 8000 ms cancels; any input restarts that timer. A mode change, disarm, reset or new
+     phrase also cancels. Other sounds are ignored while choosing; sounds failing the not-deliberate gate (talking
+     etc.) are ignored. Choice events log `spoken_pick`, `spoken`, `narrowed` and `no_match` with the spoken `text`.
    - With `decider = rules` there is no model to ask: toast, and `target{result: "no model (decider=rules)"}`.
    - With `decider = escalate` the cloud answers first. Its answer has no probabilities (`unscored`), so it always
-     takes the highlight path with the one element: `pop` taps it, `hiss` cancels.
+     takes the highlight path with the one element: a click or `pop` taps it, `hiss` cancels.
 
 ## Personalization: enrolled sounds rewrite the line
 

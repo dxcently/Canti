@@ -12,7 +12,7 @@ package ai.vox.companion
  */
 data class Target(val label: String, val role: String, val position: String,
                   val left: Int, val top: Int, val right: Int, val bottom: Int,
-                  val context: String? = null, val rank: String? = null) {
+                  val context: String? = null, val rank: String? = null, val parent: String? = null) {
     val option: String get() = label + (context?.let { " · $it" } ?: "") + " ($role, $position" + (rank?.let { ", $it" } ?: "") + ")"
     val cx: Int get() = (left + right) / 2
     val cy: Int get() = (top + bottom) / 2
@@ -307,6 +307,7 @@ object Targets {
     private fun isListItem(n: NodeSnap, parent: NodeSnap?): Boolean =
         n.collectionItem || (parent != null && (parent.shortCls in LIST_CLASSES || parent.rows > 0 || parent.cols > 0))
 
+
     // --- the option list ---------------------------------------------------------------------------------------------
 
     fun isTarget(n: NodeSnap, screenW: Int, screenH: Int): Boolean {
@@ -331,8 +332,9 @@ object Targets {
     fun build(root: NodeSnap?, screenW: Int, screenH: Int, covers: List<Box> = emptyList(), format: String = OptionFormat.V1): List<Target> =
         build(listOfNotNull(root?.let { it to covers }), screenW, screenH, format)
 
-    /** A target and the text of the row it sits in ([rowText]), before [build] decides whether the option shows it. */
-    class Found(val target: Target, val rowText: String?)
+    /** A target and the text of the row it sits in ([rowText]), its immediate parent node and that node's
+     *  collection-item flag, before [build] decides whether the option shows it. */
+    class Found(val target: Target, val rowText: String?, val parent: NodeSnap? = null, val collectionItem: Boolean = false)
 
     /** One window's tree and the windows above it. */
     fun collect(root: NodeSnap, screenW: Int, screenH: Int, covers: List<Box>): List<Found> {
@@ -355,7 +357,7 @@ object Targets {
                     val cx = (v.left + v.right) / 2; val cy = (v.top + v.bottom) / 2
                     val lab = label(n)
                     found += Found(Target(lab, role(n, path.lastOrNull()), position(cx, cy, screenW, screenH), v.left, v.top, v.right, v.bottom),
-                        rowText(n, lab, path, screenW, screenH))
+                        rowText(n, lab, path, screenW, screenH), path.lastOrNull(), n.collectionItem)
                 }
             }
             path += n
@@ -395,9 +397,15 @@ object Targets {
     // controls) get the "{k} of {n}" suffix: "Delete (button, right, 1st of 3)".
 
     const val MAX_CONTEXT_CHARS = 30
+    /** The indentation threshold in dp on the app's 411-dp design width (the screen-width-scaled px indent in [indentParents]). */
+    const val INDENT_DP = 16
     private const val ROW_CLIMB = 3
     val GENERIC_LABELS = setOf("unlabeled", "more", "more options", "more actions", "onoff", "on off", "toggle", "switch", "checkbox",
         "play or pause", "media image", "channel image", "image", "icon", "button", "menu", "options", "overflow menu", "expand", "collapse")
+
+    /** Cap a context the same way [rowText] does (MAX_CONTEXT_CHARS, ellipsis). */
+    private fun capContext(s: String): String =
+        if (s.length <= MAX_CONTEXT_CHARS) s else s.take(MAX_CONTEXT_CHARS - 3).trimEnd() + "..."
 
     private fun vOverlap(aTop: Int, aBottom: Int, bTop: Int, bBottom: Int): Boolean {
         val ov = minOf(aBottom, bBottom) - maxOf(aTop, bTop)
@@ -420,7 +428,7 @@ object Targets {
         // [DESCENDANT_PASSES] in order (a row's title before its icons', as in [label]), each nearest ancestor first.
         val near = path.asReversed().take(ROW_CLIMB).takeWhile { it.area <= CONTAINER_SHARE * screenW.toLong() * screenH }
         val t = DESCENDANT_PASSES.firstNotNullOfOrNull { f -> near.firstNotNullOfOrNull { a -> find(a, 0, f) } } ?: return null
-        return if (t.length <= MAX_CONTEXT_CHARS) t else t.take(MAX_CONTEXT_CHARS - 3).trimEnd() + "..."
+        return capContext(t)
     }
 
     fun ordinal(k: Int, n: Int): String = if (k == n) "last" else k.toString() + when {
@@ -431,15 +439,20 @@ object Targets {
         else -> "th"
     }
 
-    /** Context, rank and the last-resort repeat number for the kept targets, in reading order (see OPTION FORMAT). */
+    /** Context, rank, the tree parent and the last-resort repeat number for the kept targets, in reading order (see OPTION FORMAT). */
     fun decorate(kept: List<Found>, screenW: Int, screenH: Int, format: String = OptionFormat.V1): List<Target> {
-        val v2 = format == OptionFormat.V2
+        val v2 = format == OptionFormat.V2 || format == OptionFormat.V2I
+        val v2i = format == OptionFormat.V2I
         val ts = kept.map { it.target }
         val counts = ts.groupingBy { it.label.lowercase(java.util.Locale.ROOT) }.eachCount()
+        // The tree parent is computed for every format (the on-device TargetMatcher uses it even in v1); the model-facing
+        // context only includes it in v2i, so flat v2 stays byte-identical.
+        val parents = indentParents(kept, screenW)
         fun b(t: Target) = bucket(t.cx, t.cy, screenW, screenH)
-        val out = if (!v2) ts else ts.mapIndexed { i, t ->
+        val out = if (!v2) ts.mapIndexed { i, t -> t.copy(parent = parents[i]) } else ts.mapIndexed { i, t ->
             val low = t.label.lowercase(java.util.Locale.ROOT)
-            val ctx = kept[i].rowText.takeIf { t.role == "switch" || low in GENERIC_LABELS || counts.getValue(low) >= 2 }
+            val existing = kept[i].rowText.takeIf { t.role == "switch" || low in GENERIC_LABELS || counts.getValue(low) >= 2 }
+            val ctx = if (v2i) existing ?: parents[i] else existing   // the existing v2 rule wins over the tree parent
             val col = ts.indices.filter { j -> ts[j].role == t.role &&
                     (minOf(t.right, ts[j].right) - maxOf(t.left, ts[j].left)).let { ov -> ov > 0 && 2 * ov >= minOf(t.right - t.left, ts[j].right - ts[j].left) } }
                 .sortedWith(compareBy({ ts[it].top }, { ts[it].left }, { it }))
@@ -454,13 +467,67 @@ object Targets {
                 others.isNotEmpty() && b(t) % 3 == 2 && others.all { ts[it].cx < t.cx } -> "far right"
                 else -> null
             }
-            t.copy(context = ctx, rank = rank)
+            t.copy(context = ctx, rank = rank, parent = parents[i])
         }
         val same = out.indices.groupBy { out[it].option }
         return out.mapIndexed { i, t ->
             val g = same.getValue(t.option)
             if (g.size < 2) t else t.copy(rank = listOfNotNull(t.rank, "${ordinal(g.indexOf(i) + 1, g.size)} of ${g.size}").joinToString(", "))
         }
+    }
+
+    /**
+     * Tree parent for indented list rows (vox/option_format.indent_context, jl10), independent of the option format.
+     * Only a "list item" target may take a parent, and the parent row must also be a "list item" (a). The parent is the
+     * nearest PRECEDING kept row in reading order (sorted by top, then left) in the SAME immediate parent node, whose
+     * left edge is at least `round(16 * screenW / 411)` px smaller and whose row is strictly ABOVE the target. The
+     * immediate parent must be a list container (its class / rows / cols, or the child is a collection item), falling
+     * back to >= 3 kept list items when a flat dump carries no list-class info (b). A parent whose label is generic or
+     * equals the child's label is skipped, taking the next nearest (c). A grid container (>= 2 kept list items in the
+     * same row at different lefts) gets none (i). Returns index -> parent label (capped like a context).
+     */
+    fun indentParents(kept: List<Found>, screenW: Int): Map<Int, String> {
+        val indent = Math.round(INDENT_DP * screenW / 411.0).toInt()
+        val isRow = BooleanArray(kept.size) { kept[it].target.role == "list item" }
+        fun containerOk(i: Int): Boolean {
+            val p = kept[i].parent ?: return false
+            if (kept[i].collectionItem) return true
+            if (p.shortCls in LIST_CLASSES || p.rows > 0 || p.cols > 0) return true
+            return kept.indices.count { j -> isRow[j] && kept[j].parent === p } >= 3
+        }
+        fun isGrid(i: Int): Boolean {
+            val p = kept[i].parent ?: return false
+            val rows = kept.indices.filter { j -> isRow[j] && kept[j].parent === p }
+            for (a in rows.indices) for (b in a + 1 until rows.size) {
+                val ta = kept[rows[a]].target; val tb = kept[rows[b]].target
+                if (vOverlap(ta.top, ta.bottom, tb.top, tb.bottom) && ta.left != tb.left) return true
+            }
+            return false
+        }
+        // reading order: sorted by top, then left (stable by the original index)
+        val order = kept.indices.sortedWith(compareBy({ kept[it].target.top }, { kept[it].target.left }, { it }))
+        val pos = IntArray(kept.size)
+        for ((k, i) in order.withIndex()) pos[i] = k
+        val out = HashMap<Int, String>()
+        for (i in kept.indices) {
+            val t = kept[i].target
+            if (!isRow[i] || !containerOk(i) || isGrid(i)) continue
+            val p = kept[i].parent ?: continue
+            var parentRow = -1
+            for (k in pos[i] - 1 downTo 0) {
+                val j = order[k]
+                if (!isRow[j] || kept[j].parent !== p) continue
+                val u = kept[j].target
+                if (u.left <= t.left - indent && u.top < t.top) {
+                    val low = u.label.lowercase(java.util.Locale.ROOT)
+                    if (low in GENERIC_LABELS || low == t.label.lowercase(java.util.Locale.ROOT)) continue
+                    parentRow = j
+                    break
+                }
+            }
+            if (parentRow >= 0) out[i] = capContext(kept[parentRow].target.label)
+        }
+        return out
     }
 
     /** The same element found twice (nested nodes, two layers): same label and role, one's centre inside the other. */
