@@ -50,7 +50,7 @@ def build_session(root, name, recorder='app'):
     sess = root / 'files' / 'range' / name
     sess.mkdir(parents=True)
     L.write_json(sess / 'spec.json', sp)
-    meta = dict(device='phone', mic='phone built-in mic', rate=16000, channels=1, spec='range_v1',
+    meta = dict(device='phone', mic='phone built-in mic', rate=16000, channels=1, spec=sp['version'],
                 synthetic=False, profile='short', speaker='self',
                 range=dict(bottom_hz=None, home_hz=None, top_hz=None, whistle_home_hz=None, below_f0_min=False),
                 sittings=[dict(started=1.0, ended=None)],
@@ -228,8 +228,12 @@ def test_cli_pull_parses_and_calls_pull(tmp_path, monkeypatch):
 
 def test_plan_fixture_is_current():
     import make_range_plan_fixture as M
-    stored = json.loads((Path(__file__).parent / 'fixtures' / 'range_v1_plan.json').read_text())
-    assert M.build() == stored
-    assert len(stored['short']) == 42
-    assert len(stored['full']) == 269 + 7
-    assert sum(1 for t in stored['full'] if t['kind'] == 'backgrounds') == 7
+    stored_v1 = json.loads((Path(__file__).parent / 'fixtures' / 'range_v1_plan.json').read_text())
+    stored_v2 = json.loads((Path(__file__).parent / 'fixtures' / 'range_v2_plan.json').read_text())
+    assert M.build(L.load_spec(L.HERE / 'prompts' / 'range_v1.json')) == stored_v1
+    assert M.build(L.load_spec(L.HERE / 'prompts' / 'range_v2.json')) == stored_v2
+    assert len(stored_v1['short']) == 42
+    assert len(stored_v1['full']) == 269 + 7
+    assert len(stored_v2['short']) == 42
+    assert len(stored_v2['full']) == 269 + 7
+    assert sum(1 for t in stored_v2['full'] if t['kind'] == 'backgrounds') == 7

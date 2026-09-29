@@ -203,27 +203,102 @@ def test_label_scoring_combos_and_exact_sequence():
     assert lab["confusion"]["rise"] == {"fall": 1}
 
 
+def test_pop_fold_and_click_merge():
+    def c(label, start, end, snr=20):
+        return dict(ev(label, snr=snr), t_start_ms=start, t_end_ms=end)
+    events = [
+        c("pop", 100, 150),                    # folds to click
+        c("click", 160, 200, snr=15),          # 160 - 150 = 10 <= 30 ms: merges
+        c("click", 210, 300, snr=25),          # 210 - 200 = 10 <= 30 ms: merges further
+        c("click", 500, 600, snr=10),          # 500 - 300 = 200 > 30 ms: stays
+        dict(ev("hiss", snr=5), t_start_ms=700, t_end_ms=900)]
+    out = R.fold_and_merge(events)
+    assert [e["label"] for e in out] == ["click", "click", "hiss"]
+    assert (out[0]["t_start_ms"], out[0]["t_end_ms"]) == (100, 300)   # the merged span
+    assert out[0]["snr_db"] == 25   # the strongest merged example wins
+    assert R.fold_expect(["pop", "pop"]) == ["click", "click"]
+    assert R.fold_expect(["pop", "hiss"]) == ["click", "hiss"]
+
+
+def test_v1_session_scores_with_pop_folded(private):
+    v1 = L.load_spec(L.HERE / "prompts" / "range_v1.json")
+    out = private / "v1"
+    L.open_session(out, v1, "desktop", "synthetic", FS, 1, True)
+    plan = {t["take_id"]: t for t in L.build_plan(v1)}
+    rng = np.random.default_rng(7)
+    audio = make_gesture("click", rng)
+    t = plan[tid("discrete", "click", DISCRETE)]
+    row = L.label_row(t, 0, 0, 1000, len(audio), FS)
+    write_wav(out / row["file"], audio)
+    L.append_row(out / "labels.jsonl", row)
+    rep = R.run_session(out, opts())
+    assert rep["spec"] == "range_v1"
+    assert rep["labels"]["n_takes"] == 1
+    assert "pop folded into click (round 7)" in (out / "report.md").read_text()
+
+
+HISS_TXT = "a hiss; duration short (150-400 ms); loudness normal; sounds like mouth sound"
+NOISE_HISS_TXT = "a hiss; duration long (over 1 s); loudness normal; sounds like background noise"
+
+
+def test_hiss_length_sweep():
+    def hiss(start, end, text=HISS_TXT):
+        return dict(ev("hiss", snr=20), t_start_ms=start, t_end_ms=end, text=text)
+    session = {"spec": L.load_spec(), "takes": [
+        {"take_id": "s1", "expect": ["hiss"], "cond": DISCRETE},
+        {"take_id": "s2", "expect": ["hiss"], "cond": DISCRETE},
+        {"take_id": "l07", "expect": ["hiss"], "cond": dict(DISCRETE, speed="long07")},
+        {"take_id": "l10a", "expect": ["hiss"], "cond": dict(DISCRETE, speed="long10")},
+        {"take_id": "l10b", "expect": ["hiss"], "cond": dict(DISCRETE, speed="long10")},
+        {"take_id": "l10n", "expect": ["hiss"], "cond": dict(DISCRETE, speed="long10")},
+        {"take_id": "l05", "expect": ["hiss"], "cond": dict(DISCRETE, speed="long05")}]}
+    events = {
+        "s1": [hiss(1000, 1300)],            # 300 ms
+        "s2": [hiss(1000, 1100)],            # 100 ms
+        "l07": [hiss(1000, 1750)],           # 750 ms
+        "l10a": [hiss(1000, 2100)],          # 1100 ms
+        "l10b": [hiss(1000, 1900)],          # 900 ms
+        "l10n": [hiss(1000, 2100, NOISE_HISS_TXT)],   # sounds like background noise: never long
+        "l05": [hiss(1000, 1500)]}           # 500 ms (the grey zone)
+    hl = R.check_hiss_length(session, events)
+    assert hl["app_cutoff_ms"] == 700
+    assert hl["per_length"]["short"]["n"] == 2 and hl["per_length"]["short"]["median_ms"] == 200
+    assert hl["per_length"]["long07"]["n"] == 1 and hl["per_length"]["long07"]["median_ms"] == 750
+    assert hl["per_length"]["long10"]["n"] == 3   # the never-long hiss still counts as long10 for the stats
+    assert hl["per_length"]["long05"]["n"] == 1
+    sweep = {s["cutoff_ms"]: s for s in hl["sweep"]}
+    assert sweep[700]["app"] is True
+    # short stay Back below the cutoff: both short takes (< 400) stay at every cutoff >= 400
+    assert sweep[400]["short_stay"] == 1.0
+    # long07 + long10 listen at/above the cutoff; the never-long hiss (1100 ms) never listens
+    assert sweep[400]["long_listen"] == 0.75   # l07 750 + l10a 1100 + l10b 900; l10n excluded
+    assert sweep[1000]["long_listen"] == 0.25  # only l10a 1100
+    assert sweep[800]["long_listen"] == 0.5    # l10a 1100 + l10b 900; l07 750 and l10n excluded
+
+
 def test_level_gate_mirrors_the_apps_calibration_steps():
     joy = json.loads(R.JOY_SPEC.read_text())
     session = {"takes": [
         {"take_id": "click", "block": "discrete", "expect": ["click"], "cond": DISCRETE, "bg": None},
         {"take_id": "soft", "block": "discrete", "expect": ["click"], "cond": dict(DISCRETE, loud="soft"), "bg": None},
         {"take_id": "hiss", "block": "discrete", "expect": ["hiss"], "cond": DISCRETE, "bg": None},
-        {"take_id": "pop", "block": "discrete", "expect": ["pop"], "cond": DISCRETE, "bg": None}]}
+        {"take_id": "folded", "block": "discrete", "expect": ["click"], "cond": DISCRETE, "bg": None},   # a v1 pop, folded
+        {"take_id": "longhiss", "block": "discrete", "expect": ["hiss"], "cond": dict(DISCRETE, speed="long07"), "bg": None}]}
     events = {
         # the clicks step takes any pop/click/hiss up to max_dur_ms (the strongest), not a longer one
         "click": [ev("hiss", 18, -35, 120), ev("click", 30, -20, joy["calib_v2"]["clicks"]["max_dur_ms"] + 1)],
         "soft": [ev("click", 6, -50)],            # soft/across takes are not a calibration: ignored
         "hiss": [ev("click", 40, -15), ev("hiss", 22, -32, 200)],   # the hiss step takes only hiss
-        "pop": [ev("pop", 35, -18), ev("unknown", 50, -10)]}
+        "folded": [ev("pop", 35, -18), ev("unknown", 50, -10)],     # folded pop -> click feeds the clicks bucket
+        "longhiss": [ev("hiss", 40, -10, 800)]}   # a long hiss never feeds the gate
     gate = R.derive_level_gate(session, events, joy)
-    want = R.J.derive_gate({"clicks": [ev("hiss", 18, -35, 120)["example"]], "hiss": [ev("hiss", 22, -32, 200)["example"]],
-                            "pops": [ev("pop", 35, -18)["example"]]}, None, joy)
+    want = R.J.derive_gate({"clicks": [ev("hiss", 18, -35, 120)["example"], ev("pop", 35, -18)["example"]],
+                            "hiss": [ev("hiss", 22, -32, 200)["example"]], "pops": []}, None, joy)
     assert {k: gate[k] for k in want} == want
-    assert gate["examples"] == {"pops": 1, "clicks": 1, "hiss": 1}
+    assert gate["examples"] == {"pops": 0, "clicks": 2, "hiss": 1}   # the pops bucket stays empty
     assert gate["min_snr_db"] == pytest.approx(18 - joy["level_gate"]["margin_snr_db"])
     # no centre click: the spec default, like the app before its clicks step
-    assert R.derive_level_gate({"takes": session["takes"][1:]}, events, joy)["from"] == "default"
+    assert R.derive_level_gate({"takes": session["takes"][1:3]}, events, joy)["from"] == "default"
 
 
 ROOM_TID = "room-room-r1"
@@ -412,6 +487,26 @@ def test_cli_gate_from_and_summary_out(private, capsys):
         R.main([str(sis), "--no-cpp", "--summary-out", str(L.HERE / "tests")])
 
 
+# ---------------------------------------------------------------------------------- full synthetic CLI round
+
+def test_full_synthetic_cli_round_self_and_sis(private):
+    import subprocess
+    self_dir, sis_dir = private / "self", private / "sis"
+    full = subprocess.run([sys.executable, str(R.HERE / "range_session.py"), "--source", "fake", "--auto",
+                           "--out", str(self_dir)], capture_output=True, text=True)
+    assert full.returncode == 0, full.stderr
+    short = subprocess.run([sys.executable, str(R.HERE / "range_session.py"), "--source", "fake", "--auto",
+                            "--profile", "short", "--speaker", "sis", "--out", str(sis_dir)],
+                           capture_output=True, text=True)
+    assert short.returncode == 0, short.stderr
+    rep = R.run_session(sis_dir, opts(), gate_from=R.gate_from_session(self_dir, R.Config()))
+    assert set(rep["gates"]) == {"own", "from"}   # the report has both gates
+    assert rep["hiss_length"] is not None
+    md = (sis_dir / "report.md").read_text()
+    assert "pop folded into click (round 7)" in md
+    assert "hiss length" in md
+
+
 # ---------------------------------------------------------------------------------- app replay safety
 
 def test_emulator_refusal():
@@ -488,5 +583,14 @@ def test_app_replay_pins_the_emulator_and_reads_decisions(private, monkeypatch):
 
 def test_expected_action_mapping():
     assert R.expected_action(["rise"]) == "swipe_up"
+    assert R.expected_action(["fall"]) == "swipe_down"
+    assert R.expected_action(["arch"]) == "swipe_right"
+    assert R.expected_action(["dip"]) == "swipe_left"
+    assert R.expected_action(["click"]) == "tap"
+    assert R.expected_action(["hiss"]) == "back"
+    assert R.expected_action(["flat"]) == "long_press"
     assert R.expected_action(["click", "click"]) == "home"
-    assert R.expected_action(["pop", "pop"]) == "none"
+    assert R.expected_action(["click", "click", "click"]) == "listen_for_phrase"
+    assert R.expected_action(["hiss", "click"]) == "back"
+    assert R.expected_action(["click", "hiss"]) == "forward"
+    assert R.expected_action(["pop"]) == "none"   # a pop is folded to click; the raw table has no pop

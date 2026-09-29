@@ -37,7 +37,7 @@ The checks (each a section of the report); the extractor runs once per take and 
                 and a 'representative' verdict (--flag percentage points).
   5. app replay   (--emulator) feed each take through the app's mic_feed {deliver:true} on the
                 EMULATOR only and compare its `decision` actions with expect -> action
-                (vox_extract.vocab.DEFAULT_BINDINGS). Refuses the phone: serial R5CX62H7PNJ, adb server
+                (a local round-7 table). Refuses the phone: serial R5CX62H7PNJ, adb server
                 port 5037, host port 7788, and any serial that is not emulator-*.
   6. ratings     ratings.jsonl per block with seconds and redos.
   no sound       the phone recorder's missed attempts (labels rows with no_sound: true, each kept as its own
@@ -73,15 +73,24 @@ if str(NF_DIR) not in sys.path:
 
 from vox_extract import Config  # noqa: E402
 from vox_extract.extractor import extract_array  # noqa: E402
-from vox_extract.policy import not_deliberate  # noqa: E402
-from vox_extract.vocab import DEFAULT_BINDINGS  # noqa: E402
+from vox_extract.lines import parse_line  # noqa: E402
+from vox_extract.policy import NOT_GESTURE_SOURCES, not_deliberate  # noqa: E402
 
 import joystick_core as J  # noqa: E402
 import nearfield as nf  # noqa: E402
 import range_layout as L  # noqa: E402
 
 COND_KEYS = L.COND_KEYS
-GESTURES = ("rise", "fall", "arch", "dip", "flat", "click", "hiss", "pop")
+GESTURES = ("rise", "fall", "arch", "dip", "flat", "click", "hiss")
+CLICK_MERGE_SLACK_MS = 30
+# Round 7: a pop now counts as a click. The app's own expected action table (vox_extract.vocab is model-facing and
+# must not change).
+R7_ACTIONS = {
+    ("rise",): "swipe_up", ("fall",): "swipe_down", ("arch",): "swipe_right", ("dip",): "swipe_left",
+    ("click",): "tap", ("hiss",): "back", ("flat",): "long_press",
+    ("click", "click"): "home", ("click", "click", "click"): "listen_for_phrase", ("hiss", "click"): "back",
+    ("click", "hiss"): "forward",
+}
 DEFAULT_FLAG = 10.0           # real-vs-mix "representative" tolerance, percentage points
 FORBIDDEN_SERIAL = "R5CX62H7PNJ"
 FORBIDDEN_ADB_PORT = 5037
@@ -105,6 +114,8 @@ def load_session(directory: str | Path) -> dict:
     plan = L.build_plan(spec, profile=profile)
     # each row carries its plan cell's quiet flag (the room step: nothing expected, not a gesture take)
     takes = [dict(rows[t["take_id"]], quiet=L.is_quiet(t)) for t in plan if t["take_id"] in rows]
+    for t in takes:   # round 7: fold a pop (v1) into a click before any scoring
+        t["expect"] = fold_expect(t.get("expect") or [])
     quiet = {t["take_id"]: L.is_quiet(t) for t in plan}
     no_sound = [dict(r, quiet=quiet.get(r["take_id"], False)) for r in L.no_sound_rows(journal)]
     return {"dir": d, "meta": meta, "spec": spec, "profile": profile, "speaker": L.session_speaker(meta),
@@ -114,6 +125,31 @@ def load_session(directory: str | Path) -> dict:
 
 
 # --------------------------------------------------------------------------------- audio helpers
+
+def fold_expect(expect: list[str]) -> list[str]:
+    """Round 7: a pop is a click (a v1 'pop pop' becomes 'click click'), before any scoring."""
+    return ['click' if g == 'pop' else g for g in expect]
+
+
+def fold_and_merge(events: list[dict]) -> list[dict]:
+    """Round 7: every heard 'pop' becomes 'click', then adjacent clicks whose spans overlap or lie within
+    CLICK_MERGE_SLACK_MS of each other merge into one (the app's ClickMerge)."""
+    out: list[dict] = []
+    for e in events:
+        e = dict(e)
+        e['label'] = 'click' if e['label'] == 'pop' else e['label']
+        prev = out[-1] if out else None
+        if (prev is not None and prev['label'] == 'click' and e['label'] == 'click'
+                and (e.get('t_start_ms') or 0) - (prev.get('t_end_ms') or 0) <= CLICK_MERGE_SLACK_MS):
+            prev['t_end_ms'] = max(prev.get('t_end_ms') or 0, e.get('t_end_ms') or 0)
+            if (e.get('snr_db') or -1e9) > (prev.get('snr_db') or -1e9):
+                for k in ('snr_db', 'level_db', 'example', 'nearfield', 'text'):
+                    if k in e:
+                        prev[k] = e[k]
+        else:
+            out.append(e)
+    return out
+
 
 def rms(x: np.ndarray) -> float:
     x = np.asarray(x, dtype=np.float64)
@@ -296,6 +332,9 @@ def derive_level_gate(session: dict, events: dict[str, list[dict]], joy: dict | 
         expect = t.get("expect") or []
         if t.get("block") != "discrete" or len(expect) != 1 or expect[0] not in rules or not is_centre(t):
             continue
+        # the hiss step asks for short 'tss'es only: a long hiss (speed long*) never feeds the gate
+        if expect[0] == "hiss" and (t.get("cond") or {}).get("speed") != "na":
+            continue
         bucket, ok = rules[expect[0]]
         cand = [e for e in events.get(t["take_id"], []) if e["snr_db"] is not None and e["level_db"] is not None and ok(e)]
         if cand:
@@ -395,7 +434,7 @@ def analyze_takes(session: dict, cfg: Config) -> dict[str, list[dict]]:
     out = {}
     for t in session["takes"]:
         audio, rate = read_take(session["dir"] / t["file"])
-        out[t["take_id"]] = analyze(audio, rate, cfg)
+        out[t["take_id"]] = fold_and_merge(analyze(audio, rate, cfg))
     return out
 
 
@@ -404,7 +443,7 @@ def analyze_backgrounds(session: dict, cfg: Config) -> dict[str, dict]:
     out = {}
     for b in session["backgrounds"]:
         audio, rate = read_take(session["dir"] / b["file"])
-        out[b["name"]] = {"events": analyze(audio, rate, cfg), "seconds": len(audio) / rate}
+        out[b["name"]] = {"events": fold_and_merge(analyze(audio, rate, cfg)), "seconds": len(audio) / rate}
     return out
 
 
@@ -629,6 +668,63 @@ def check_no_sound(session: dict) -> dict:
             "per_gesture": dict(per_gesture), "per_take": list(per_take.values())}
 
 
+def _never_long(e: dict) -> bool:
+    """A hiss whose sounds_like is a non-gesture source (talking/background noise, ...) is never long (CursorListen)."""
+    try:
+        return parse_line(e.get("text", "")).get("sounds_like") in NOT_GESTURE_SOURCES
+    except Exception:
+        return False
+
+
+def hiss_takes(session: dict, events: dict[str, list[dict]]) -> list[dict]:
+    """Every take expecting ['hiss'] as {aimed, duration_ms, never_long}: the longest hiss event's span."""
+    out = []
+    for t in session["takes"]:
+        if (t.get("expect") or []) != ["hiss"]:
+            continue
+        cond = t.get("cond") or {}
+        aimed = "short" if cond.get("speed", "na") == "na" else cond["speed"]
+        best = None
+        for e in events.get(t["take_id"], []):
+            if e.get("label") != "hiss":
+                continue
+            span = (e.get("t_end_ms") or 0) - (e.get("t_start_ms") or 0)
+            if best is None or span > best[0]:
+                best = (span, _never_long(e))
+        if best is None:
+            continue
+        out.append({"take_id": t["take_id"], "aimed": aimed, "duration_ms": best[0], "never_long": best[1]})
+    return out
+
+
+def _hiss_stats(takes: list[dict], app_cutoff_ms: int) -> dict:
+    per_length = {}
+    for aimed in ("short", "long05", "long07", "long10"):
+        durs = sorted(t["duration_ms"] for t in takes if t["aimed"] == aimed)
+        per_length[aimed] = {"n": len(durs),
+                             "median_ms": round(float(np.median(durs)), 1) if durs else None,
+                             "p10_ms": round(float(np.percentile(durs, 10)), 1) if durs else None,
+                             "p90_ms": round(float(np.percentile(durs, 90)), 1) if durs else None}
+    short = [t for t in takes if t["aimed"] == "short"]
+    long = [t for t in takes if t["aimed"] in ("long07", "long10")]   # long05 is the grey zone, listed apart
+    sweep = []
+    for c in range(400, 1001, 50):
+        stay = sum(t["duration_ms"] < c for t in short)
+        listen = sum(t["duration_ms"] >= c and not t["never_long"] for t in long)
+        sweep.append({"cutoff_ms": c,
+                      "short_stay": round(stay / len(short), 4) if short else None,
+                      "long_listen": round(listen / len(long), 4) if long else None,
+                      "app": c == app_cutoff_ms})
+    return {"per_length": per_length, "sweep": sweep, "app_cutoff_ms": app_cutoff_ms}
+
+
+def check_hiss_length(session: dict, events: dict[str, list[dict]]) -> dict:
+    """The hiss-length section: durations per aimed length, and a cutoff sweep of short-vs-long (round 7)."""
+    app_cutoff_ms = int(session["spec"]["analysis"].get("long_hiss_ms", 700))
+    takes = hiss_takes(session, events)
+    return dict(_hiss_stats(takes, app_cutoff_ms), takes=takes)
+
+
 def check_ratings(session: dict) -> list[dict]:
     blocks: dict[str, dict] = {}
     for r in session["ratings"]:
@@ -649,7 +745,7 @@ def check_ratings(session: dict) -> list[dict]:
 
 
 def expected_action(expect: list[str]) -> str:
-    return DEFAULT_BINDINGS.get(tuple(expect), "none")
+    return R7_ACTIONS.get(tuple(expect), "none")
 
 
 def check_device(serial: str, adb_port: int | None, socket_port: int | None = None) -> None:
@@ -791,8 +887,10 @@ def run_session(directory: str | Path, opts: argparse.Namespace, gate_from: dict
         "app_replay": app_replay,
         "ratings": check_ratings(session),
         "no_sound": check_no_sound(session),
+        "hiss_length": check_hiss_length(session, events),
         "notes": [],
     }
+    report["notes"].append("pop folded into click (round 7)")
     room = gate.get("room") or {}
     if gate["from"] == "calibration" and room.get("status") == "absent":
         report["notes"].append("the level gate has no room step here (no room take: a session recorded before the "
@@ -820,7 +918,7 @@ def summarize(reports: list[dict]) -> dict:
         lab = r["labels"]
         g = out.setdefault(r["speaker"], {}).setdefault(r["device"], {
             "sessions": [], "recall": {"correct": 0, "total": 0}, "exact": {"correct": 0, "total": 0},
-            "keep": {}, "per_gesture": {}, "per_cond_id": {}})
+            "keep": {}, "per_gesture": {}, "per_cond_id": {}, "hiss_takes": []})
         g["sessions"].append({"session": r["session"], "profile": r["profile"], "takes": lab["n_takes"],
                               "synthetic": r.get("synthetic", False)})
         for t in lab["per_take"]:
@@ -834,6 +932,8 @@ def summarize(reports: list[dict]) -> dict:
         for name, chk in r["gates"].items():
             for gesture, acc in chk["keep_rate"]["per_gesture"].items():
                 add_frac(g["keep"].setdefault(name, {}), gesture, acc["correct"], acc["total"])
+        if r.get("hiss_length"):
+            g["hiss_takes"] += r["hiss_length"].get("takes", [])
     for by_device in out.values():
         for g in by_device.values():
             for key in ("recall", "exact"):
@@ -841,6 +941,7 @@ def summarize(reports: list[dict]) -> dict:
             g["per_gesture"] = with_rates(g["per_gesture"])
             g["per_cond_id"] = with_rates(g["per_cond_id"])
             g["keep"] = {name: with_rates(v) for name, v in g["keep"].items()}
+            g["hiss_length"] = _hiss_stats(g.pop("hiss_takes"), 700)
     return out
 
 
@@ -967,6 +1068,21 @@ def build_markdown(r: dict) -> str:
     out.append(md_table(["block", "n", "mean rating", "seconds", "redos", "notes"],
                         [[x["block"], x["n"], num(x["rating_mean"], ".1f"), x["seconds"], x["redos"],
                           "; ".join(x["notes"])] for x in r["ratings"]]))
+    hl = r.get("hiss_length")
+    if hl:
+        out.append("\n## 7. hiss length")
+        out.append("pop folded into click (round 7); a long hiss is the cursor-listen sound")
+        out.append(md_table(["aimed", "n", "median ms", "p10 ms", "p90 ms"],
+                            [[a, v["n"], num(v["median_ms"], ".1f"), num(v["p10_ms"], ".1f"), num(v["p90_ms"], ".1f")]
+                             for a, v in hl["per_length"].items()]))
+        out.append("")
+        out.append("cutoff sweep (short stays Back below the cutoff; long07+long10 listen at or above it; long05 is the grey zone)")
+        rows = []
+        for s in hl["sweep"]:
+            c = s["cutoff_ms"]
+            label = f"{c} ms" + (" (app)" if s.get("app") else "")
+            rows.append([label, pct(s["short_stay"]), pct(s["long_listen"])])
+        out.append(md_table(["cutoff", "short stay %", "long listen %"], rows))
     if r.get("notes"):
         out.append("\n**notes:** " + "; ".join(r["notes"]))
     return "\n".join(out) + "\n"
