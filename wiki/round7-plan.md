@@ -43,7 +43,14 @@ A pop is too hard to make consistently. Pop carries more than it looks on the ph
   - Voice commands in cursor mode get their own trigger, not a click combo: a **long hiss** (over ~0.7 s) opens listening, and a
     short hiss is still Back. On the phone mic, cursor mode lets only click and hiss through as gestures (hums and whistles
     steer), so there was no free sound; the hiss's length is known when it ends, so nothing waits.
-  - Gesture mode keeps the mapping above (click click = home, click click click = listen).
+  - Gesture mode: click click = home, click click click = listen. A **lone phone/USB-mic click does nothing in gesture mode**
+    unless bound (the D135 policy, kept: room and video clicks must not tap); it taps only in cursor mode. The Pico's lone
+    click taps.
+  - **Media-lock unlock = a long hiss** (not the triple click): in the round 4 media log, 14 raw click triples became 0 once
+    the level gate ran, while a hiss is loud and broadband.
+  - The combo gap drops from 600 to **350 ms** (a stored 600, the old default, migrates; other stored values are kept).
+  - Model-facing text (Vocab.DEFAULTS_TEXT, POLICY, TargetVocab, the finetune schema) is left as it was: the models were
+    trained on "pop = tap" and would need retraining for the new wording.
 
 ## 3. The media lock: why gestures fail on videos, Reels and feeds
 
