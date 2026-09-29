@@ -25,6 +25,7 @@ __pycache__/
 # --- the user's own voice recordings: private, never committed
 /extractor/recordings/*
 !/extractor/recordings/README.md
+/demo/recordings/
 
 # --- finetune: generated data (regenerate with python -m vox.generate / vox.targets), checkpoints, predictions, logs
 /finetune/data/*
