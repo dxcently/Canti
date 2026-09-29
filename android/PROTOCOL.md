@@ -960,6 +960,28 @@ the phone). The PC pulls with `android/suite/range_phone.py pull` (see extractor
 size-checked and each session validated before anything local is replaced, and the phone copy is deleted only with
 `--clear` and a typed yes (or `--yes`).
 
+### PC stream (dev)
+
+DEV-ONLY (round 7 §3d, `rec/PcmStream.kt`): the PC records the phone's own mic capture over the debug socket by
+polling the RAM ring (no file, no upload; audio never reaches the event log). Same gate (`DevRec.enabled`) and the same
+debug socket as the recorder. The sample clock is the ring's stream frame (the capture's pushed count); the ring holds
+12 s, so a PC that polls every 100 ms has ~11 s of slack.
+
+- `pcm_open {idle_ms?: 5000 (1000-30000)}` → `{ok, sid, rate, gen, frame, mic, source}` (`frame` = `ring.end` at
+  open). Refused (`ok:false, error`) unless the source is phone|usb, the capture is listening, the mode is gesture, and
+  no recorder session / calibration / training / measurement / other stream is open. While a stream is open every
+  phone/usb sound is dropped as `mic_sound{dropped:"pc stream"}` (precedence
+  `touch ?: level gate ?: joystick ?: recording|pc stream ?: dry_run`), so the phone does not act on the takes; the
+  recorder, calibration and training refuse to start with "PC stream is open".
+- `pcm_read {sid, from}` → `{ok, sid, gen, rate, from, to, start, end, lost_frames, b64}`. Let `s = max(from, ring.start)`;
+  `b64` is PCM16 LE mono of `[s, to)` with `to = min(ring.end, s + 2 s of frames)`; `lost_frames = max(0, ring.start - from)`.
+  If the capture generation or rate changed since the open: `{ok:false, error:"capture restarted", gen}` and the stream
+  closes. Every read renews the idle timer. An unknown sid replies `ok:false, error:"no stream"`.
+- `pcm_close {sid}` → `{ok, frames_sent}`. The stream auto-closes when no read arrives within `idle_ms` (an
+  `idle_close` event), so a crashed PC never leaves Canti deaf.
+
+Events: `pc_stream{event: open|close|idle_close|restart, sid, rate, frames}` (frames sent, never audio).
+
 ## Decider HTTP call
 
 `POST {base_url}/v1/systemone`. `Authorization: Bearer <key>` is sent only when a key is set. Both model clients (this one and
