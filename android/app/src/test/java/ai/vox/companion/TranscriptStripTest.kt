@@ -247,4 +247,42 @@ class TranscriptStripTest {
         m.quiet(c.t + 4000)
         assertEquals(c.t + 4000, frames.last()!!.deadline)
     }
+
+    @Test fun chainRows() {
+        assertEquals("PAUSED" to "try again · skip · cancel", StripRow.Paused().key to StripRow.Paused().value)
+        assertEquals(Signal.MISS, StripRow.Paused().signal)
+        assertEquals("BACK" to "scroll up", StripRow.Back("scroll up").key to StripRow.Back("scroll up").value)
+        assertEquals(Signal.DONE, StripRow.Back("scroll up").signal)
+        assertEquals("3 · WHICH" to "say 1, 2 or 3", StripRow.Which(3).key to StripRow.Which(3).value)
+    }
+
+    @Test fun aHeldChainKeepsDoRowsAndAllLines() {
+        val c = Clock(); val m = StripModel(c)
+        val frames = mutableListOf<StripFrame?>()
+        m.onChange = { frames += it }
+        m.open(StripKind.CHAIN, 6000)
+        m.final("open youtube")
+        m.hold(true)
+        m.result(StripRow.Done("open youtube"), emptySet())
+        assertEquals(0, c.pending)   // held: no auto-hide
+        assertTrue(frames.last()!!.visible)
+        m.hold(false)                 // the chain ended: the row hides after RESULT_MS
+        assertEquals(1, c.pending)
+        c.advance(StripModel.RESULT_MS)
+        assertNull(frames.last())
+        // allLines keeps every wrapped line (fit shows only the last 2)
+        val m2 = StripModel(Clock()); m2.onChange = { }
+        m2.open(StripKind.CHAIN, 6000)
+        m2.setGeometry(::measure, 9f)
+        m2.final("one two three four five")
+        assertEquals(listOf(listOf("one", "two"), listOf("three"), listOf("four", "five")),
+            m2.allLines().map { it.map(Word::text) })
+        assertEquals(2, m2.frame().lines.size)   // fit() keeps only the last 2
+
+        // Y2: the transcript is scrollable when it overflows the visible 2 lines, and the offset is settable
+        assertTrue(m2.scrollable())
+        assertEquals(0, m2.scrollOffset())
+        m2.setScroll(3)
+        assertEquals(3, m2.scrollOffset())
+    }
 }

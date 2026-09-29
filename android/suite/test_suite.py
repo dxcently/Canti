@@ -1367,7 +1367,7 @@ def ui_flutter_status_screen_is_readable_and_pausable(c: Ctx):
     """The Flutter status screen (ui/) as the accessibility service sees it: Targets.kt lists its controls by their
     semantics labels, and tapping them (adb input at the listed bounds) pauses, resumes and opens the legacy settings."""
     mark = c.ev.mark()
-    sh("am start -W -n ai.vox.companion/.MainActivity")   # not start_activity: its -S force-stop would kill the service
+    sh("am start -W --activity-clear-task -n ai.vox.companion/.MainActivity")   # not start_activity: its -S force-stop would kill the service; a fresh task: an earlier test may have scrolled the screen
     t = own_targets(c, "Pause Canti")
     opts = t["options"]
     for want in ("Pause Canti", "Refresh status", "Legacy settings"):
@@ -1481,6 +1481,321 @@ def strip_no_text_in_log(c: Ctx):
     for e in c.ev.since(0):
         if e["ev"] == "strip":
             assert "text" not in e and "query" not in e and "words" not in e, e
+
+
+# --- command chains -------------------------------------------------------------------------------------------------
+
+
+@test
+def chain_three_steps_run_in_order(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open list then scroll down then go back")
+    st = c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "start", 5)
+    assert st and st.get("steps") == 3, [e["ev"] for e in c.ev.since(m)]
+    ts = []
+    for i in range(3):
+        cf = c.ev.wait(m, lambda e, i=i: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == i + 1, 8)
+        assert cf, f"no confirm for step {i + 1}; {[e['ev'] for e in c.ev.since(m)]}"
+        ts.append(cf["t"])
+    assert ts == sorted(ts), ts
+    end = c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "end", 8)
+    assert end, [e["ev"] for e in c.ev.since(m)]
+    assert "VOX fixture menu" in c.vox.all_text()
+
+
+@test
+def chain_no_change_pauses_then_skip(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open static then scroll down then go back")
+    p = c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "pause", 8)
+    assert p and p.get("index") == 2 and p.get("reason") == "no_change", [e["ev"] for e in c.ev.since(m)]
+    st = c.vox.control("strip_state")
+    assert st.get("row_key") == "PAUSED", st
+    # W2: the drawn queue frame agrees with the model (step 2 stuck "nothing changed", step 3 held)
+    cs = c.vox.control("chain_state")
+    by_n = {s["n"]: s for s in cs.get("steps", [])}
+    drawn = {d["n"]: d for d in cs.get("drawn", [])}
+    assert by_n.get(2, {}).get("status") == "stuck" and by_n.get(2, {}).get("note") == "nothing changed", cs
+    assert drawn.get(2, {}).get("status") == "stuck" and drawn.get(2, {}).get("note") == "nothing changed", cs
+    assert by_n.get(3, {}).get("note") == "held" and drawn.get(3, {}).get("note") == "held", cs
+    # no back exec while paused
+    time.sleep(2.0)
+    assert not any(e["ev"] == "exec" and e.get("action") == "back" for e in c.ev.since(m))
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="skip")
+    back = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "back", 5)
+    assert back, [e["ev"] for e in c.ev.since(m2)]
+
+
+@test
+def chain_try_again_reruns_stuck_step(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open static then scroll down then go back")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "pause", 8)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="try again")
+    sc = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_down", 5)
+    assert sc, [e["ev"] for e in c.ev.since(m2)]
+
+
+@test
+def chain_cancel_drops_rest(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open static then scroll down then go back")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "pause", 8)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="cancel")
+    end = c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "end" and e.get("reason") == "cancel", 5)
+    assert end, [e["ev"] for e in c.ev.since(m2)]
+    time.sleep(0.5)
+    assert not any(e["ev"] == "exec" and e.get("action") == "back" for e in c.ev.since(m2))
+
+
+@test
+def chain_undo_reverses_last_step(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open list then scroll down")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == 2, 8)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="undo")
+    u = c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "undo" and e.get("result") == "ok", 5)
+    assert u, [e["ev"] for e in c.ev.since(m2)]
+    sc = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_up", 5)
+    assert sc, [e["ev"] for e in c.ev.since(m2)]
+
+
+@test
+def chain_rewind_to_named_step(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open list then scroll down")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == 2, 8)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="no, not the list")
+    assert c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "rewind", 5)
+    up = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_up", 5)
+    assert up, [e["ev"] for e in c.ev.since(m2)]
+    back = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "back", 5)
+    assert back, [e["ev"] for e in c.ev.since(m2)]
+    assert up["t"] < back["t"], (up["t"], back["t"])
+    assert c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "end", 8)
+    c.texts_until("title", "VOX fixture menu")
+
+
+@test
+def chain_rewind_stops_at_cant_undo(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open controls then tap toggle")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == 2, 8)
+    c.texts_until("toggle_state", "State: ON")
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="no, not controls")
+    rw = c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "rewind" and e.get("result") == "cant_undo", 5)
+    assert rw, [e["ev"] for e in c.ev.since(m2)]
+    c.texts_until("toggle_state", "State: ON")
+
+
+@test
+def chain_picker_holds_queue(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    srv = FakeSystemOne()
+    try:
+        srv.option_format = "v2i"
+        enable_tree_context(c, srv)
+        c.open(TREE)
+        m = c.ev.mark()
+        c.vox.control("phrase", text="open vocabulary then go back")
+        ch = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "choose", 5)
+        assert ch and len(ch["candidates"]) == 3, [e["ev"] for e in c.ev.since(m)]
+        time.sleep(0.5)
+        assert not any(e["ev"] == "exec" and e.get("action") == "back" for e in c.ev.since(m))
+        c.vox.control("phrase", text="1")
+        tap = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
+        assert tap, [e["ev"] for e in c.ev.since(m)]
+        back = c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("action") == "back", 5)
+        assert back, [e["ev"] for e in c.ev.since(m)]
+    finally:
+        srv.close()
+
+
+@test
+def chain_done_ends(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(LIST)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="scroll down then scroll up")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == 2, 8)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="that's it")
+    end = c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "end" and e.get("reason") == "done", 5)
+    assert end, [e["ev"] for e in c.ev.since(m2)]
+
+
+@test
+def chain_strip_off_refuses(c: Ctx):
+    # transcript_strip is already False from the baseline reset
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="scroll down and go home")
+    toast = c.ev.wait(m, lambda e: e["ev"] == "toast" and e.get("text") == "one command at a time", 5)
+    assert toast, [e["ev"] for e in c.ev.since(m)]
+    assert not any(e["ev"] == "chain" for e in c.ev.since(m))
+
+
+@test
+def chain_undo_mid_chain_holds(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(LIST)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="scroll down then scroll up then go back")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == 2, 8)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="undo")
+    assert c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "undo", 5)
+    # the undo's inverse runs (step 2 was "scroll up"), then the chain holds
+    assert c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_down", 5)
+    st = c.vox.control("chain_state")
+    steps = {s["n"]: s["status"] for s in st.get("steps", [])}
+    assert steps.get(2) == "undone", st
+    assert steps.get(3) == "waiting", st
+    # nothing new runs for ~2 s
+    m3 = c.ev.mark()
+    time.sleep(2.0)
+    assert not any(e["ev"] == "exec" for e in c.ev.since(m3))
+    # continue runs step 3
+    m4 = c.ev.mark()
+    c.vox.control("phrase", text="continue")
+    back = c.ev.wait(m4, lambda e: e["ev"] == "exec" and e.get("action") == "back", 5)
+    assert back, [e["ev"] for e in c.ev.since(m4)]
+
+
+# The spoken words of the chain tests' phrases: any of these must never appear as a whole word in a chain/exec/strip
+# event value (fixed action keys like "scroll_down" / "back" never contain them, so they are not flagged).
+CHAIN_SPOKEN_WORDS = ("list", "static", "controls", "toggle", "vocabulary", "recently", "updated", "mail", "menu",
+                      "favourites", "walrus")
+
+
+def _all_strings(o, skip_keys):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k in skip_keys:
+                continue
+            yield from _all_strings(v, skip_keys)
+    elif isinstance(o, list):
+        for v in o:
+            yield from _all_strings(v, skip_keys)
+    elif isinstance(o, str):
+        yield o
+
+
+@test
+def chain_no_text_in_log(c: Ctx):
+    # recursive whole-word check: every string value of every chain/exec/strip event must not contain a spoken word.
+    # The exec "how" field is execution detail (node ids / class names) and "action" holds fixed action keys, so both
+    # are skipped.
+    for e in c.ev.since(0):
+        if e["ev"] in ("chain", "exec", "strip"):
+            for s in _all_strings(e, skip_keys={"how", "action"}):
+                ws = set(re.findall(r"[a-z0-9]+", s.lower()))
+                for w in CHAIN_SPOKEN_WORDS:
+                    assert w not in ws, (e["ev"], s, w)
+
+
+@test
+def panel_does_not_hide_targets(c: Ctx):
+    c.vox.control("config", transcript_strip=True, panel_top_portrait=980)
+    c.open(TREE)
+    c.vox.control("listen"); time.sleep(0.8)
+    opts = c.vox.control("targets").get("options", [])
+    assert any("L07" in o for o in opts), "L07 not listed under the panel"
+    m = c.ev.mark()
+    c.vox.control("phrase", text="tap L07 then scroll down")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == 1, 8)
+    c.texts_until("tree_tap", "tapped: L07")
+
+
+@test
+def chain_target_under_panel_jumps_to_top(c: Ctx):
+    # real jump: the panel covers TREE row L07, a chain taps it -> the panel jumps to the top and the tap lands
+    c.vox.control("config", transcript_strip=True, panel_top_portrait=980)
+    c.open(TREE)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="tap L07 then scroll down")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "confirm" and e.get("index") == 1, 8)
+    c.texts_until("tree_tap", "tapped: L07")
+    cs = c.vox.control("chain_state")
+    p = cs.get("panel") or {}
+    assert p.get("jumped") is True, cs
+    assert p.get("top") < 300, cs
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="cancel")
+    assert c.ev.wait(m2, lambda e: e["ev"] == "chain" and e.get("event") == "end", 5)
+    assert (c.vox.control("chain_state").get("panel") or {}).get("jumped") is False
+    # not-jumped case: a target not under the panel
+    c.vox.control("config", panel_top_portrait=-1)
+    c.open(MENU)
+    m3 = c.ev.mark()
+    c.vox.control("phrase", text="open static then scroll down")
+    assert c.ev.wait(m3, lambda e: e["ev"] == "chain" and e.get("event") == "pause", 8)
+    assert (c.vox.control("chain_state").get("panel") or {}).get("jumped") is False
+    c.vox.control("phrase", text="cancel")
+
+
+@test
+def queue_tap_expands_and_snaps_back(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open static then scroll down then scroll up then go back then go home")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "pause", 8)
+    cs = c.vox.control("chain_state")
+    q = cs.get("queue_rect") or {}
+    assert not (cs.get("expanded")), cs
+    sh(f"input tap 1000 {q.get('top', 0) + q.get('height', 0) // 2}")
+    time.sleep(1.0)
+    assert c.vox.control("chain_state").get("expanded"), "queue did not expand on tap"
+    time.sleep(3.5)
+    assert not c.vox.control("chain_state").get("expanded"), "queue did not snap back"
+    c.vox.control("phrase", text="cancel")
+
+
+@test
+def strip_handle_drag_moves_panel(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open static then scroll down then go back")
+    assert c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "pause", 8)
+    st = c.vox.control("strip_state")
+    top0 = st.get("top")
+    sh(f"input swipe 300 {top0 + 20} 300 {top0 - 200} 300")
+    assert c.ev.wait(m, lambda e: e["ev"] == "panel" and e.get("event") == "moved", 5)
+    assert c.vox.control("config").get("settings", {}).get("panel_top_portrait") != -1
+    c.vox.control("phrase", text="cancel")
+
+
+@test
+def gesture_under_panel_passes_through(c: Ctx):
+    c.vox.control("config", transcript_strip=True, panel_top_portrait=1180)
+    c.open(CONTROLS)
+    c.vox.control("listen"); time.sleep(0.8)
+    # a tap on the app under the (NOT_TOUCHABLE) strip body reaches the toggle
+    sh("input tap 540 1250")
+    c.texts_until("toggle_state", "State: ON")
+    c.vox.disarm()
 
 
 def main() -> None:

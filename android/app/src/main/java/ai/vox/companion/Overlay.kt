@@ -61,6 +61,61 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     private var stripParams: WindowManager.LayoutParams? = null
     private var stripPalette: StripPalette = StripPalette.dark()
     private val stripHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    // [chain] Canti's own touchable rects (C4): remembered so a target under them stays visible to Targets/TreeReader.
+    private val ownRects = OwnRects()
+    private var queueView: View? = null
+
+    private fun noteOwn() { ownRects.note(touchableRects(), SystemClock.elapsedRealtime()) }
+    fun recentOwnRects(now: Long): List<Box> = ownRects.recent(now)
+
+    // [chain] C5: while a Confirmer watch runs, Canti-initiated geometry changes (panel jump, queue resize, preview)
+    // are queued and applied at unfreeze (newest wins); content redraws are allowed.
+    private var frozenWatch: Long? = null
+    private var freezeTask: Runnable? = null
+    private var pendingJump: Boolean? = null
+
+    fun freeze(watch: Long) {
+        frozenWatch = watch
+        freezeTask?.let { stripHandler.removeCallbacks(it) }
+        val r = Runnable { unfreeze(watch) }   // 3 s safety
+        freezeTask = r
+        stripHandler.postDelayed(r, 3000)
+    }
+
+    fun unfreeze(watch: Long) {
+        if (frozenWatch != watch) return
+        frozenWatch = null
+        freezeTask?.let { stripHandler.removeCallbacks(it) }; freezeTask = null
+        pendingJump?.let { applyJump(it); pendingJump = null }
+    }
+
+    fun panelJump(on: Boolean) {
+        if (frozenWatch != null) { pendingJump = on; return }
+        applyJump(on)
+    }
+
+    private fun applyJump(on: Boolean) { jumped = on; placeStrip(); placeQueue() }   // [chain] C1 moves both windows
+    private var jumped = false
+    val isJumped: Boolean get() = jumped
+
+    /** The queue window's y and height, or null while hidden (for the `chain_state` op). */
+    fun queueGeometry(): IntArray? {
+        val p = queueParams ?: return null
+        if (queueView?.isAttachedToWindow != true) return null
+        return intArrayOf(p.y, p.height)
+    }
+
+    /** Screen rects of Canti's touchable windows (badge, menu, strip, queue): the panel must never hide a target. */
+    fun touchableRects(): List<Box> = listOfNotNull(badge?.view, menu, stripView, queueView).filter { it.isAttachedToWindow }.map { v ->
+        val l = IntArray(2); v.getLocationOnScreen(l)
+        Box(l[0], l[1], l[0] + v.width, l[1] + v.height)
+    }
+
+    /** The strip + queue rects (the panel) for the jump-to-top check (Y1). */
+    fun panelRects(): List<Box> = listOfNotNull(stripView, queueView).filter { it.isAttachedToWindow }.map { v ->
+        val l = IntArray(2); v.getLocationOnScreen(l)
+        Box(l[0], l[1], l[0] + v.width, l[1] + v.height)
+    }
 
     var x = 0f; private set
     var y = 0f; private set
@@ -78,6 +133,11 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT,
     )
+
+    /** A touchable overlay window (the strip / queue): NOT_FOCUSABLE stays, NOT_TOUCHABLE drops. */
+    private fun touchParams(w: Int, h: Int) = params(w, h).apply {
+        flags = flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+    }
 
     fun showBadge(actions: BadgeActions) {
         if (badge != null) return
@@ -108,27 +168,44 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
      * windows to update before dispatching. Swipes, pinches and the hold drag never start there (the head sits at a
      * side edge); cursor and target taps can.
      */
+    /**
+     * An injected gesture whose strokes start at [points] would land on a touchable Canti window (the head, the strip or
+     * the queue). Each such window becomes NOT_TOUCHABLE for [ms] (the gesture's length + 400 ms), then restores; returns
+     * true so the caller can wait a frame for the input windows to update before dispatching. One restore per window.
+     */
     fun passThroughIfUnder(points: List<FloatArray>, ms: Long): Boolean {
-        val v = badge?.view ?: return false
-        val p = badgeParams ?: return false
-        if (!v.isAttachedToWindow || tucked || !v.isShown) return false
-        val l = IntArray(2); v.getLocationOnScreen(l)
-        val hit = points.any { (x, y) -> x >= l[0] && x < l[0] + v.width && y >= l[1] && y < l[1] + v.height }
-        if (!hit) return false
-        hideMenu()
-        p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        wm.updateViewLayout(v, p)
-        v.removeCallbacks(restoreTouch); v.postDelayed(restoreTouch, ms)
-        EventLog.ev("badge", "event" to "pass-through", "ms" to ms)
-        return true
+        var any = false
+        for ((view, p, panel) in touchableWindows()) {
+            if (!view.isAttachedToWindow || !view.isShown) continue
+            val l = IntArray(2); view.getLocationOnScreen(l)
+            val hit = points.any { (x, y) -> x >= l[0] && x < l[0] + view.width && y >= l[1] && y < l[1] + view.height }
+            if (!hit) continue
+            if (!panel) hideMenu()   // a gesture passing through the head also closes its menu
+            p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            wm.updateViewLayout(view, p)
+            val restore = Runnable {
+                if (view.isAttachedToWindow) {
+                    p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                    wm.updateViewLayout(view, p)
+                }
+            }
+            if (!panel) { view.removeCallbacks(restoreTouch); restoreTouch = restore }
+            view.postDelayed(restore, ms)
+            EventLog.ev(if (panel) "panel" else "badge", "event" to "pass-through", "ms" to ms)
+            any = true
+        }
+        return any
     }
 
-    private val restoreTouch = Runnable {
-        val v = badge?.view; val p = badgeParams
-        if (v != null && p != null && v.isAttachedToWindow && !tucked) {
-            p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-            wm.updateViewLayout(v, p)
-        }
+    private var restoreTouch: Runnable? = null
+
+    /** The touchable Canti windows (badge, queue, title tab) with their params, and whether they are part of the panel. */
+    private fun touchableWindows(): List<Triple<View, WindowManager.LayoutParams, Boolean>> {
+        val out = ArrayList<Triple<View, WindowManager.LayoutParams, Boolean>>()
+        badge?.view?.let { v -> badgeParams?.let { p -> if (!tucked) out += Triple(v, p, false) } }
+        queueView?.let { v -> queueParams?.let { p -> out += Triple(v, p, true) } }
+        tabView?.let { v -> tabParams?.let { p -> out += Triple(v, p, true) } }
+        return out
     }
     fun badgePlayOnce(s: BadgeState) { badge?.playOnce(s) }
 
@@ -390,7 +467,7 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     }
 
     /** Screen rects of Canti's own overlay windows (padded), so the pixel confirmer never sees its own drawing. */
-    fun maskRects(): List<IntArray> = listOfNotNull(badge?.view, menu, cursorView, bracketView, stripView).filter { it.isAttachedToWindow && it.isShown }.map { v ->
+    fun maskRects(): List<IntArray> = listOfNotNull(badge?.view, menu, cursorView, bracketView, stripView, queueView).filter { it.isAttachedToWindow && it.isShown }.map { v ->
         val l = IntArray(2); v.getLocationOnScreen(l)
         intArrayOf(l[0] - 32, l[1] - 32, l[0] + v.width + 32, l[1] + v.height + 32)
     }
@@ -642,9 +719,11 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     // --- the transcript strip (TranscriptStrip.kt / TranscriptStripView.kt) -----------------------------------------
 
     /** The night-mode palette; call again on configuration changes ([VoxService.onConfigurationChanged]). */
+    private var stripNight = false
     fun stripThemeChanged() {
         val night = (svc.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
+        stripNight = night
         stripPalette = if (night) StripPalette.dark() else StripPalette.light()
         stripView?.let { it.palette = stripPalette; it.invalidate() }
     }
@@ -665,7 +744,13 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         val p = stripParams ?: params(0, 0).apply { gravity = Gravity.TOP or Gravity.START }.also { stripParams = it }
         p.width = 0; p.height = 0   // recomputed by placeStrip below
         if (v.isAttachedToWindow) wm.updateViewLayout(v, placeStrip(p, frame))
-        else { placeStrip(p, frame); wm.addView(v, p); OwnWindows.note(v) }
+        else {
+            placeStrip(p, frame)
+            try { wm.addView(v, p); OwnWindows.note(v) }
+            catch (e: IllegalStateException) { wm.updateViewLayout(v, placeStrip(p, frame)) }   // already added (re-attach race)
+        }
+        noteOwn()   // [chain]
+        showTitleTab()   // [chain] C6
     }
 
     fun updateStrip(frame: StripFrame) {
@@ -677,6 +762,169 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     fun hideStrip() {
         stripView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         stripView = null; stripParams = null
+        hideQueue()   // [chain]
+        hideTitleTab()   // [chain] C6
+        hideBodyTouch()   // [chain] Y2: never leave the invisible scroll window behind
+    }
+
+    // [chain] C1: the queue window (ChainQueueView), right-aligned, stacked above the strip.
+    private var queueParams: WindowManager.LayoutParams? = null
+
+    fun showQueue(frame: QueueFrame) {
+        val v = queueView as? ChainQueueView ?: ChainQueueView(svc, tinyFont, pixelFont).also { queueView = it }
+        v.frame = frame
+        v.paletteLight = !stripNight
+        v.onTap = { onQueueTap?.invoke() }   // [chain] C6
+        v.onScroll = { onQueueScroll?.invoke(it) }   // [chain] C6
+        v.invalidate()   // [chain] a Frame redraw (updateViewLayout alone does not re-draw when the size is unchanged)
+        val p = queueParams ?: touchParams(0, 0).apply { gravity = Gravity.TOP or Gravity.START }.also { queueParams = it }
+        placeQueue()
+        if (v.isAttachedToWindow) wm.updateViewLayout(v, p)
+        else { try { wm.addView(v, p); OwnWindows.note(v) } catch (_: Exception) {} }
+        noteOwn()
+    }
+
+    /** [chain] C6: the queue's tap (expand) and drag (scroll) callbacks, set by VoxService. */
+    var onQueueTap: (() -> Unit)? = null
+    var onQueueScroll: ((Float) -> Unit)? = null
+    /** [chain] C6: the panel was dragged by the title tab; VoxService saves panel_top_<orientation>. */
+    var onPanelMoved: (() -> Unit)? = null
+
+    // [chain] C6: a small touchable window over the strip's title tab (the drag handle); the body stays NOT_TOUCHABLE.
+    private var tabView: View? = null
+    private var tabParams: WindowManager.LayoutParams? = null
+
+    fun showTitleTab() {
+        val sp = stripParams ?: return
+        val s = stripScale()
+        val v = tabView ?: View(svc).also { tabView = it }
+        val p = tabParams ?: touchParams(0, 0).apply { gravity = Gravity.TOP or Gravity.START }.also { tabParams = it }
+        p.width = Math.round(320f * s); p.height = Math.round(52f * s)
+        p.x = sp.x + Math.round(24f * s); p.y = sp.y
+        v.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { downTabY = e.rawY; downPanelY = sp.y; true }
+                android.view.MotionEvent.ACTION_MOVE -> { movePanel(downPanelY + Math.round(e.rawY - downTabY)); true }
+                android.view.MotionEvent.ACTION_UP -> { onPanelMoved?.invoke(); true }
+                else -> false
+            }
+        }
+        if (v.isAttachedToWindow) wm.updateViewLayout(v, p)
+        else { try { wm.addView(v, p); OwnWindows.note(v) } catch (_: Exception) {} }
+    }
+
+    private var downTabY = 0f
+    private var downPanelY = 0
+
+    private fun movePanel(top: Int) {
+        val clamped = top.coerceIn(statusBarTop(), screenH() - 80)
+        stripParams?.let { it.y = clamped; if (stripView?.isAttachedToWindow == true) wm.updateViewLayout(stripView!!, it) }
+        tabParams?.let { it.y = clamped; if (tabView?.isAttachedToWindow == true) wm.updateViewLayout(tabView!!, it) }
+        placeQueue()
+        if (bodyView != null) showBodyTouch(true)   // [chain] the scroll window follows the drag
+    }
+
+    fun hideTitleTab() {
+        tabView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        tabView = null; tabParams = null
+    }
+
+    /** [chain] C6/Y2: a touchable window over the strip body, shown only while the transcript overflows (scrollable). */
+    var onBodyScroll: ((Float) -> Unit)? = null
+    private var bodyView: View? = null
+    private var bodyParams: WindowManager.LayoutParams? = null
+
+    fun showBodyTouch(scrollable: Boolean) {
+        if (!scrollable) { hideBodyTouch(); return }
+        val sp = stripParams ?: return
+        val s = stripScale()
+        val v = bodyView ?: View(svc).also { bodyView = it }
+        val p = bodyParams ?: touchParams(0, 0).apply { gravity = Gravity.TOP or Gravity.START }.also { bodyParams = it }
+        p.width = sp.width
+        p.height = Math.round((stripBodyHeight(true) - 52f) * s).coerceAtLeast(1)
+        p.x = sp.x; p.y = sp.y + Math.round(52f * s)
+        var downY = 0f
+        v.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { downY = e.rawY; true }
+                android.view.MotionEvent.ACTION_MOVE -> { onBodyScroll?.invoke(e.rawY - downY); downY = e.rawY; true }
+                android.view.MotionEvent.ACTION_UP -> true
+                else -> false
+            }
+        }
+        if (v.isAttachedToWindow) wm.updateViewLayout(v, p)
+        else { try { wm.addView(v, p); OwnWindows.note(v) } catch (_: Exception) {} }
+    }
+
+    fun hideBodyTouch() {
+        bodyView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        bodyView = null; bodyParams = null
+    }
+
+    /** Recompute the queue window's height and y (stacked above the strip's tabs), for a jump / return. */
+    private fun placeQueue() {
+        val v = queueView as? ChainQueueView ?: return
+        val p = queueParams ?: return
+        val frame = v.frame ?: return
+        val s = stripScale()
+        val rows = frame.rows.size
+        val chips = (if (frame.doneAbove > 0) 1 else 0) + (if (frame.moreBelow > 0) 1 else 0)
+        val h = Math.round((rows * ChainViewLayout.rowHeight(s) + chips * (ChainViewLayout.chipHeight(s) + 12f * s) + 10f * s))
+        p.height = h.coerceAtLeast(1)
+        // [chain] Y3: size the window to the drawn blocks+chips (right-aligned); the left dead area is at most the pad.
+        val cw = v.contentWidth(s)
+        p.width = Math.round(cw + 40f * s).coerceAtLeast(1)
+        p.x = (screenW() - p.width).coerceAtLeast(0)
+        val stripTop = stripParams?.y ?: stripTop(stripBodyHeight(false))
+        p.y = (stripTop - h).coerceAtLeast(0)
+    }
+
+    fun hideQueue() {
+        queueView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        queueView = null; queueParams = null
+    }
+
+    /** The queue view's last drawn frame (for the `chain_state` "drawn" diagnostic), or null. */
+    fun queueFrame(): QueueFrame? = (queueView as? ChainQueueView)?.frame
+
+    // [chain] C2: the NOW/NEXT preview — orange double outline + a flag above each rect, in NOT_TOUCHABLE windows.
+    private var previewView: View? = null
+    private var previewNow: Target? = null
+    private var previewNext: Target? = null
+
+    fun showPreview(now: Target?, next: Target?) {
+        hidePreview()
+        if (now == null && next == null) return
+        previewNow = now; previewNext = next
+        val v = object : View(svc) {
+            val p = Paint().apply { isAntiAlias = false; color = 0xFFF2A33A.toInt() }
+            val flag = Paint().apply { isAntiAlias = false; typeface = pixelFont; color = 0xFF1D2757.toInt(); textAlign = Paint.Align.CENTER }
+            val loc = IntArray(2)
+            override fun onDraw(c: Canvas) {
+                getLocationOnScreen(loc)
+                val entries = ArrayList<Pair<Target, String>>()
+                now?.let { entries += it to "NOW" }
+                next?.let { entries += it to "NEXT" }
+                for ((t, label) in entries) {
+                    val l = t.left - loc[0]; val tp = t.top - loc[1]; val r = t.right - loc[0]; val b = t.bottom - loc[1]
+                    p.style = Paint.Style.STROKE
+                    p.strokeWidth = 4f; c.drawRect(l.toFloat(), tp.toFloat(), r.toFloat(), b.toFloat(), p)
+                    c.drawRect((l - 8).toFloat(), (tp - 8).toFloat(), (r + 8).toFloat(), (b + 8).toFloat(), p)
+                    flag.textSize = 28f
+                    val fw = (r - l).coerceAtLeast(60)
+                    p.style = Paint.Style.FILL
+                    c.drawRect(l.toFloat(), tp - 44f, (l + fw).toFloat(), tp.toFloat(), p)
+                    c.drawText(label, (l + fw / 2).toFloat(), tp - 14f, flag)
+                }
+            }
+        }
+        wm.addView(v, params(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT))
+        previewView = v
+    }
+
+    fun hidePreview() {
+        previewView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        previewView = null; previewNow = null; previewNext = null
     }
 
     /** [strip] The strip window's current y and height, or null while hidden (for the `strip_state` op). */
@@ -691,6 +939,9 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         val v = stripView ?: return
         val f = v.frame ?: return
         stripParams?.let { if (v.isAttachedToWindow) wm.updateViewLayout(v, placeStrip(it, f)) }
+        // [chain] the touch windows follow the strip (a jump would otherwise leave them eating touches at the old spot)
+        if (tabView != null) showTitleTab()
+        if (bodyView != null) showBodyTouch(true)
     }
 
     private fun placeStrip(p: WindowManager.LayoutParams, frame: StripFrame): WindowManager.LayoutParams {
@@ -703,14 +954,17 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         return p
     }
 
-    /** [StripPlace.top] with the live nav bar / status bar insets and the focused editable field (IME dictation). */
+    /** The strip window's top y from the screen geometry and the focused editable field (see VoxService.placeStrip). */
     private fun stripTop(stripH: Int): Int {
         val navBottom = screenH() - navBarBottom()
         val statusTop = statusBarTop()
         val imeTop = imeTop()
         val field = focusedFieldRect()
-        return StripPlace.top(screenH(), navBottom, statusTop, stripH, imeTop, field)
+        return PanelPlace.top(screenH(), navBottom, statusTop, stripH, imeTop, field, panelTop, jumped)   // [chain] C1
     }
+
+    /** [chain] C1: the saved panel top (px, -1 = default) per orientation, set by VoxService. */
+    var panelTop: Int? = null
 
     private fun navBarBottom(): Int = try {
         wm.currentWindowMetrics.windowInsets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom

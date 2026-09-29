@@ -221,26 +221,39 @@ fun resolve(kind: FollowKind, dir: Dir?, said: String, last: Last?, screen: List
         if (candidates.isEmpty()) return Plan.Nothing("nothing ${dirWord(d)}")
         Plan.Tap(candidates[0], candidates.drop(1))
     }
-    FollowKind.UNDO -> {
-        if (last == null) return Plan.CantUndo("can't undo that")
-        if (last.confirm == "no visible change") return Plan.CantUndo("nothing changed")
-        when (last) {
-            is Last.Action -> {
-                if (Outward.isOutward(last.action)) return Plan.CantUndo("can't undo that")
-                INVERSE[last.action]?.let { return Plan.Run(it, last.mode) }
-                when (last.action) {
-                    "tap", "click" -> backIfWindowChange(last, last.mode)
-                    else -> Plan.CantUndo("can't undo that")
-                }
+    FollowKind.UNDO -> undoPlan(last, screen)
+    }
+}
+
+/**
+ * The UNDO branch of [resolve], extracted for the command chain ([Chain.kt]) to undo a done step by the same rules.
+ * [screen] is unused here (no undo reads the screen; the service re-finds an on-screen "Undo" button itself).
+ */
+fun undoPlan(last: Last?, screen: List<Target>): Plan {
+    if (last == null) return Plan.CantUndo("can't undo that")
+    if (last.confirm == "no visible change") return Plan.CantUndo("nothing changed")
+    return when (last) {
+        is Last.Action -> {
+            if (Outward.isOutward(last.action)) return Plan.CantUndo("can't undo that")
+            INVERSE[last.action]?.let { return Plan.Run(it, last.mode) }
+            when (last.action) {
+                "tap", "click" -> backIfWindowChange(last, last.mode)
+                else -> Plan.CantUndo("can't undo that")
             }
-            is Last.Volume -> when (val op = last.op) {
-                is VolOp.Step -> Plan.RunVolume(VolOp.Step(op.steps, -op.dir, op.exact, op.fraction), last.stream)
-                else -> Plan.CantUndo("can't undo that")   // Set / Mute / Unmute / Lowest: no stored level
-            }
-            is Last.OpenApp -> backIfWindowChange(last, "listening")
-            is Last.Pick -> if (Outward.isOutwardTarget(last.target.label)) Plan.CantUndo("can't undo that")
-                else backIfWindowChange(last, "listening")
         }
+        is Last.Volume -> when (val op = last.op) {
+            is VolOp.Step -> Plan.RunVolume(VolOp.Step(op.steps, -op.dir, op.exact, op.fraction), last.stream)
+            else -> Plan.CantUndo("can't undo that")   // Set / Mute / Unmute / Lowest: no stored level
+        }
+        is Last.OpenApp -> backIfWindowChange(last, "listening")
+        is Last.Pick -> if (Outward.isOutwardTarget(last.target.label)) Plan.CantUndo("can't undo that")
+            else backIfWindowChange(last, "listening")
     }
-    }
+}
+
+/** True when [p] is a navigation undo (a scroll/swipe/next/previous inverse, or a "back"), i.e. a chain can apply it. */
+fun navigationUndo(p: Plan): Boolean = when (p) {
+    is Plan.Run -> p.action == "back" ||
+        (INVERSE.containsKey(p.action) && p.action != "volume_up" && p.action != "volume_down")
+    else -> false
 }

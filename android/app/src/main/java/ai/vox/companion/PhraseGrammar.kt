@@ -12,8 +12,10 @@ import java.util.Locale
  * ("maybe", "please", "kind of") at the edges or next to a command word, politeness and wake words at the start ("hey canti", "could
  * you"), tails at the end ("for me", "thanks"), doubled words ("the the") and repeats ("scroll down scroll down").
  * A self-correction ("go back, no wait, home") keeps the last part. Then, on what is left:
- *  0. only filler, chatter ("what was I doing"), a retraction ("... never mind"), or two different commands
- *     ("scroll down and go home")                             -> [SpeechCommand.Ignore], nothing happens
+ *  0. only filler, chatter ("what was I doing"), or a retraction ("... never mind")
+ *                                                                -> [SpeechCommand.Ignore], nothing happens
+ *     several commands joined into one phrase ("scroll down and go home", "open settings then tap wifi")
+ *                                                                -> [SpeechCommand.Chain], a queue of [ChainStep]s
  *  1. an exact user phrase rule (profile scope "phrases")      -> [SpeechCommand.Phrase], the decider path
  *  2. "... timer ..."                                          -> [SpeechCommand.Timer] (words or digits, [Durations])
  *  3. navigation ("go back", "scroll down", "next", ...)       -> [SpeechCommand.Nav], decided by the rules
@@ -27,6 +29,27 @@ import java.util.Locale
  */
 data class Heard(val hypotheses: List<String>, val confidences: List<Float> = emptyList(), val partial: Boolean = false) {
     val best: String? get() = hypotheses.firstOrNull()
+}
+
+/**
+ * Pause marks (S1/A1): which words were preceded by a >= [GAP_MS] silence. The recognizer's partial results grow word
+ * by word; each event is (words seen so far, elapsed ms). A word that first appeared >= [GAP_MS] after the previous
+ * word gets a mark. Pure (PauseMarksTest).
+ */
+object PauseMarks {
+    const val GAP_MS = 800L
+
+    fun indexes(partials: List<Pair<Int, Long>>, gapMs: Long = GAP_MS): Set<Int> {
+        val firstSeen = HashMap<Int, Long>()
+        for ((count, t) in partials) for (i in 0 until count) firstSeen.putIfAbsent(i, t)
+        val out = HashSet<Int>()
+        for (i in firstSeen.keys.sorted()) {
+            if (i == 0) continue
+            val prev = firstSeen[i - 1] ?: continue
+            if (firstSeen[i]!! - prev >= gapMs) out += i
+        }
+        return out
+    }
 }
 
 sealed class SpeechCommand {
@@ -58,6 +81,13 @@ sealed class SpeechCommand {
      */
     data class Followup(val kind: FollowKind, val dir: Dir?, val said: String, val fallback: SpeechCommand? = null) : SpeechCommand()
 
+    /**
+     * A queue of spoken steps (one command each), run strictly in order (see Chain.kt). [dangling] = the utterance
+     * ended on a joiner ("open settings then"), so more steps may be appended later; [dropped] = steps beyond the
+     * first 8 discarded. Never produced when the transcript strip or chains are off (the service refuses).
+     */
+    data class Chain(val steps: List<ChainStep>, val dangling: Boolean = false, val dropped: Int = 0) : SpeechCommand()
+
     fun describe(): String = when (this) {
         is OpenApp -> "open_app $label ($pkg, ${"%.2f".format(Locale.ROOT, score)})" + (if (others.isNotEmpty()) " or ${others.joinToString()}" else "")
         is AppMissing -> "no app called $name"
@@ -69,8 +99,15 @@ sealed class SpeechCommand {
         is Volume -> "volume ${stream.key} ${op.describe()}"
         is Swipe -> "swipe ${action ?: semantic}" + (if (count > 1) " x$count" else "") + (if (how.isNotEmpty()) " ($how)" else "")
         is Followup -> "followup " + (if (kind == FollowKind.DIRECTION) dir?.name?.lowercase() ?: "direction" else kind.name.lowercase())
+        is Chain -> "chain ${steps.size}: " + steps.joinToString(" | ") { it.command.describe() }
     }
 }
+
+/**
+ * One step of a spoken command chain: [said] is the segment's cleaned words (memory only, never logged), [command]
+ * the parsed command to run (concrete, or a label-like `Phrase` the service re-resolves against the screen).
+ */
+data class ChainStep(val said: String, val command: SpeechCommand)
 
 object PhraseGrammar {
     data class Context(
@@ -144,8 +181,8 @@ object PhraseGrammar {
         "never mind", "forget it", "cancel that", "nevermind", "no", "wait", "sorry", "actually")
     /** Words that make the next word an argument, not a correction ("tap no", "press wait"). */
     internal val TAKES_ARG = setOf("tap", "tab", "click", "press", "hit", "select", "touch", "push", "choose", "pick", "open", "the", "say", "on")
-    /** Two commands joined by these are refused (one command per phrase). */
-    private val JOINERS = listOf("and then", "after that", "and", "then", "also")
+    /** Words a command starts with; "and" before one is a joiner, not part of a name ("open settings and go back"). */
+    private val JOINERS = listOf("and then", "after that", "and now", "and", "then", "now", "also", "next")
 
     private val CUT_OFF = Regex("(?<![a-z0-9'’-])[a-z]+-(?=[\\s,.;:!?]|$)")
 
@@ -161,27 +198,44 @@ object PhraseGrammar {
     internal fun isNumberWord(w: String) = w.toDoubleOrNull() != null || w in NumberWords.UNITS || w in NumberWords.TENS
 
     /** Hesitations, softeners and a filler "like" out, "-ing" to the verb, a doubled word once ("the the" -> "the"). */
-    fun tidy(basic: String): List<String> {
-        var t = " $basic "
-        for (p in SOFT_PHRASES) t = t.replace(" $p ", " ")
-        t = t.replace(" going back ", " go back ").replace(" going home ", " go home ")
-        val h = t.trim().split(' ').filter { it.isNotEmpty() && !isHesitation(it) }.map { ING[it] ?: it }
+    fun tidy(basic: String): List<String> = tidyIndexed(basic).map { it.first }
+
+    /**
+     * [tidy] with each surviving word's index in [basic]'s word list (for mapping pause marks through tidy: a word
+     * tidy drops leaves a gap, so a pause mark whose word is dropped maps to nothing and is dropped as ambiguous).
+     */
+    internal fun tidyIndexed(basic: String): List<Pair<String, Int>> {
+        var toks = basic.trim().split(' ').filter { it.isNotEmpty() }.mapIndexed { i, w -> w to i }
+        for (p in SOFT_PHRASES) {
+            val pw = p.split(' ')
+            val out = ArrayList<Pair<String, Int>>()
+            var i = 0
+            while (i < toks.size) {
+                if (i + pw.size <= toks.size && toks.subList(i, i + pw.size).map { it.first } == pw) i += pw.size
+                else { out += toks[i]; i++ }
+            }
+            toks = out
+        }
+        toks = toks.mapIndexed { i, (w, si) -> if (w == "going" && toks.getOrNull(i + 1)?.first in setOf("back", "home")) "go" to si else w to si }
+        toks = toks.filter { !isHesitation(it.first) }
+        toks = toks.map { (w, si) -> (ING[w] ?: w) to si }
         // A softener goes at the start or the end, or next to a command word ("scroll quickly down", "can you maybe open
         // youtube"); never where it is the argument: "tap maybe later" is the Maybe later button.
-        val lead = h.indexOfFirst { it !in SOFT_WORDS }.let { if (it < 0) h.size else it }
-        val trail = h.indexOfLast { it !in SOFT_WORDS }
+        val h = toks
+        val lead = h.indexOfFirst { it.first !in SOFT_WORDS }.let { if (it < 0) h.size else it }
+        val trail = h.indexOfLast { it.first !in SOFT_WORDS }
         val w = h.filterIndexed { i, x ->
-            x !in SOFT_WORDS || (i > 0 && h[i - 1] in TAKES_ARG) || softLabelAt(h, i) ||
-                !(i < lead || i > trail || h.getOrNull(i - 1) in COMMAND_START || h.getOrNull(i + 1) in COMMAND_START)
+            x.first !in SOFT_WORDS || (i > 0 && h[i - 1].first in TAKES_ARG) || softLabelAt(h.map { it.first }, i) ||
+                !(i < lead || i > trail || h.getOrNull(i - 1)?.first in COMMAND_START || h.getOrNull(i + 1)?.first in COMMAND_START)
         }
-        val out = ArrayList<String>()
+        val out = ArrayList<Pair<String, Int>>()
         for ((i, x) in w.withIndex()) {
             // a filler "like": before a command word, or mid-phrase before an amount or at the end, or between "open"
             // and a name ("open like youtube"); never "like button", "like this", "tap like"
-            if (x == "like" && (w.getOrNull(i + 1) in COMMAND_START ||
-                    (i > 0 && w[i - 1] in LIKE_OPEN && i + 1 < w.size && w[i + 1] !in LIKE_NOUNS) ||
-                    (i > 0 && w[i - 1] !in TAKES_ARG && (i == w.size - 1 || w[i + 1] in LIKE_BEFORE)))) continue
-            if (out.isNotEmpty() && out.last() == x && !isNumberWord(x) && x !in REPEATABLE) continue
+            if (x.first == "like" && (w.getOrNull(i + 1)?.first in COMMAND_START ||
+                    (i > 0 && w[i - 1].first in LIKE_OPEN && i + 1 < w.size && w[i + 1].first !in LIKE_NOUNS) ||
+                    (i > 0 && w[i - 1].first !in TAKES_ARG && (i == w.size - 1 || w[i + 1].first in LIKE_BEFORE)))) continue
+            if (out.isNotEmpty() && out.last().first == x.first && !isNumberWord(x.first) && x.first !in REPEATABLE) continue
             out += x
         }
         return out
@@ -344,8 +398,11 @@ object PhraseGrammar {
         return FOLLOWUP_EXACT[t]?.let { (kind, dir) -> Triple(kind, dir, t) }
     }
 
-    fun parse(raw: String, ctx: Context = Context()): SpeechCommand {
-        val words = tidy(basic(raw))
+    fun parse(raw: String, ctx: Context = Context(), pauses: Set<Int> = emptySet()): SpeechCommand {
+        val indexed = tidyIndexed(basic(raw))
+        val words = indexed.map { it.first }
+        // Pause marks are indexes into basic(raw)'s words; map them through tidy (a dropped word drops its mark).
+        val mappedPauses = pauses.mapNotNull { p -> indexed.indexOfFirst { it.second == p }.takeIf { it > 0 } }.toSet()
         if (words.isEmpty()) return SpeechCommand.Ignore("empty")
         val whole = strip(words.joinToString(" "))
         if (whole in ctx.userPhrases) return SpeechCommand.Phrase(whole, "user phrase rule")
@@ -357,15 +414,25 @@ object PhraseGrammar {
         // "swipe left, no, right": after a correction "right" is a direction, not an ack
         if (!ctx.cursor && last.split(" ").all { it in ACK } && !(parts.size > 1 && last == "right") && !LIKE_FORM.matches(last)) return SpeechCommand.Ignore("filler")
         if (last in ctx.userPhrases) return SpeechCommand.Phrase(last, "user phrase rule")
-        // [follow-up] an exact spoken follow-up ("try again", "undo", "the other one") wins over the normal parse, but
-        // the normal parse is kept as its fallback (the service uses it when there is no pick to act on).
-        val normal = normalCommand(parts, last, ctx)
+        // A command chain (steps split at joiners/pauses) is the normal parse, and the follow-up rule's fallback.
+        val normal = normalOrChain(words, parts, last, ctx, mappedPauses)
         followupMatch(words)?.let { (kind, dir, said) ->
             // a user phrase rule still wins over a follow-up ("try again" bound by the user beats the retry)
             if (said in ctx.userPhrases) return SpeechCommand.Phrase(said, "user phrase rule")
             return SpeechCommand.Followup(kind, dir, said, normal)
         }
         return normal
+    }
+
+    /** The chain parse (a split of the raw words), else the normal [normalCommand] parse. */
+    private fun normalOrChain(words: List<String>, parts: List<List<String>>, last: String, ctx: Context, pauses: Set<Int>): SpeechCommand {
+        segments(words, ctx, pauses)?.let { segs ->
+            val dangling = isDangling(words)
+            if (segs.size == 1 && !dangling) return segs[0].command   // the same command twice stays one command
+            val dropped = (segs.size - MAX_CHAIN_STEPS).coerceAtLeast(0)
+            return SpeechCommand.Chain(segs.take(MAX_CHAIN_STEPS), dangling, dropped)
+        }
+        return normalCommand(parts, last, ctx)
     }
 
     /** The normal parse (self-correction merge, then [command]) — the follow-up rule's fallback. */
@@ -407,44 +474,151 @@ object PhraseGrammar {
         val said = text.split(' ').filter { it.isNotEmpty() }
         val words = once(said)
         val t = words.joinToString(" ")
-        twoCommands(words, ctx, JOINERS)?.let { return it }
         val one = single(t, ctx)?.let { times(it, said.size / words.size) }
         if (one != null) {
             // "how long is left on the timer" is a question, not a timer to set
             if (one is SpeechCommand.Timer && one.seconds == null && !ctx.cursor && words.first() in CHATTER) return SpeechCommand.Ignore("chatter")
             return one
         }
-        // run together without a joiner: "scroll down go home"
-        if (words.size <= 12) twoCommands(words, ctx, null)?.let { return it }
+        // run together without a joiner: "scroll down go home" (concrete steps only, as before the chain)
+        if (words.size <= 12) runTogether(words, ctx)?.let { return it }
         request(words, ctx)?.let { return it }
         if (ctx.cursor) return SpeechCommand.Tap(thing(t), null)
         if (words.first() in CHATTER) return SpeechCommand.Ignore("chatter")
         return SpeechCommand.Phrase(t, "unparsed")
     }
 
-    /**
-     * Two commands in one phrase, split at a joiner (or anywhere, [joiners] null): the same one twice -> it;
-     * two different ones -> Ignore (one command per phrase, never a guess). Null: not two commands.
-     */
-    private fun twoCommands(w: List<String>, ctx: Context, joiners: List<String>?): SpeechCommand? {
-        for (i in 1 until w.size) {
-            val skip = if (joiners == null) 0 else joiners.firstOrNull { j ->
-                val jw = j.split(' '); i + jw.size <= w.size && w.subList(i, i + jw.size) == jw
-            }?.split(' ')?.size ?: continue
-            if (i + skip >= w.size) continue
-            val a = single(strip(w.subList(0, i).joinToString(" ")), ctx)
-            if (!concrete(a)) continue
-            val right = strip(w.subList(i + skip, w.size).joinToString(" "))
-            var b = single(right, ctx)
-            // "open youtube and spotify": the second app shares the verb (only apps: "tap terms and conditions" is one name)
-            if (!concrete(b) && joiners != null && a is SpeechCommand.OpenApp) {
-                val verb = OPEN.find(strip(w.subList(0, i).joinToString(" ")))?.groupValues?.get(1)
-                if (verb != null) b = single("$verb $right", ctx)?.takeIf { it is SpeechCommand.OpenApp }
+    // --- command chains -----------------------------------------------------------------------------------------
+
+    /** A chain runs at most this many steps; the rest are dropped (the strip says "8 steps at most"). */
+    private const val MAX_CHAIN_STEPS = 8
+
+    private data class Boundary(val left: Int, val skip: Int, val joiner: Boolean, val weak: Boolean)
+
+    /** A trailing joiner that makes a chain dangling: "then", "and then", "after that", or a bare "and". */
+    private val TRAILING_JOINERS = listOf("and then", "after that", "then", "and")
+
+    /** A trailing joiner ("open settings then"): [isDangling] and [stripTrailingJoiner] share this. */
+    private fun trailingJoiner(w: List<String>): String? = TRAILING_JOINERS.firstOrNull { j ->
+        w.size >= j.split(' ').size && w.subList(w.size - j.split(' ').size, w.size) == j.split(' ')
+    }
+
+    private fun isDangling(w: List<String>) = trailingJoiner(w) != null
+
+    private fun stripTrailingJoiner(w: List<String>): List<String> {
+        val j = trailingJoiner(w) ?: return w
+        return w.dropLast(j.split(' ').size)
+    }
+
+    /** A leading joiner left over from the previous split ("... then go home", "... and after that go home"). */
+    private fun stripLeadingJoiners(w: List<String>): List<String> {
+        var out = w
+        var changed = true
+        while (changed && out.isNotEmpty()) {
+            changed = false
+            for (j in JOINERS) {
+                if (j == "next") continue   // a leading "next" is the command, not a joiner
+                val jw = j.split(' ')
+                if (out.size >= jw.size && out.subList(0, jw.size) == jw) { out = out.drop(jw.size); changed = true; break }
             }
-            if (!concrete(b)) continue
-            return if (a == b) a else SpeechCommand.Ignore("two commands: ${a!!.describe()} + ${b!!.describe()}")
+        }
+        return out
+    }
+
+    /** Split positions: a joiner (each, "next" only before a command verb) or a pause index. */
+    private fun boundaries(w: List<String>, pauses: Set<Int>): List<Boundary> {
+        val byEnd = HashMap<Int, Boundary>()
+        for (i in 0 until w.size) {
+            for (j in JOINERS) {
+                val jw = j.split(' ')
+                if (i + jw.size <= w.size && w.subList(i, i + jw.size) == jw) {
+                    if (j == "next" && w.getOrNull(i + jw.size) !in COMMAND_START) continue
+                    val b = Boundary(i, jw.size, joiner = true, weak = j == "and")
+                    val prev = byEnd[i + jw.size]
+                    if (prev == null || b.skip > prev.skip) byEnd[i + jw.size] = b
+                    break
+                }
+            }
+        }
+        for (p in pauses) if (p in 1 until w.size) byEnd.putIfAbsent(p, Boundary(p, 0, joiner = false, weak = false))
+        return byEnd.values.sortedBy { it.left }
+    }
+
+    private fun startsWithCorrection(w: List<String>): Boolean = w.isNotEmpty() && corrections(w).first().isEmpty()
+
+    /**
+     * One step from these words: concrete, or (when [allowLabel] and it reads like a label) a label-like `Phrase`.
+     * Run through the existing corrections/[normalCommand] path, so a correction inside the segment merges.
+     */
+    private fun oneStep(words: List<String>, ctx: Context, allowLabel: Boolean): ChainStep? {
+        val w = stripLeadingJoiners(words)
+        if (w.isEmpty()) return null
+        val said = strip(w.joinToString(" "))
+        if (said.isEmpty()) return null
+        val parts = corrections(w)
+        val last = strip(parts.last().joinToString(" "))
+        if (last.isEmpty()) return null
+        val cmd = normalCommand(parts, last, ctx)
+        if (concrete(cmd)) return ChainStep(said, cmd)
+        if (allowLabel && w.size in 1..5 && w.first() !in CHATTER && !w.all { it in ACK }) {
+            return ChainStep(said, SpeechCommand.Phrase(last, "unparsed"))
         }
         return null
+    }
+
+    /** The right side of a split: further steps, one step, or (a joiner + open-app left) a verb-shared app step. */
+    private fun rightSteps(w: List<String>, ctx: Context, b: Boundary, left: ChainStep): List<ChainStep>? {
+        splitExplicit(w, ctx, emptySet(), allowLabel = true)?.let { return it }
+        // "open youtube and spotify": the second app shares the verb (only apps: "tap terms and conditions" is one name)
+        if (b.joiner && left.command is SpeechCommand.OpenApp) {
+            val verb = OPEN.find(left.said)?.groupValues?.get(1)
+            if (verb != null) {
+                val shared = single("$verb ${strip(w.joinToString(" "))}", ctx)
+                if (shared is SpeechCommand.OpenApp) return listOf(ChainStep(strip(w.joinToString(" ")), shared))
+            }
+        }
+        oneStep(w, ctx, allowLabel = !b.weak)?.let { return listOf(it) }
+        return null
+    }
+
+    /** Greedy left-to-right split at joiners and pauses; label-like steps allowed once a concrete step precedes them. */
+    private fun splitExplicit(w: List<String>, ctx: Context, pauses: Set<Int>, allowLabel: Boolean): List<ChainStep>? {
+        if (w.isEmpty()) return null
+        for (b in boundaries(w, pauses)) {
+            val left = oneStep(w.subList(0, b.left), ctx, allowLabel) ?: continue
+            val rw = w.subList(b.left + b.skip, w.size)
+            if (startsWithCorrection(rw)) return null   // "then no wait ..." corrects the previous segment: not a clean chain
+            val right = rightSteps(rw, ctx, b, left) ?: continue
+            return listOf(left) + right
+        }
+        return null
+    }
+
+    /** Run-together without a joiner ("scroll down go home", <= 12 words): split anywhere, concrete steps only. */
+    private fun runTogether(w: List<String>, ctx: Context): SpeechCommand? {
+        if (w.size > 12) return null
+        for (i in 1 until w.size) {
+            val left = oneStep(w.subList(0, i), ctx, allowLabel = false) ?: continue
+            val right = oneStep(w.subList(i, w.size), ctx, allowLabel = false) ?: continue
+            return if (left.command == right.command) left.command else SpeechCommand.Chain(listOf(left, right))
+        }
+        return null
+    }
+
+    /**
+     * Split the tidy words into chain steps, or null when the phrase is one command. Split points are a joiner or a
+     * pause index; greedy left to right, a split taken only when the left part is a step and the rest parses into at
+     * least one more. The same command twice stays one command; a trailing joiner yields a dangling chain.
+     */
+    fun segments(w: List<String>, ctx: Context, pauses: Set<Int> = emptySet()): List<ChainStep>? {
+        if (w.isEmpty()) return null
+        val dangling = isDangling(w)
+        val steps = splitExplicit(w, ctx, pauses, allowLabel = false)
+            ?: if (dangling) oneStep(stripTrailingJoiner(w), ctx, allowLabel = false)?.let { listOf(it) } else null
+        if (steps == null) return null
+        val collapsed = if (steps.size == 2 && steps[0].command == steps[1].command) listOf(steps[0]) else steps
+        if (collapsed.size < 2 && !dangling) return null
+        return collapsed
     }
 
     /** Words a request may start with before its command ("i want you to", "would you mind"), and how it may end. */
@@ -541,6 +715,7 @@ object PhraseGrammar {
     private fun rank(c: SpeechCommand, tapScore: ((String) -> Double)?): Int = when (c) {
         is SpeechCommand.OpenApp, is SpeechCommand.Nav, is SpeechCommand.Volume, is SpeechCommand.Swipe -> 4
         is SpeechCommand.Followup -> 4   // a follow-up counts as concrete (n-best)
+        is SpeechCommand.Chain -> if (c.steps.isNotEmpty() && c.steps.all { concrete(it.command) }) 4 else 2
         is SpeechCommand.AppMissing -> 1
         is SpeechCommand.Timer -> if (c.seconds != null) 4 else 1
         is SpeechCommand.Phrase -> when (c.why) { "user phrase rule" -> 4; else -> 0 }
@@ -555,10 +730,10 @@ object PhraseGrammar {
     }
 
     /** The command for a recognizer result: each hypothesis parsed, the most concrete one wins (ties: recognizer order). */
-    fun choose(h: Heard, ctx: Context = Context(), tapScore: ((String) -> Double)? = null): Pick {
+    fun choose(h: Heard, ctx: Context = Context(), pauses: Set<Int> = emptySet(), tapScore: ((String) -> Double)? = null): Pick {
         val hyps = h.hypotheses.take(5)
         if (hyps.isEmpty()) return Pick(-1, "", SpeechCommand.Ignore("empty"), emptyList())
-        val parsed = hyps.map { parse(it, ctx) }
+        val parsed = hyps.map { parse(it, ctx, pauses) }
         var bestI = 0; var bestR = -1
         parsed.forEachIndexed { i, c -> val r = rank(c, tapScore); if (r > bestR) { bestR = r; bestI = i } }
         return Pick(bestI, hyps[bestI], parsed[bestI], parsed)

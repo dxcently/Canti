@@ -95,6 +95,8 @@ class Confirmer(
     private val schedule: (Long, () -> Unit) -> Unit = { ms, r -> handler.postDelayed(r, ms) },
     /** Called from [finish] with each watch's outcome (also "superseded"), after the log line. */
     private val onResult: (watch: Long, action: String, result: String, by: String?) -> Unit = { _, _, _, _ -> },
+    /** Called from [begin] with each new watch id and action, right after the watch is created (the overlay freeze). */
+    private val onBegin: (watch: Long, action: String) -> Unit = { _, _ -> },
 ) {
     /** [before] = the tree fingerprint before dispatch, null when not taken ([treeBaseline]). */
     private class Watch(val id: Long, val action: String, val before: Int?, val t0: Long, val injected: Boolean) {
@@ -121,6 +123,7 @@ class Confirmer(
         watch?.let { if (!it.done) finish(it, "superseded", null) }
         val w = Watch(nextId++, action, if (treeBaseline(action)) fingerprint() else null, clock(), injected)
         watch = w
+        onBegin(w.id, action)
         when (val plan = gate.baseline(w.t0)) {
             GrabGate.Plan.Now -> { gate.took(w.t0); grab { g -> w.beforePixels = g; w.beforePixelsState = if (g == null) "unavailable" else "ok" } }
             is GrabGate.Plan.Reuse -> { w.beforePixels = plan.grid; w.beforePixelsState = "reused" }

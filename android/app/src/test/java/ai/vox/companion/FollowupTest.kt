@@ -3,6 +3,7 @@ package ai.vox.companion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -139,6 +140,30 @@ class FollowupTest {
     @Test fun aNoVisibleChangeConfirmCannotBeUndone() {
         assertEquals(Plan.CantUndo("nothing changed"),
             resolve(FollowKind.UNDO, null, "undo", action("swipe_up", confirm = "no visible change"), emptyList()))
+    }
+
+    // --- undoPlan / navigationUndo (extracted for the command chain) ----------------------------------------------
+
+    @Test fun undoPlanMatchesResolveUndo() {
+        // the extracted undoPlan agrees with resolve(UNDO) for every kind
+        assertEquals(resolve(FollowKind.UNDO, null, "undo", action("swipe_up"), emptyList()), undoPlan(action("swipe_up"), emptyList()))
+        assertEquals(resolve(FollowKind.UNDO, null, "undo", action("tap", confirm = "confirmed (events)", by = "TYPE_WINDOW_STATE_CHANGED:com.x"), emptyList()),
+            undoPlan(action("tap", confirm = "confirmed (events)", by = "TYPE_WINDOW_STATE_CHANGED:com.x"), emptyList()))
+        assertEquals(resolve(FollowKind.UNDO, null, "undo", action("swipe_up", confirm = "no visible change"), emptyList()),
+            undoPlan(action("swipe_up", confirm = "no visible change"), emptyList()))
+        assertEquals(Plan.CantUndo("can't undo that"), undoPlan(null, emptyList()))
+    }
+
+    @Test fun navigationUndoIsTheInverseOrBackOnly() {
+        assertTrue(navigationUndo(Plan.Run("scroll_up", "listening")))
+        assertTrue(navigationUndo(Plan.Run("swipe_left", "listening")))
+        assertTrue(navigationUndo(Plan.Run("next_item", "listening")))
+        assertTrue(navigationUndo(Plan.Run("back", "listening")))
+        assertFalse(navigationUndo(Plan.Run("volume_up", "listening")))   // volume is not navigation
+        assertFalse(navigationUndo(Plan.Run("volume_down", "listening")))
+        assertFalse(navigationUndo(Plan.Run("tap", "listening")))
+        assertFalse(navigationUndo(Plan.RunVolume(VolOp.Step(1, -1), VolStream.MUSIC)))
+        assertFalse(navigationUndo(Plan.CantUndo("can't undo that")))
     }
 
     // --- memory --------------------------------------------------------------------------------------------------------

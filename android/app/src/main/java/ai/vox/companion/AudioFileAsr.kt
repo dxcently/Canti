@@ -454,6 +454,7 @@ object AsrAudioArgs {
                 .put("count", c.count).put("how", c.how)
             is SpeechCommand.Followup -> o.put("type", "followup").put("kind", c.kind.name.lowercase())
                 .put("dir", c.dir?.name?.lowercase() ?: JSONObject.NULL).put("fallback", c.fallback?.let(::command) ?: JSONObject.NULL)
+            is SpeechCommand.Chain -> o.put("type", "chain").put("steps", c.steps.size).put("dangling", c.dangling).put("dropped", c.dropped)
         }
         return o
     }

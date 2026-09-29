@@ -12,6 +12,9 @@ object TreeReader {
     private const val MAX_NODES = 1500
     private const val MAX_DEPTH = 40
 
+    /** Canti's own touchable rects (the overlay's OwnRects), set by VoxService: a target under them is still visible. */
+    var ownRects: () -> List<Box> = { emptyList() }
+
     /**
      * Root of the active application window. VOX's own app windows (the Flutter screens) count like any app's; VOX's
      * accessibility overlays (badge, cursor, highlights), its other non-app windows, and the IME never do.
@@ -130,9 +133,11 @@ object TreeReader {
             val r = Rect().also { n.getBoundsInScreen(it) }
             val actions = n.actionList
             val kids = mutableListOf<NodeSnap>()
+            val box = Box(r.left, r.top, r.right, r.bottom)
+            val vis = OwnCover.visible(n.isVisibleToUser, box, ownRects())
             // An off-screen subtree (an off-screen pager page, a closed drawer) is skipped, so the node budget reaches
             // what is drawn last: floating buttons and sheets usually come at the end of the tree. See [descends].
-            if (depth < MAX_DEPTH && descends(n.isVisibleToUser, r.left, r.top, r.right, r.bottom)) {
+            if (depth < MAX_DEPTH && descends(vis, r.left, r.top, r.right, r.bottom)) {
                 for (i in 0 until n.childCount) {
                     if (count >= MAX_NODES) break
                     val c = n.getChild(i) ?: continue
@@ -154,7 +159,7 @@ object TreeReader {
                 editable = n.isEditable,
                 focused = n.isFocused,
                 clickable = n.isClickable,
-                visible = n.isVisibleToUser,
+                visible = vis,
                 focusable = n.isFocusable,
                 selected = n.isSelected,
                 collectionItem = n.collectionItemInfo != null,
@@ -203,8 +208,8 @@ object TreeReader {
         val r = Rect()
         fun walk(n: AccessibilityNodeInfo, depth: Int) {
             if (count++ > MAX_NODES || depth > MAX_DEPTH) return
-            if (n.isVisibleToUser) {
-                n.getBoundsInScreen(r)
+            n.getBoundsInScreen(r)
+            if (OwnCover.visible(n.isVisibleToUser, Box(r.left, r.top, r.right, r.bottom), ownRects())) {
                 h = 31 * h + (n.className?.hashCode() ?: 0)
                 h = 31 * h + (n.text?.toString()?.hashCode() ?: 0)
                 h = 31 * h + (n.contentDescription?.toString()?.hashCode() ?: 0)
