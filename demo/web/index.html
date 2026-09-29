@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canti Live</title>
+<link rel="icon" href="/ui/brand/canti-icon-on@2.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="field" aria-hidden="true"></canvas>
+
+<header class="top">
+  <img id="wordmark" alt="Canti" class="px">
+  <div class="device box" data-kind="box">
+    <img id="devicon" alt="" class="px">
+    <div class="devtext">
+      <div class="t">VOX-2807</div>
+      <div class="b" id="devline">vox_node 0.2.2 · pico 2 w</div>
+    </div>
+    <span class="lamp" id="lamp" title="status"></span>
+    <div class="devtext right">
+      <div class="t" id="linkstate">BLE · …</div>
+      <div class="b" id="targetline">…</div>
+    </div>
+  </div>
+</header>
+
+<main class="grid">
+  <section class="win" data-kind="window" data-title="Mic · live" id="w-mic">
+    <div class="panel" data-kind="panel">
+      <canvas id="mic"></canvas>
+      <div class="stats">
+        <div class="stat"><span class="k">F0</span><span class="lead"></span><span class="v" id="s-f0">–</span></div>
+        <div class="stat"><span class="k">Level</span><span class="lead"></span><span class="v" id="s-level">–</span></div>
+        <div class="stat"><span class="k">Clarity</span><span class="lead"></span><span class="v" id="s-clar">–</span></div>
+        <div class="stat"><span class="k">Centroid</span><span class="lead"></span><span class="v" id="s-cent">–</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="win" data-kind="window" data-title="On-device extractor" id="w-ext">
+    <div class="extrow">
+      <div class="panel labelbox" data-kind="panel">
+        <div class="biglabel" id="e-label">—</div>
+        <div class="b" id="e-meta">waiting for a sound</div>
+      </div>
+      <div class="panel" data-kind="panel">
+        <div class="cap">PITCH16 · semitones</div>
+        <canvas id="p16"></canvas>
+      </div>
+    </div>
+    <div class="line b" id="e-line">&nbsp;</div>
+    <div class="panel" data-kind="panel">
+      <div class="cap">FINGERPRINT · fp1 · 24</div>
+      <canvas id="fp"></canvas>
+      <div class="b fpname" id="fp-name">&nbsp;</div>
+    </div>
+  </section>
+
+  <section class="win" data-kind="window" data-title="BLE → Canti" id="w-ble">
+    <div class="stats">
+      <div class="stat"><span class="k">Link</span><span class="lead"></span><span class="v" id="b-link">–</span></div>
+      <div class="stat"><span class="k">Msg</span><span class="lead"></span><span class="v" id="b-id">–</span></div>
+      <div class="stat"><span class="k">Size</span><span class="lead"></span><span class="v" id="b-size">–</span></div>
+    </div>
+    <pre class="packet b" id="b-packet"></pre>
+  </section>
+
+  <section class="win" data-kind="window" data-title="Canti app" id="w-app">
+    <div class="panel" data-kind="panel">
+      <div class="stats pipe" id="pipe">
+        <div class="stat" data-ev="msg"><span class="k">Heard</span><span class="lead"></span><span class="v">–</span></div>
+        <div class="stat" data-ev="resolve"><span class="k">Sequence</span><span class="lead"></span><span class="v">–</span></div>
+        <div class="stat" data-ev="decision"><span class="k">Decision</span><span class="lead"></span><span class="v">–</span></div>
+        <div class="stat" data-ev="exec"><span class="k">Action</span><span class="lead"></span><span class="v">–</span></div>
+        <div class="stat" data-ev="confirm"><span class="k">Screen</span><span class="lead"></span><span class="v">–</span></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="k">Mode</span><span class="lead"></span><span class="v" id="a-mode">gesture</span></div>
+      <div class="stat"><span class="k">Cursor</span><span class="lead"></span><span class="v" id="a-cursor">–</span></div>
+      <div class="stat"><span class="k">Latency</span><span class="lead"></span><span class="v" id="a-lat">–</span></div>
+    </div>
+  </section>
+
+  <section class="win wide" data-kind="window" data-title="Event log" id="w-log">
+    <div class="log b" id="log"></div>
+  </section>
+</main>
+
+<div class="caption" id="caption" data-kind="box"><span id="cap-sound">&nbsp;</span><span class="arrow">▸</span><span id="cap-action">&nbsp;</span></div>
+
+<aside class="op win" data-kind="window" data-title="Operator · H hides" id="op">
+  <div class="oprow">
+    <button data-target="emulator" class="tgt">Screen</button>
+    <button data-target="phone" class="tgt">Phone</button>
+    <button id="mirror">Mirror</button>
+    <button id="reset">Reset</button>
+    <button id="openwiki">Wiki</button>
+    <button id="src">Src: VOX</button>
+  </div>
+  <div class="oprow">
+    <button id="run" class="main">Run ⏎</button>
+    <button id="step">Step ␣</button>
+    <button id="stop">Stop</button>
+    <span class="b" id="stepinfo">–</span>
+  </div>
+  <div class="oprow pad" id="pad"></div>
+  <ol class="steps b" id="steps"></ol>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
