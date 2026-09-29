@@ -745,6 +745,7 @@ Other events: `absorbed{sound, tail_of, gap_ms, clock}` (above), `mode`, `arm`, 
 `forward{result: clicked | click-failed | no-forward, where, why, waited_ms, menu_closed}` and
 `badge{event: moved | menu | long-press | tap-to-wake | pass-through | tucked | untucked | state | no-change, ...}` (the Canti head; `state` carries the held state on each change, for the app's header; `tucked` while a Canti screen is in front; `no-change` is the ignored shrug after a "no visible change" confirm on the current follow-up slot), `hold{kind, sound, ...}` / `hold{event, why}` and `auto_scroll{event: start | stop, action, app, hold, why, pct_per_s, ms}` (*Hold messages*),
 `followup{n, kind, dir, result: label | run | tap | choose | cant_undo | nothing | fallback, last_kind, age_ms, confirm, why}` (*Spoken follow-ups*, below; no label or option text in this event),
+`chain{event, steps, index, kind, status, result, reason, watch, ms}` (*Command chains*, above; fixed keys and numbers only, never the spoken or on-screen text),
 and the BLE link's events:
 - `ble{what, ...}`: `start`, `scan`, `found{address, name, rssi}`, `state{state, why, address}`,
   `priority{high}` (the result of `requestConnectionPriority(HIGH)`, asked right after connecting), `mtu{mtu}`,
@@ -1195,11 +1196,13 @@ the argument ("tap no"). A command after a request is found ("i'm gonna go home"
 ("scroll d-, scroll down", "open tele-, telegram") is dropped; `let's see`, `what's it called` are filler.
 
 **Nothing happens** (`ignore (why)` in `phrase_parse`; no decision, no toast) for: only filler ("um okay yeah"), a
-retraction ("open settings, never mind"), chatter (starts with a question or remark word: "what was i doing", "is it
-paused", "how long is left on the timer"), and **two different commands** in one phrase ("scroll down and go home",
-"open youtube and spotify": toast "one command at a time"; never a guess; the same one twice is fine). "and" inside
-one command stays ("tap terms and conditions", "an hour and a half"). A tap always needs a tap verb (or cursor mode)
-and a match on the screen: chatter never taps.
+retraction ("open settings, never mind"), and chatter (starts with a question or remark word: "what was i doing", "is it
+paused", "how long is left on the timer"). **Two or more commands** in one phrase ("scroll down and go home") are a
+*command chain* (`chain (N)` in `phrase_parse`; see **Command chains** below), run as a queue of steps in order — except
+with the transcript strip off (`transcript_strip: false`) or chains off (`chains: false`), when they keep the old
+behaviour: toast "one command at a time", strip reason `one_at_a_time`; never a guess. "and" inside one command stays
+("tap terms and conditions", "an hour and a half"), and the same command twice is one command ("scroll down and scroll
+down"). A tap always needs a tap verb (or cursor mode) and a match on the screen: chatter never taps.
 
 **Grammar** (`PhraseGrammar.kt`, on the cleaned phrase):
 
@@ -1258,6 +1261,56 @@ status, n_best, confidence, partial, partials, peak_db, ready_ms, ms, mic_yielde
 `state` + `decision` (navigation, `path: local`), or `target_match{n, query, targets, result, top}` + `target` /
 `choice`, or the usual `resolve` chain. Also `asr{engine}` and `asr{event: check, pack, status, info}`.
 
+### Command chains
+
+Several commands in one phrase ("open recently updated then tap K-9 Mail now open the menu then add it to favourites")
+become a **chain**: a queue of steps (`Chain.kt`, `chain (N)` in `phrase_parse`) run strictly in order, each step
+starting only after the previous one's Confirmer answered. Chains need the transcript strip (`transcript_strip`) and
+the `chains` setting (default true); otherwise the phrase keeps the old refusal (toast "one command at a time", reason
+`one_at_a_time`).
+
+- **Segments**: the phrase splits at a joiner ("and then", "after that", "and", "then", "now", "also", "next" before a
+  command verb) or at a >= 0.8 s pause between words. At most 8 steps; more drop the rest (`dropped`). A trailing
+  "then" / "and then" / "after that" / "and" leaves the chain *dangling* (more steps may be appended). A segment that
+  is not a known command but reads like a label (1-5 words, not chatter) becomes a label-like step the service re-resolves
+  against the screen at run time. "and" inside one name or amount stays one command ("tap terms and conditions"); the
+  same command twice stays one command.
+- **Order and gating**: step N+1 runs only after step N's Confirmer result (or its timeout). Each step resolves its
+  screen target when it *starts*, never at parse time.
+- **Pause**: a step whose result is "no visible change", or that misses, turns red and the chain PAUSES (`PAUSED ....
+  try again · skip · cancel`), later steps held. The pause listens; after 10 s without an answer the rest is dropped and
+  the chain ends.
+- **Controls** (checked before the grammar while a chain runs): `try again`/`again`/`once more`/`retry` re-runs the stuck
+  step (or the last done step); `skip`/`skip it`/`skip that`/`skip this step` drops the stuck step; `continue`/`go on`/
+  `keep going`/`carry on` resumes; `cancel`/`stop`/`cancel that`/`stop the chain`/`forget it`/`never mind` drops the rest;
+  `undo`/`undo that`/`not that`/`no not that`/`i didnt mean that`/`no i didnt mean that`/`thats wrong` undoes the last done
+  step; `no not the <x>` / `not the <x>` / `no not <x>` rewinds to before the named step; `not that one` rejects the next
+  (previewed) step; `done`/`thats it`/`thats all`/`im done`/`finished` ends. Anything else heard is parsed and appended.
+- **Undo** is navigation only: the inverse of a scroll/swipe/next/previous, a tap/pick/app-launch confirmed by a window
+  change (-> back), or an on-screen "Undo" label. Not undoable: typing, timers, volume, toggles and other in-place taps.
+  A rewind stops at the first step it cannot undo. After the chain ends, "undo" / "no, not the <x>" still work for 30 s
+  while the same app is in front.
+- **End**: silence (`chain_tail_ms`, 3000) with the queue empty, or a "done"/end control, or disarm/pause/reset/a new
+  listen.
+- **Events**: `chain{event, steps, index, kind, status, result, reason, watch, ms}` — fixed keys and numbers only, never
+  the spoken or on-screen text. `reason` is a fixed key (`no_change`, `not_on_screen`, `nothing`, `failed`, `no_answer`,
+  `picker_cancelled`, `confirm_cancelled`, `cant_undo`, `silence`, `done`, `cancel`, `paused_timeout`, `disarm`, `reset`,
+  `rewind`, `max_steps`).
+- **Debug op** `chain_state` (socket only, may carry step text like `strip_state`): `state`, `steps` (`n`, `text`,
+  `status`, `note`, `kind`), `panel` (`top`, `height`, `jumped`), `queue_rect` (`top`, `height`), `expanded`, `drawn`
+  (the queue view's last drawn rows, for agreeing with the model frame), `preview` (`now`, `next`).
+  `strip_state` gains `chain: true|false`, `scrollable: true|false` and `scroll` (the transcript body's offset).
+- **Panel touch**: the strip body is `FLAG_NOT_TOUCHABLE` (touches pass through), except while the transcript
+  overflows the visible lines, when a touchable body window lets a drag scroll the text. The queue window is sized to
+  its drawn blocks + chips (right-aligned); a tap expands the whole chain (snaps back after ~3 s or on the next step)
+  and a drag scrolls it. The strip's title tab is a touchable drag handle that moves the whole panel (strip + queue);
+  on release it saves `panel_top_portrait`/`panel_top_landscape` and logs `panel{event: moved, top}`. An injected
+  gesture whose stroke starts under a touchable Canti window makes it pass through for that gesture
+  (`panel{event: pass-through}` / `badge{event: pass-through}`). A chain step whose target is under the panel jumps
+  the panel to the top first (`chain_state` `panel.jumped`), and it returns after the chain ends.
+- **Settings**: `chains` (bool, default true), `chain_tail_ms` (3000), `panel_top_portrait` / `panel_top_landscape`
+  (int px, -1 = default).
+
 ### The transcript strip
 
 While Canti listens, a bottom overlay (`TranscriptStrip.kt`, `TranscriptStripView.kt`, `TYPE_ACCESSIBILITY_OVERLAY`,
@@ -1267,11 +1320,13 @@ editable field (dictation). The transcript text lives only in the view and in me
 a file, a toast, or a debug-op reply that is logged. The only new event is `strip`, and it carries no text.
 
 - **What it shows**: a double-line pixel frame with a title tab (the lamp is orange while listening, red while
-  dictating: `LISTENING`, `NAME IT`, `PICK ONE`, `DICTATING`) and an 8-cell timer tab; up to two lines of transcript
+  dictating: `LISTENING`, `NAME IT`, `PICK ONE`, `DICTATING`, `CHAIN`) and an 8-cell timer tab; up to two lines of transcript
   (settled words in ink, the trailing partial word dim with a dotted underline, a caret block); after the result a rule
   line and a `KEY ....... VALUE` row. `DO ... <done>` (green), `? ... <reason>` (red miss) or `? ... <question>` (orange
   ask), `N LEFT ... say 1 or 2` / `say 1, 2 or 3` / `say 1 to N` (picker), `END ... say "stop dictation"` (dictating).
-  The words it could not use are red with a solid underline. A done row stays 2 s, then the strip hides.
+  A chain adds `PAUSED ... try again · skip · cancel` (red), `BACK ... <what the last inverse did>` (green), and
+  `<n> · WHICH ... say 1 or 2` (a picker inside a chain). The words it could not use are red with a solid underline. A
+  done row stays 2 s, then the strip hides — a held CHAIN ticket keeps its DO row up while the chain runs.
 - **Retry**: after a MISS (never a question or a phone-side failure) the mic stays open 4 s for one retry, only while
   the ticket was user-opened (LISTEN/NAME, never PICK or DICTATE), not already retried, armed and unpaused, and with no
   choice, confirm or listen window open. The retry logs `listening{state: open, ..., retry: true}`. While any listen

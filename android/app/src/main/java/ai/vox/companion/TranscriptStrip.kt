@@ -22,6 +22,7 @@ enum class StripKind(val title: String, val orangeLamp: Boolean) {
     NAME("NAME IT", true),
     PICK("PICK ONE", true),
     DICTATE("DICTATING", false),
+    CHAIN("CHAIN", true),
 }
 
 /** A word's drawing tone: settled ink, a still-partial word dim, a word it could not use bad (red). */
@@ -52,7 +53,11 @@ object StripWords {
      * Greedy wrap into lines, then keep only the LAST 2 lines (the oldest words scroll off the top). A single word
      * wider than a line is clipped by the view, not wrapped forever.
      */
-    fun fit(words: List<Word>, maxWidth: Float, measure: (String) -> Float): List<List<Word>> {
+    fun fit(words: List<Word>, maxWidth: Float, measure: (String) -> Float): List<List<Word>> =
+        fitAll(words, maxWidth, measure).takeLast(2)
+
+    /** Greedy wrap into ALL lines (the chain's scrollable transcript keeps every line). */
+    fun fitAll(words: List<Word>, maxWidth: Float, measure: (String) -> Float): List<List<Word>> {
         val lines = ArrayList<MutableList<Word>>()
         var cur = ArrayList<Word>()
         for (w in words) {
@@ -62,7 +67,7 @@ object StripWords {
             cur += w
         }
         if (cur.isNotEmpty()) lines += cur
-        return lines.takeLast(2)
+        return lines
     }
 }
 
@@ -81,6 +86,14 @@ sealed class StripRow(val key: String, val value: String, val signal: Signal) {
     class Miss(reason: String, val retry: Boolean) : StripRow("?", reason, Signal.MISS)
     /** A question, not a miss (`? ... <question>`, orange): no red words, no retry. */
     class Ask(question: String) : StripRow("?", question, Signal.ASK)
+    /** A paused chain (`PAUSED ... try again · skip · cancel`, red). */
+    class Paused : StripRow("PAUSED", "try again · skip · cancel", Signal.MISS)
+    /** An undone navigation step (`BACK ... <what the last inverse did>`, done colour). */
+    class Back(value: String) : StripRow("BACK", value, Signal.DONE)
+    /** A refused undo (`BACK ... can't undo <text>`, red): the key is BACK, the colour a miss. */
+    class BackMiss(value: String) : StripRow("BACK", value, Signal.MISS)
+    /** A picker inside a chain (`<n> · WHICH ... say 1 or 2`, same value as [Left]). */
+    class Which(n: Int) : StripRow("$n · WHICH", pickText(n), Signal.PLAIN)
 
     /** Two rows are equal when they read the same (a [Miss] also by its retry flag); the view never compares them. */
     override fun equals(other: Any?): Boolean {
@@ -251,8 +264,22 @@ class StripModel(
     private var caret = true
     private var visible = false
     private var hideTask: (() -> Unit)? = null
+    private var hold = false      // a CHAIN ticket never auto-hides a DO row while held
+    private var scroll = 0        // transcript line scroll (chain strip body drag)
 
     fun frame(): StripFrame = StripFrame(kind, StripWords.fit(words, maxWidth, measure), row, deadline, totalMs, caret, visible)
+
+    /** All wrapped transcript lines (the chain's scrollable body keeps every line; [fit] still shows the last 2). */
+    fun allLines(): List<List<Word>> = StripWords.fitAll(words, maxWidth, measure)
+
+    /** True when the transcript overflows the visible 2 lines (the body becomes scrollable by touch). */
+    fun scrollable(): Boolean = allLines().size > 2
+
+    /** The transcript scroll offset (chain strip body drag; clamped by the view). */
+    fun scrollOffset(): Int = scroll
+
+    /** The transcript scroll offset (chain strip body drag; clamped by the view). */
+    fun setScroll(v: Int) { if (scroll != v) { scroll = v; emit() } }
 
     /** The view sets its measurement and width (e.g. after a rotation); the current frame is re-notified. */
     fun setGeometry(measure: (String) -> Float, maxWidth: Float) {
@@ -298,11 +325,22 @@ class StripModel(
         words = StripWords.mark(words, bad)
         caret = false
         hideTask?.invoke(); hideTask = null
-        // stays up: dictation, the picker's own rows (n LEFT, a no-match hint) while it is open, and a miss the mic
-        // re-opens for; a DO row (also a pick's tap) and every other result hide after [RESULT_MS]
-        val persistent = kind == StripKind.DICTATE || (kind == StripKind.PICK && (row is StripRow.Left || row is StripRow.Miss)) ||
-            (row is StripRow.Miss && row.retry)
-        if (!persistent) hideTask = scheduler.schedule(RESULT_MS) { hide() }
+        // stays up: dictation, the picker's own rows (n LEFT, a no-match hint) while it is open, a miss the mic
+        // re-opens for, and a held chain ticket (a DO row stays while the chain runs); every other result hides
+        if (!persistentRow(row)) hideTask = scheduler.schedule(RESULT_MS) { hide() }
+        emit()
+    }
+
+    private fun persistentRow(r: StripRow?): Boolean =
+        kind == StripKind.DICTATE || (kind == StripKind.PICK && (r is StripRow.Left || r is StripRow.Miss)) ||
+            (r is StripRow.Miss && r.retry) || hold
+
+    /** While a chain is active ([on] true) its DO rows never auto-hide; turning it off lets the current row hide. */
+    fun hold(on: Boolean) {
+        if (hold == on) return
+        hold = on
+        hideTask?.invoke(); hideTask = null
+        if (!on && !persistentRow(row)) hideTask = scheduler.schedule(RESULT_MS) { hide() }
         emit()
     }
 

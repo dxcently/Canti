@@ -110,6 +110,12 @@ class VoxService : AccessibilityService() {
     private val recent = ArrayDeque<Pair<String, Long>>()   // action key, time
     // [followup] spoken follow-ups ("try again", "undo", ...) on the last action (Followup.kt); memory only, never logged.
     private val followups = FollowupMemory()
+    // [chain] the active command chain (Chain.kt) and the memory of the last ended chain (for a while after it ends).
+    private var chain: ChainQueue? = null
+    private val chainMemory = ChainMemory()
+    private lateinit var scheduler: Scheduler
+    private var partialTimes: MutableList<Pair<Int, Long>>? = null   // [chain] partial word growth (pause marks)
+    private val queueSnap = Runnable { chain?.setExpanded(false) }   // [chain] C6 snap back after 3 s idle
     private val labelCache = HashMap<String, String>()
     // The phrase window: the recognizer (`asr_engine`), the window around it, the last problem the user must fix.
     private var asr: PhraseRecognizer = StubPhraseRecognizer()
@@ -207,8 +213,19 @@ class VoxService : AccessibilityService() {
         audio.registerAudioPlaybackCallback(playbackWatch, main)
         audio.registerAudioDeviceCallback(routeWatch, main)
         overlay = Overlay(this, ::screenW, ::screenH)
+        TreeReader.ownRects = { overlay.recentOwnRects(SystemClock.elapsedRealtime()) }   // [chain] C4
+        overlay.onQueueTap = { chain?.setExpanded(true); main.removeCallbacks(queueSnap); main.postDelayed(queueSnap, 3000) }   // [chain] C6
+        overlay.onQueueScroll = { dy -> chain?.setScroll((chain?.frame()?.scroll ?: 0) + Math.round(-dy)) }   // [chain] C6
+        overlay.onBodyScroll = { dy -> stripModel.setScroll(stripModel.scrollOffset() + Math.round(-dy)) }   // [chain] C6/Y2
+        overlay.onPanelMoved = {
+            overlay.stripGeometry()?.get(0)?.let { top ->
+                if (screenW() <= screenH()) settings.panelTopPortrait = top else settings.panelTopLandscape = top
+                EventLog.ev("panel", "event" to "moved", "top" to top)
+            }
+        }   // [chain] C6
         confirmer = Confirmer(main, packageName, { MainLoad.time("tree:fingerprint") { TreeReader.fingerprint(TreeReader.appRoot(this)) } }, { settings.confirmTimeoutMs }, ::grabGrid,
-            onResult = ::onConfirmResult)
+            onResult = ::onConfirmResult,
+            onBegin = { watch, _ -> overlay.freeze(watch) })   // [chain] C5
         MainLoad.mainThread = Thread.currentThread()
         MainLoad.onSlow = { what, ms -> EventLog.ev("main_slow", "what" to what, "ms" to Math.round(ms * 10) / 10.0, "app" to lastPkg) }
         main.removeCallbacks(heartbeat); main.post(heartbeat)
@@ -219,7 +236,7 @@ class VoxService : AccessibilityService() {
             EventLog.ev("system_dialog", "action" to action, "dialog" to dialog, "result" to "refused")
             main.post { updateBadge(SystemDialog.BADGE) }
         }
-        val scheduler = object : Scheduler {
+        scheduler = object : Scheduler {
             override fun now() = SystemClock.elapsedRealtime()
             override fun schedule(delayMs: Long, task: () -> Unit): () -> Unit {
                 val r = Runnable(task); main.postDelayed(r, delayMs); return { main.removeCallbacks(r) }
@@ -231,7 +248,7 @@ class VoxService : AccessibilityService() {
         }
         listenWindow = ListenWindow(scheduler, micYield)
         stripModel = StripModel(scheduler)
-        stripModel.onChange = { f -> if (f == null) { strip = null; overlay.hideStrip() } else overlay.showStrip(f) }   // [strip] hidden = the ticket ends
+        stripModel.onChange = { f -> if (f == null) { strip = null; overlay.hideStrip() } else { overlay.showStrip(f); overlay.showBodyTouch(stripModel.scrollable()) } }   // [strip] hidden = the ticket ends
         overlay.stripThemeChanged()
         // Dictation holds the mic itself for the whole session; its windows (one recognizer per utterance) have none.
         dictation = Dictation(scheduler, micYield, ListenWindow(scheduler, null), { asr },
@@ -843,6 +860,8 @@ class VoxService : AccessibilityService() {
         armed = false
         generation++
         followups.clear()   // [followup]
+        chain?.clear("disarm")   // [chain]
+        chainMemory.clear()   // [chain]
         clearStrip()   // [strip]
         sequencer.cancel()
         holdScroll.stop("disarm ($why)"); dropBufferedHold()
@@ -860,6 +879,8 @@ class VoxService : AccessibilityService() {
         if (p) {
             generation++
             followups.clear()   // [followup]
+            chain?.clear("pause")   // [chain]
+            chainMemory.clear()   // [chain]
             clearStrip()   // [strip]
             sequencer.cancel()
             holdScroll.stop("pause"); dropBufferedHold()
@@ -1040,6 +1061,7 @@ class VoxService : AccessibilityService() {
 
     private fun openListening() {
         val engine = asr
+        chain?.clear("listen")   // [chain] a new pop pop ends any active chain at once
         EventLog.ev("listening", "state" to "open", "window_ms" to settings.listenWindowMs, "mode" to deviceMode, "engine" to engine.name,
             "recognizer" to (engine as? AndroidPhraseRecognizer)?.plan()?.kind?.name?.lowercase())
         val gen = generation
@@ -1050,7 +1072,8 @@ class VoxService : AccessibilityService() {
             stripModel.start(kind, settings.listenWindowMs)
             stripEvent("show", "none", false)
         }
-        listenWindow.open(engine, settings.listenWindowMs, onWords = { if (strip?.gen == gen) stripModel.partial(it) }) { d -> listenDone(d, gen) }
+        partialTimes = null
+        listenWindow.open(engine, settings.listenWindowMs, onWords = { recordPartial(it); if (strip?.gen == gen) stripModel.partial(it) }) { d -> listenDone(d, gen) }
         updateBadge("LISTENING")
         // Warm the app list ("open <app>") while the user speaks, after the recognizer has started.
         main.postDelayed({ if (listenWindow.isOpen) launchableApps() }, 700)
@@ -1071,7 +1094,11 @@ class VoxService : AccessibilityService() {
         } else if (h != null && asr is AndroidPhraseRecognizer) asrProblem = null
         updateBadge("")
         // [strip] a cancelled window ends quietly; a phrase message owns the strip, and a pick (choice ended) keeps it for the DO row
-        if (d.why.startsWith("cancelled:")) { if (strip?.gen == gen && d.why != "cancelled: phrase message" && d.why != "cancelled: choice ended") clearStrip(); return }
+        if (d.why.startsWith("cancelled:")) { if (strip?.gen == gen && strip?.kind != StripKind.CHAIN && d.why != "cancelled: phrase message" && d.why != "cancelled: choice ended") clearStrip(); return }
+        // [chain] a chain's own window: no speech / a timeout is silence; a cancellation is not.
+        if (strip?.kind == StripKind.CHAIN) {
+            if (h == null) { chain?.onSilence(); return }
+        }
         if (h == null) {
             // [strip] nothing heard (no speech / no match / timeout with nothing): a miss the strip shows as a dim "...".
             if (strip?.gen == gen) { stripModel.final("..."); notify("", "no_words") { StripReasons.noWords() } }
@@ -1080,7 +1107,7 @@ class VoxService : AccessibilityService() {
         if (gen != generation || !armed || paused) { EventLog.ev("ignored", "reason" to "disarmed while listening", "phrase" to if (hide) "(typing: not logged)" else h.best); return }
         strip?.let { if (it.gen == gen) it.words = h.best ?: "" }   // [strip] the heard text drives the reason mapping
         if (strip?.gen == gen) stripModel.final(h.best ?: "")
-        onHeard(h, "asr:${d.engine}", window = true)   // every recognizer run answers a listen window a pop pop opened
+        onHeard(h, "asr:${d.engine}", window = true, pauses = pauseMarks(h.best))   // every recognizer run answers a listen window a pop pop opened
     }
 
     /** The `phrase` debug op's record of one phrase's path (parse, decision, exec); null outside that op. */
@@ -1088,12 +1115,14 @@ class VoxService : AccessibilityService() {
     private fun trace(key: String, value: Any?) { trace?.put(key, value) }
 
     /** A phrase (the recognizer's n-best, or a message's phrase): the grammar first, then the phrase decider. */
-    private fun onHeard(h: Heard, source: String, window: Boolean) {
+    private fun onHeard(h: Heard, source: String, window: Boolean, pauses: Set<Int> = emptySet()) {
         // A choice's own listening window answers spoken picking first, not the normal grammar (or typing). This is
         // shared by every spoken source so a narrowing/pick phrase is handled the same however it arrived.
         if (choice != null) { choicePhrase(h); return }
         // Typing by voice, in a listen window only: the best hypothesis as said, never the grammar's cleaned words.
         if (window) h.best?.let { TypeGrammar.parse(it) }?.let { runTyping(it, source); return }
+        // [chain] a phrase heard while a chain runs is a control or appended steps, not a fresh command.
+        if (onChainHeard(h, source, window)) return
         val t0 = System.nanoTime()
         val apps = launchableApps()
         val t1 = System.nanoTime()
@@ -1104,7 +1133,7 @@ class VoxService : AccessibilityService() {
             targets ?: (try { Targets.build(TreeReader.targetLayers(this), screenW(), screenH(), format = optionFormat) }
                 catch (e: Exception) { EventLog.ev("error", "where" to "targets", "error" to e.toString()); emptyList() }).also { targets = it }
         }
-        val pick = PhraseGrammar.choose(h, ctx) { q -> TargetMatcher.best(screenTargets(), q) }
+        val pick = PhraseGrammar.choose(h, ctx, tapScore = { q -> TargetMatcher.best(screenTargets(), q) }, pauses = pauses)
         val parseMs = Math.round((System.nanoTime() - t1) / 1e5) / 10.0   // the screen read for a tap included
         EventLog.ev("phrase_parse", "source" to source, "heard" to pick.text, "hypothesis" to pick.index, "command" to pick.command.describe(),
             "parses" to org.json.JSONArray(pick.parsed.map { it.describe() }), "mode" to deviceMode, "window" to window, "parse_ms" to parseMs)
@@ -1171,7 +1200,7 @@ class VoxService : AccessibilityService() {
                 val n = ++decisionCount
                 val r = try { executor.setVolume(c) } catch (e: Exception) { Executor.Result(false, "error: $e") }
                 // [followup] a spoken volume change is its own last slot ("try again" / "undo").
-                followups.record(Last.Volume(c.op, c.stream, SystemClock.elapsedRealtime(), currentApp(), watch = r.watch))
+                recordLast(Last.Volume(c.op, c.stream, SystemClock.elapsedRealtime(), currentApp(), watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "volume", "stream" to c.stream.key, "op" to c.op.describe(), "ok" to r.ok, "how" to r.how,
                     "watch" to r.watch)
                 trace("exec", JSONObject().put("action", "volume").put("stream", c.stream.key).put("op", c.op.describe()).put("ok", r.ok).put("how", r.how))
@@ -1210,7 +1239,7 @@ class VoxService : AccessibilityService() {
                 val appBefore = currentApp()   // [followup] before the launch, as perform() does
                 val r = try { executor.launchApp(pkg) } catch (e: Exception) { Executor.Result(false, "error: $e") }
                 // [followup] a spoken app launch is its own last slot ("try again" / "undo" -> back when it changed windows).
-                followups.record(Last.OpenApp(pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
+                recordLast(Last.OpenApp(pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to c.pkg, "opened" to pkg.takeIf { it != c.pkg }, "label" to c.label, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
                 trace("exec", JSONObject().put("action", "open_app").put("app", c.pkg).put("ok", r.ok).put("how", r.how))
                 if (!r.ok) notify("couldn't open ${c.label}", "failed") { StripRow.Miss("couldn't open ${c.label}", false) to emptySet() }
@@ -1232,7 +1261,171 @@ class VoxService : AccessibilityService() {
             }
             // [followup] spoken follow-ups on the last action (Followup.kt): decided app-side only, no model.
             is SpeechCommand.Followup -> followup(c, screenTargets)
+            // [chain] a chain runs only with the strip and chains on; otherwise the old refusal, byte-identical.
+            is SpeechCommand.Chain -> if (settings.transcriptStrip && settings.chains) startChain(c)
+                else notify("one command at a time", "one_at_a_time") { StripReasons.why("one command at a time") }
         }
+    }
+
+    // --- command chains (Chain.kt) ---------------------------------------------------------------------------------
+
+    // [chain]
+    private fun currentTargets(): List<Target> =
+        try { Targets.build(TreeReader.targetLayers(this), screenW(), screenH(), format = optionFormat) }
+        catch (e: Exception) { EventLog.ev("error", "where" to "targets", "error" to e.toString()); emptyList() }
+
+    // [chain] record a follow-up slot (as today) AND report the exec to the running chain step (or an undo).
+    private fun recordLast(last: Last) {
+        followups.record(last)
+        chain?.onExec(last)
+    }
+
+    // [chain] the first Chain command opens the strip's CHAIN ticket and starts the queue (S12: chains need the strip).
+    private fun startChain(c: SpeechCommand.Chain) {
+        val q = ChainQueue(scheduler, stepTimeoutMs = { settings.confirmTimeoutMs + 6000L })
+        q.onEffect = ::onChainEffect
+        chain = q
+        strip = StripTicket(generation, StripKind.CHAIN, false, SystemClock.elapsedRealtime())
+        stripModel.start(StripKind.CHAIN, settings.chainTailMs)
+        stripModel.hold(true)
+        stripEvent("show", "none", false)
+        q.start(c.steps, c.dropped)
+    }
+
+    // [chain] the queue's effects -> the service (Phase C draws the preview and the queue view; here they are stubs).
+    private fun onChainEffect(e: ChainEffect) {
+        when (e) {
+            is ChainEffect.RunStep -> runChainStep(e.step)
+            is ChainEffect.RunUndo -> runChainUndo(e.step, e.plan)
+            is ChainEffect.Listen -> openChainListening(e.ms)
+            is ChainEffect.StopListening -> if (chain != null) listenWindow.cancel("chain stop")
+            is ChainEffect.Preview -> onPreview(e.now, e.next)   // [chain] C2/C7
+            is ChainEffect.Frame -> if (e.frame.rows.isNotEmpty()) overlay.showQueue(e.frame)   // [chain] C1
+            is ChainEffect.Row -> if (e.row != null) stripModel.result(e.row, emptySet())
+            is ChainEffect.Log -> EventLog.ev("chain", *e.fields.toTypedArray())
+            is ChainEffect.Ended -> chainEnded(e.why)
+        }
+    }
+
+    // [chain] record the partial's word growth for the pause marks (a word index gets a mark when the partial grew after
+    // >= 800 ms without growth). [partialTimes] is reset when a listen window opens.
+    private fun recordPartial(text: String) {
+        val count = text.split(' ').filter { it.isNotEmpty() }.size
+        val list = partialTimes ?: ArrayList<Pair<Int, Long>>().also { partialTimes = it }
+        if (list.isEmpty() || list.last().first != count) list += count to SystemClock.elapsedRealtime()
+    }
+
+    private fun pauseMarks(finalText: String?): Set<Int> {
+        val pts = partialTimes ?: return emptySet()
+        if (finalText == null || pts.isEmpty()) return emptySet()
+        // only apply the marks when the final text starts with the partial's words (the partial is a prefix)
+        val partialWords = pts.last().first
+        if (PauseMarks.indexes(pts).isEmpty()) return emptySet()
+        val finalCount = PhraseGrammar.basic(finalText).split(' ').filter { it.isNotEmpty() }.size
+        return if (finalCount >= partialWords) PauseMarks.indexes(pts) else emptySet()
+    }
+
+    // [chain] the queue's own listen window (controls, appends, the tail).
+    private fun openChainListening(ms: Long) {
+        if (chain == null) return
+        partialTimes = null
+        val gen = generation
+        listenWindow.open(asr, ms, onWords = { recordPartial(it); if (strip?.gen == gen) stripModel.partial(it) }) { d -> listenDone(d, gen) }
+    }
+
+    // [chain] a short settle before a chain step's gesture, so the previous step's window transition finishes first.
+    private val chainSettleMs = 500L
+    private val panelSettleMs = 150L   // [chain] C1: after the panel jumps to the top, wait for the windows to update
+
+    // [chain] the step's targets are resolved when it STARTS (the screen has moved since the utterance); a short settle
+    // lets the previous step's window transition finish before the next gesture dispatches (so its Confirmer does not
+    // catch the tail of the transition).
+    private fun runChainStep(step: QueueStep) {
+        main.postDelayed({ runChainStepNow(step) }, chainSettleMs)
+    }
+
+    private fun runChainStepNow(step: QueueStep) {
+        if (step.status != StepStatus.RUNNING) return   // held/dropped during the settle
+        when (val c = step.command) {
+            is SpeechCommand.Tap -> tapNamed(c, currentTargets())
+            is SpeechCommand.Phrase -> runChainLabel(step, c)
+            else -> runCommand(c) { currentTargets() }
+        }
+    }
+
+    // [chain] a label-like step: tap it if a target matches STRONG, else fall back to the phrase decider.
+    private fun runChainLabel(step: QueueStep, c: SpeechCommand.Phrase) {
+        val targets = currentTargets()
+        val out = TargetMatcher.match(targets, c.text)
+        if (out is Targets.Outcome.Tap && TargetMatcher.best(targets, c.text) >= TargetMatcher.STRONG) {
+            step.text = "tap ${out.target.label}"
+            tapTarget(++decisionCount, out.target, "chain label", alternatives = emptyList())
+        } else runCommand(c) { targets }
+    }
+
+    // [chain] an undo's inverse: an on-screen "Undo" label wins, else the plan (navigation only).
+    private fun runChainUndo(step: QueueStep, plan: Plan) {
+        main.postDelayed({ runChainUndoNow(step, plan) }, chainSettleMs)
+    }
+
+    private fun runChainUndoNow(step: QueueStep, plan: Plan) {
+        if (step.status != StepStatus.UNDONE) return   // held/dropped during the settle
+        val targets = currentTargets()
+        val label = targets.firstOrNull { it.label.isNotBlank() && TargetQuery.normalize(it.label) == "undo" }
+        if (label != null) { tapTarget(++decisionCount, label, "chain:undo label"); return }
+        when (plan) {
+            is Plan.Run -> act(++decisionCount, generation, plan.mode, Decision(plan.action, "chain:undo", explicit = true), local = true)
+            else -> chain?.onOutcome(Outcome.Miss("nothing"))
+        }
+    }
+
+    // [chain] a phrase heard while a chain runs: a control, or the parsed steps appended to the queue. False: no chain.
+    private fun onChainHeard(h: Heard, source: String, window: Boolean): Boolean {
+        // An active chain: controls and appends as usual.
+        val active = chain
+        if (active != null) {
+            h.best?.let { ChainControl.parse(it) }?.let { active.control(it); active.heard(); return true }
+            val ctx = PhraseGrammar.Context(apps = launchableApps(),
+                userPhrases = profile.phraseBindings().mapNotNull { it.say }.toSet(), cursor = deviceMode == "cursor", window = window)
+            val pick = PhraseGrammar.choose(h, ctx)
+            if (pick.command is SpeechCommand.Chain) active.append(pick.command.steps)
+            else if (pick.command !is SpeechCommand.Ignore) active.append(listOf(ChainStep(pick.text, pick.command)))
+            active.heard()
+            return true
+        }
+        // A remembered (ended) chain: only "undo" / "no, not the <x>" act on it, then it ends again; anything else is
+        // the normal parse path.
+        val mem = chainMemory.current(SystemClock.elapsedRealtime(), currentApp()) ?: return false
+        val ctrl = h.best?.let { ChainControl.parse(it) }
+        if (ctrl is ChainControl.Cmd.Undo || ctrl is ChainControl.Cmd.Rewind) {
+            if (mem.reopenForUndo()) { mem.control(ctrl); chain = mem }
+            return true
+        }
+        return false
+    }
+
+    // [chain] C2/C7: the NOW/NEXT preview — the running tap step's target, and the next waiting Tap step's target when
+    // it matches STRONG on the current screen.
+    private fun onPreview(now: QueueStep?, next: QueueStep?) {
+        val targets = currentTargets()
+        fun targetOf(s: QueueStep?): Target? {
+            val c = s?.command as? SpeechCommand.Tap ?: return null
+            return (TargetMatcher.match(targets, c.query) as? Targets.Outcome.Tap)?.target
+        }
+        val nowT = targetOf(now)
+        val nextT = targetOf(next)?.takeIf { TargetMatcher.best(targets, (next!!.command as SpeechCommand.Tap).query) >= TargetMatcher.STRONG }
+        overlay.showPreview(nowT, nextT)
+    }
+
+    // [chain] the queue ended: remember it, drop the held strip row after RESULT_MS, and clear the step.
+    private fun chainEnded(why: String) {
+        val q = chain ?: return
+        chainMemory.store(q, currentApp(), SystemClock.elapsedRealtime())
+        chain = null
+        overlay.hidePreview()   // [chain] C2
+        overlay.panelJump(false)   // [chain] C1: the panel returns to its saved top
+        stripModel.hold(false)
+        stripEvent("hidden", "end", false)
     }
 
     private fun timerText(s: Int): String = listOfNotNull(
@@ -1260,7 +1453,9 @@ class VoxService : AccessibilityService() {
     // [followup]
     private fun onConfirmResult(watch: Long, action: String, result: String, by: String?) {
         val appNow = currentApp()
+        overlay.unfreeze(watch)   // [chain] C5
         followups.onConfirm(watch, result, by, appNow)
+        chain?.onConfirm(watch, result, by)   // [chain]
         if (result == "no visible change" && followups.current(SystemClock.elapsedRealtime(), appNow)?.watch == watch) {
             if (ignoredGate.admit(SystemClock.elapsedRealtime())) {
                 try { overlay.badgePlayOnce(BadgeState.IGNORED) } catch (_: Exception) {}
@@ -1293,7 +1488,7 @@ class VoxService : AccessibilityService() {
             }
             is Plan.RunVolume -> {
                 val r = try { executor.setVolume(SpeechCommand.Volume(plan.stream, plan.op)) } catch (e: Exception) { Executor.Result(false, "error: $e") }
-                followups.record(Last.Volume(plan.op, plan.stream, SystemClock.elapsedRealtime(), currentApp(), watch = r.watch))
+                recordLast(Last.Volume(plan.op, plan.stream, SystemClock.elapsedRealtime(), currentApp(), watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "volume", "stream" to plan.stream.key, "op" to plan.op.describe(), "ok" to r.ok, "how" to r.how, "watch" to r.watch)
                 if (!r.ok) notify("couldn't change the volume", "failed") { StripRow.Miss("couldn't change the volume", false) to emptySet() }
                 else notify("") { StripRow.Done("volume ${plan.op.describe()}") to emptySet() }
@@ -1302,7 +1497,7 @@ class VoxService : AccessibilityService() {
             is Plan.RunApp -> {
                 val appBefore = currentApp()
                 val r = try { executor.launchApp(plan.pkg) } catch (e: Exception) { Executor.Result(false, "error: $e") }
-                followups.record(Last.OpenApp(plan.pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
+                recordLast(Last.OpenApp(plan.pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to plan.pkg, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
                 if (!r.ok) notify("couldn't open the app", "failed") { StripRow.Miss("couldn't open the app", false) to emptySet() }
                 else notify("") { StripRow.Done("open ${plan.pkg}") to emptySet() }
@@ -1575,6 +1770,8 @@ class VoxService : AccessibilityService() {
         val r = Runnable { cancelConfirm("timeout") }
         confirm = PendingConfirm(n, gen, mode, what, run, r)
         main.postDelayed(r, windowMs)
+        // [chain] an outward step's confirm: the step asks, and the chain's listen window closes while it is pending.
+        if (chain?.runningStep != null) chain!!.onOutcome(Outcome.Ask.Confirm)
         EventLog.ev("confirm_ask", "n" to n, "action" to what, "source" to source, "why" to why, "window_ms" to windowMs)
         trace("result", "waiting for a confirm pop ($why)")
         updateBadge(Outward.question(what))
@@ -1591,6 +1788,8 @@ class VoxService : AccessibilityService() {
         val c = confirm ?: return
         confirm = null
         main.removeCallbacks(c.timeout)
+        // [chain] a hiss / timeout ends the outward confirm; the step is stuck.
+        if (chain != null && (why == "hiss" || why == "timeout")) chain!!.onOutcome(Outcome.AskEnded(false))
         EventLog.ev("confirm_ask", "n" to c.n, "event" to "cancelled", "why" to why)
         updateBadge("cancelled")
     }
@@ -1612,6 +1811,7 @@ class VoxService : AccessibilityService() {
                 }
                 confirm = null; main.removeCallbacks(c.timeout)
                 EventLog.ev("confirm_ask", "n" to c.n, "event" to "confirmed", "action" to c.what)
+                chain?.onOutcome(Outcome.AskEnded(true))   // [chain]
                 if (c.gen == generation && armed) c.run()
                 true
             }
@@ -1636,7 +1836,7 @@ class VoxService : AccessibilityService() {
             "prep_ms" to SystemClock.elapsedRealtime() - t0)
         trace("exec", JSONObject().put("action", d.action).put("ok", r.ok).put("how", r.how).put("prep_ms", SystemClock.elapsedRealtime() - t0))
         // [followup] the slot records the action whatever the outcome (ok or not); a later "try again" re-runs it.
-        if (appBefore != null) followups.record(Last.Action(d.action, mode, t0, appBefore, watch = r.watch))
+        if (appBefore != null) recordLast(Last.Action(d.action, mode, t0, appBefore, watch = r.watch))
         lastSwipe = if (r.ok && p != null && p.sequence.size == 1 && d.action in HoldScrollTrigger.DIRECTIONS)
             HoldScrollTrigger.Swipe(n, d.action, p.app, mode, p.stamps.lastOrNull(), p.firstAt) else null
         if (d.action != "none" && r.ok) {
@@ -1664,6 +1864,15 @@ class VoxService : AccessibilityService() {
     /** [strip] While a live ticket's row says it, the strip shows the row; otherwise the toast, as before (exact text). */
     private fun notify(toastText: String, reason: String? = null, row: () -> Pair<StripRow, Set<Int>>?) {
         val t = strip
+        // [chain] while a chain step runs, its result routes to the queue (not the strip row); a Done with no watch is
+        // a timer / queued gesture, a Miss/Fail pauses the chain.
+        val rs = chain?.runningStep
+        if (rs != null) {
+            val rr = row()?.first
+            if (rr is StripRow.Done && rs.watches.isEmpty()) chain?.onOutcome(Outcome.DoneNoWatch)
+            else if (rr is StripRow.Miss || rr is StripRow.Ask) chain?.onOutcome(Outcome.Miss("nothing"))
+            return
+        }
         if (t == null || !settings.transcriptStrip || t.gen != generation) { if (toastText.isNotEmpty()) toast(toastText); return }
         val r = row() ?: return
         var rr = r.first
@@ -1778,10 +1987,20 @@ class VoxService : AccessibilityService() {
             }
             return
         }
+        // [chain] C1/Y1: a chain step's target under the panel jumps the panel to the top, then waits for the windows to settle.
+        if (chain?.runningStep != null && PanelPlace.needsJump(Box(t.left, t.top, t.right, t.bottom), overlay.panelRects())) {
+            overlay.panelJump(true)
+            main.postDelayed({ tapTargetNow(n, t, why, confirmed, alternatives) }, panelSettleMs)
+            return
+        }
+        tapTargetNow(n, t, why, confirmed, alternatives)
+    }
+
+    private fun tapTargetNow(n: Long, t: Target, why: String, confirmed: Boolean, alternatives: List<Target>) {
         val appBefore = currentApp()   // [followup]
         val r = try { executor.tapTarget(t, confirmed) } catch (e: Exception) { Executor.Result(false, "error: $e") }
         // [followup] a tapped target is its own last slot (the tapped target plus the other candidates).
-        followups.record(Last.Pick(t, alternatives, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
+        recordLast(Last.Pick(t, alternatives, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
         EventLog.ev("target", "n" to n, "result" to "tap", "why" to why, "option" to t.option, "x" to t.cx, "y" to t.cy,
             "ok" to r.ok, "how" to r.how, "watch" to r.watch)
         trace("exec", JSONObject().put("action", "tap_target").put("option", t.option).put("ok", r.ok).put("how", r.how))
@@ -1804,6 +2023,7 @@ class VoxService : AccessibilityService() {
         armChoiceTimeout()
         openChoiceListening()
         updateBadge("pick 1-${candidates.size}")
+        chain?.onOutcome(Outcome.Ask.Picker)   // [chain]
     }
 
     private fun armChoiceTimeout() {
@@ -1832,6 +2052,7 @@ class VoxService : AccessibilityService() {
         try { overlay.hideTargets() } catch (_: Exception) {}
         if (why != null) { EventLog.ev("choice", "n" to choiceN, "event" to "cancelled", "why" to why); updateBadge("cancelled") }
         if (why != null && strip?.kind == StripKind.PICK) clearStrip()   // [strip] a pick (why null) keeps it for the DO row
+        if (why != null) chain?.onOutcome(Outcome.AskEnded(false))   // [chain] a cancelled picker pauses the chain
     }
 
     /** The spoken text of a choice listen window: a number picks, a narrowing re-ranks, else it runs normally. */
@@ -1892,6 +2113,7 @@ class VoxService : AccessibilityService() {
     private fun tapPicked(t: Target, why: String, alternatives: List<Target> = emptyList()) {
         val n = choiceN; val gen = generation
         cancelChoice(null)
+        chain?.onOutcome(Outcome.AskEnded(true))   // [chain] the pick's tap is the step's exec
         // Let the highlight window disappear before the tap (and before the confirmer's first screenshot).
         main.postDelayed({ if (gen == generation && armed) tapTarget(n, t, why, alternatives = alternatives) }, 120)
     }
@@ -2141,7 +2363,12 @@ class VoxService : AccessibilityService() {
         super.onConfigurationChanged(newConfig)
         if (instance == null) return
         // Rotation or fold: the head goes to its remembered place for the new orientation.
-        main.post { try { overlay.hideMenu(); overlay.placeBadge(); overlay.stripThemeChanged(); overlay.placeStrip(); joy?.screenChanged() } catch (_: Exception) {} }
+        main.post {
+            try {
+                overlay.panelTop = if (screenW() <= screenH()) settings.panelTopPortrait.takeIf { it >= 0 } else settings.panelTopLandscape.takeIf { it >= 0 }
+                overlay.hideMenu(); overlay.placeBadge(); overlay.stripThemeChanged(); overlay.placeStrip(); joy?.screenChanged()
+            } catch (_: Exception) {}
+        }
     }
 
     // --- app and screen -------------------------------------------------------------------------------------------
@@ -2430,7 +2657,7 @@ class VoxService : AccessibilityService() {
                     .put("route", ai.vox.companion.audio.SpeakerRoute.routeName(ai.vox.companion.audio.SpeakerRoute.mediaRoute(audio)))
                     .put("locked", settings.mic.usesMic && mediaLocked(SystemClock.elapsedRealtime()))
                     .put("unlock_left_ms", mediaGate.leftMs(SystemClock.elapsedRealtime())))
-            "config" -> { settings.apply(m); mediaCheck(); rebuildDecider(); rebuildMatcher(); soundSourceChanged(); rebuildAsr(); if (m.has("asr_allow_online") || m.has("asr_language")) checkAsr("config"); reply.put("settings", settings.describe()) }   // [phone-mic] soundSourceChanged
+            "config" -> { settings.apply(m); mediaCheck(); rebuildDecider(); rebuildMatcher(); soundSourceChanged(); rebuildAsr(); if (m.has("asr_allow_online") || m.has("asr_language")) checkAsr("config"); if (m.has("panel_top_portrait") || m.has("panel_top_landscape")) { overlay.panelTop = if (screenW() <= screenH()) settings.panelTopPortrait.takeIf { it >= 0 } else settings.panelTopLandscape.takeIf { it >= 0 }; overlay.placeStrip() }; reply.put("settings", settings.describe()) }   // [chain] [phone-mic] soundSourceChanged
             "enroll_add" -> {
                 // {kind, name, examples: [{fp, fp_version, pitch16, meta?}], source?} for the active profile on the
                 // current sound source, or on `source` ([train] per-source stores).
@@ -2588,7 +2815,29 @@ class VoxService : AccessibilityService() {
                     .put("row_key", f.row?.key).put("signal", f.row?.signal?.name?.lowercase())
                     .put("cells_left", cellsLeft(SystemClock.elapsedRealtime(), f.deadline, f.totalMs))
                     .put("lines", org.json.JSONArray(f.lines.flatten().map { org.json.JSONObject().put("text", it.text).put("tone", it.tone.name.lowercase()) }))
+                    .put("scrollable", stripModel.scrollable()).put("scroll", stripModel.scrollOffset())   // [chain] Y2
+                    .put("chain", chain != null)   // [chain]
                 overlay.stripGeometry()?.let { reply.put("top", it[0]).put("height", it[1]) }
+            }
+            "chain_state" -> {   // [chain] the active queue + panel. Socket only; may carry step text (like strip_state).
+                val q = chain
+                reply.put("state", if (q == null) "none" else "active")
+                reply.put("steps", org.json.JSONArray(q?.stepList?.map { s ->
+                    JSONObject().put("n", s.n).put("text", s.text).put("status", s.status.name.lowercase())
+                        .put("note", s.note ?: JSONObject.NULL).put("kind", when (val c = s.command) {
+                            is SpeechCommand.Tap -> "tap"; is SpeechCommand.Nav -> "nav"; is SpeechCommand.Swipe -> "swipe";
+                            is SpeechCommand.OpenApp -> "open_app"; is SpeechCommand.Volume -> "volume"; is SpeechCommand.Timer -> "timer";
+                            is SpeechCommand.Phrase -> "phrase"; is SpeechCommand.Followup -> "followup"; else -> "other" })
+                } ?: emptyList<JSONObject>()))
+                val f = q?.frame()
+                reply.put("expanded", f?.expanded ?: false)
+                overlay.stripGeometry()?.let { reply.put("panel", JSONObject().put("top", it[0]).put("height", it[1]).put("jumped", overlay.isJumped)) }
+                overlay.queueGeometry()?.let { reply.put("queue_rect", JSONObject().put("top", it[0]).put("height", it[1])) }
+                    ?: reply.put("queue_rect", JSONObject.NULL)
+                overlay.queueFrame()?.let { df -> reply.put("drawn", org.json.JSONArray(df.rows.map { r ->
+                    JSONObject().put("n", r.n).put("status", r.status.name.lowercase()).put("note", r.note ?: JSONObject.NULL) })) }
+                    ?: reply.put("drawn", JSONObject.NULL)
+                reply.put("preview", JSONObject().put("now", JSONObject.NULL).put("next", JSONObject.NULL))
             }
             // A recorded clip through the on-device recognizer with the live settings, never online (AudioFileAsr.kt):
             // {wav_b64} -> {id}; poll asr_audio_result {id}. grammar {texts}: each text's parse, no screen read, no action.
@@ -2617,6 +2866,8 @@ class VoxService : AccessibilityService() {
             }
             "reset" -> {
                 generation++; sequencer.cancel(); sequencer.resetClock(); clickMerge.reset(); cursorClickGuard.reset(); holdScroll.stop("reset"); dropBufferedHold(); lastSwipe = null; overlay.stop(); executor.cancelDrag(); listenWindow.cancel("reset"); dictation.stop("reset"); recent.clear(); followups.clear(); clearStrip()   // [followup] [strip]
+                chain?.clear("reset")   // [chain]
+                chainMemory.clear()   // [chain]
                 cancelChoice("reset")
                 lastMsgId = null; armed = true; paused = false
                 if (m.optBoolean("clear_log")) EventLog.clear()

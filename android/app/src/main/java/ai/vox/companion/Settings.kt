@@ -50,6 +50,17 @@ class Settings(ctx: Context) {
     var listenWindowMs: Long get() = p.getLong("listen_window_ms", 6000); set(v) = p.edit().putLong("listen_window_ms", v).apply()
     /** The live transcript strip overlay (TranscriptStrip.kt): live words, a result row, and one retry after a miss. Off: toasts and no retry, exactly as before. */
     var transcriptStrip: Boolean get() = p.getBoolean("transcript_strip", true); set(v) = p.edit().putBoolean("transcript_strip", v).apply()
+    // [chain]
+    /** Spoken command chains (Chain.kt): with the strip on, several commands in one phrase run as a queue of steps. */
+    var chains: Boolean get() = p.getBoolean("chains", true); set(v) = p.edit().putBoolean("chains", v).apply()
+    // [chain]
+    /** The chain's tail listen window: after the last step, silence this long ends the chain. */
+    var chainTailMs: Long get() = p.getLong("chain_tail_ms", 3000); set(v) = p.edit().putLong("chain_tail_ms", v).apply()
+    // [chain]
+    /** The chain panel's saved top (px, -1 = default) per orientation (moved by the title-tab drag). */
+    var panelTopPortrait: Int get() = p.getInt("panel_top_portrait", -1); set(v) = p.edit().putInt("panel_top_portrait", v).apply()
+    // [chain]
+    var panelTopLandscape: Int get() = p.getInt("panel_top_landscape", -1); set(v) = p.edit().putInt("panel_top_landscape", v).apply()
     /** Speech in the phrase window: `android` (the phone's SpeechRecognizer) or `off` (a phrase comes only in a message). */
     var asrEngine: String get() = p.getString("asr_engine", "android")!!; set(v) = put("asr_engine", v)
     /** The Android recognizer may use the network. Off: offline only, and a missing offline pack is reported, never bypassed. */
@@ -129,6 +140,10 @@ class Settings(ctx: Context) {
             "app_prefer" -> { val v = o.getString(k).trim(); AppChoice.parsePrefer(v); appPrefer = v }
             "log_typed_text" -> logTypedText = o.getBoolean(k)
             "transcript_strip" -> transcriptStrip = o.getBoolean(k)
+            "chains" -> chains = o.getBoolean(k)   // [chain]
+            "chain_tail_ms" -> chainTailMs = o.getLong(k)   // [chain]
+            "panel_top_portrait" -> panelTopPortrait = o.getInt(k)   // [chain]
+            "panel_top_landscape" -> panelTopLandscape = o.getInt(k)   // [chain]
             "media_lock" -> mediaLock = o.getBoolean(k)
             "media_unlock_mode" -> { val v = o.getString(k); require(v in MediaGate.MODES) { "media_unlock_mode must be one of ${MediaGate.MODES}" }; mediaUnlockMode = v }
             "media_unlock_ms" -> { val v = o.getLong(k); require(v in MediaGate.UNLOCK_MS_RANGE) { "media_unlock_ms must be ${MediaGate.UNLOCK_MS_RANGE.first}..${MediaGate.UNLOCK_MS_RANGE.last}" }; mediaUnlockMs = v }
@@ -161,6 +176,7 @@ class Settings(ctx: Context) {
         .put("ollama_endpoint", ollamaEndpoint).put("ollama_model", ollamaModel).put("ollama_key", if (ollamaKey.isBlank()) "" else "set")
         .put("ollama_timeout_ms", ollamaTimeoutMs).put("ollama_target_timeout_ms", ollamaTargetTimeoutMs)
         .put("auto_scroll_pct", autoScrollPct).put("scroll_step", scrollStep).put("cursor_speed", cursorSpeed).put("cursor_pitch_sens", cursorPitchSens).put("feed_fling_ms", feedFlingMs).put("feed_fling_pct", feedFlingPct).put("timer_app", timerApp).put("app_prefer", appPrefer).put("log_typed_text", logTypedText).put("dictate_speech_hold_ms", dictateSpeechHoldMs).put("transcript_strip", transcriptStrip)
+        .put("chains", chains).put("chain_tail_ms", chainTailMs).put("panel_top_portrait", panelTopPortrait).put("panel_top_landscape", panelTopLandscape)
         .put("media_lock", mediaLock).put("media_unlock_mode", mediaUnlockMode).put("media_unlock_ms", mediaUnlockMs)
         .let { mic.describeInto(it) }   // [phone-mic]
 

@@ -247,23 +247,115 @@ class PhraseGrammarTest {
         "go back, back" to nav("go back"),
     ))
 
-    @Test fun twoDifferentCommandsAreRefusedNotGuessed() {
+    @Test fun twoCommandsBecomeAChainNotAGuess() {
+        // two different commands are a chain (not a refusal); "and" inside one command stays one command
+        assertEquals(listOf(nav("scroll down"), nav("go home")), chainSteps("scroll down and go home"))
+        assertEquals(listOf(nav("go back"), nav("go home")), chainSteps("go back go home"))
+        assertEquals(listOf(SpeechCommand.Tap("settings", "tap"), nav("scroll down")), chainSteps("tap settings and then scroll down"))
+        assertEquals(listOf(SpeechCommand.Timer(300), nav("go home")), chainSteps("set a timer for five minutes and go home"))
+        // "and" inside one command is not two
         check(listOf(
-            "scroll down and go home" to IGNORE,
-            "open youtube then go back" to IGNORE,
-            "go back go home" to IGNORE,
-            "tap settings and then scroll down" to IGNORE,
-            "set a timer for five minutes and go home" to IGNORE,
-            // "and" inside one command is not two
             "set a timer for an hour and a half" to SpeechCommand.Timer(5400),
             "set a timer for five minutes and thirty seconds" to SpeechCommand.Timer(330),
             "tap terms and conditions" to tap("terms and conditions"),
             "go back home" to nav("go home"),
-            "open youtube and spotify" to IGNORE,              // the second app shares the verb
-            "go to youtube and then spotify" to IGNORE,
             "open terms and conditions" to tap("terms and conditions"),
+            "scroll down and scroll down" to nav("scroll down"),   // the same command twice stays one command
         ))
-        assertTrue((parse("scroll down and go home") as SpeechCommand.Ignore).why.startsWith("two commands"))
+    }
+
+    // --- command chains -----------------------------------------------------------------------------------------
+
+    private fun chainSteps(s: String) = (parse(s) as? SpeechCommand.Chain)?.steps?.map { it.command }
+    private fun chain(s: String) = parse(s) as? SpeechCommand.Chain
+
+    @Test fun chainSplitsAtJoinersInOrder() {
+        // the user's example: 4 steps, the last a label-like phrase
+        val c = chain("open recently updated then tap K-9 Mail now open the menu then add it to favourites")!!
+        assertEquals(
+            listOf(
+                SpeechCommand.Tap("recently updated", "open"),
+                SpeechCommand.Tap("k 9 mail", "tap"),
+                SpeechCommand.Tap("menu", "open"),
+                SpeechCommand.Phrase("add it to favourites", "unparsed"),
+            ),
+            c.steps.map { it.command },
+        )
+        assertEquals(false, c.dangling); assertEquals(0, c.dropped)
+        // a chain of navigation
+        assertEquals(
+            listOf(nav("scroll down"), nav("go back"), nav("go home")),
+            chainSteps("scroll down and then go back and after that go home"),
+        )
+    }
+
+    @Test fun chainVerbSharingAndCaps() {
+        // "open youtube and spotify": the second app shares the verb
+        val a = chainSteps("open youtube and spotify")
+        assertEquals(2, a!!.size)
+        assertEquals(YT, (a[0] as SpeechCommand.OpenApp).pkg)
+        assertEquals(SP, (a[1] as SpeechCommand.OpenApp).pkg)
+        // "open youtube then go back": two steps in order
+        val b = chainSteps("open youtube then go back")
+        assertEquals(2, b!!.size)
+        assertEquals(YT, (b[0] as SpeechCommand.OpenApp).pkg)
+        assertEquals(nav("go back"), b[1])
+        // "go to youtube and then spotify": the second app shares the verb across a two-word joiner
+        val c = chainSteps("go to youtube and then spotify")
+        assertEquals(2, c!!.size)
+        assertEquals(YT, (c[0] as SpeechCommand.OpenApp).pkg)
+        assertEquals(SP, (c[1] as SpeechCommand.OpenApp).pkg)
+        // 9 joined commands -> 8 steps + dropped 1
+        val nine = chain("scroll down and go back and scroll up and go home and next and pause and play and scroll down and go home")!!
+        assertEquals(8, nine.steps.size); assertEquals(1, nine.dropped)
+    }
+
+    @Test fun chainDanglingJoiner() {
+        val c = chain("tap settings then")!!
+        assertEquals(1, c.steps.size); assertTrue(c.dangling)
+        assertEquals(SpeechCommand.Tap("settings", "tap"), c.steps[0].command)
+    }
+
+    @Test fun onlyThenAndThenAfterThatAndBareAndDangle() {
+        assertTrue(chain("tap settings then")!!.dangling)
+        assertTrue(chain("tap settings and then")!!.dangling)
+        assertTrue(chain("tap settings after that")!!.dangling)
+        assertTrue(chain("tap settings and")!!.dangling)
+        // "now", "also", "next" are not dangling joiners: they parse as the single command, as on main
+        assertNull(chain("go home now"))
+        assertNull(chain("scroll down also"))
+        assertNull(chain("open settings next"))
+        assertEquals(nav("go home"), parse("go home now"))
+    }
+
+    @Test fun chainSelfCorrections() {
+        // a correction inside a segment stays inside it
+        assertEquals(listOf(SpeechCommand.Tap("settings", "tap"), SpeechCommand.Tap("bluetooth", "tap")), chainSteps("tap settings then tap wifi, no wait, bluetooth"))
+        // a correction leading a segment replaces the previous segment (the whole thing is one command)
+        assertEquals(nav("go home"), parse("open settings and then no wait go home"))
+    }
+
+    @Test fun chainPauseMarks() {
+        // a pause between "settings" and "tap" splits "tap settings tap wifi" into two steps
+        val basic = PhraseGrammar.basic("tap settings tap wifi").split(' ').filter { it.isNotEmpty() }
+        val pause = basic.indexOfLast { it == "tap" }
+        assertEquals(
+            listOf(SpeechCommand.Tap("settings", "tap"), SpeechCommand.Tap("wifi", "tap")),
+            (PhraseGrammar.parse("tap settings tap wifi", ctx, setOf(pause)) as SpeechCommand.Chain).steps.map { it.command },
+        )
+        // a pause also splits where only a label-like right side follows (run-together needs both concrete)
+        val b2 = PhraseGrammar.basic("tap settings favourites").split(' ').filter { it.isNotEmpty() }
+        val p2 = b2.indexOf("favourites")
+        assertEquals(
+            listOf(SpeechCommand.Tap("settings", "tap"), SpeechCommand.Phrase("favourites", "unparsed")),
+            (PhraseGrammar.parse("tap settings favourites", ctx, setOf(p2)) as SpeechCommand.Chain).steps.map { it.command },
+        )
+    }
+
+    @Test fun nBestPrefersAnAllConcreteChain() {
+        val p = PhraseGrammar.choose(Heard(listOf("scroll down and go home and then", "scroll down and go home")), ctx)
+        assertTrue(p.command is SpeechCommand.Chain)
+        assertEquals(2, (p.command as SpeechCommand.Chain).steps.size)
     }
 
     @Test fun chatterAndFillerDoNothing() {

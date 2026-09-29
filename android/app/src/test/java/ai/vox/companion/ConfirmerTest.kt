@@ -118,4 +118,18 @@ class ConfirmerTest {
         c.onEvent(AccessibilityEvent.TYPE_WINDOWS_CHANGED, "", 12)   // confirms watch 2
         assertEquals(listOf(1L to "superseded", 2L to "confirmed (events)"), results)
     }
+
+    @Test fun onBeginFiresOncePerBegin() {
+        val r = Rig()
+        val begins = mutableListOf<Pair<Long, String>>()
+        val c = Confirmer(
+            Handler(Looper.getMainLooper()), own,
+            fingerprint = { r.walks++; r.fp }, timeoutMs = { 1500L }, grab = { it(null) }, gate = GrabGate(),
+            ownWindow = { it == ownWindowId }, clock = { r.now }, schedule = { _, f -> r.timers += f },
+            onBegin = { watch, action -> begins += watch to action },
+        )
+        c.begin("tap", injected = true)
+        c.begin("back")
+        assertEquals(listOf(1L to "tap", 2L to "back"), begins)
+    }
 }
