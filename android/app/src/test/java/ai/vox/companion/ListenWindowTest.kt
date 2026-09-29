@@ -201,4 +201,18 @@ class ListenWindowTest {
         assertNull(AsrPlan.error(7, offlineOnly = true).second)
         assertNull(AsrPlan.error(6, offlineOnly = true).second)
     }
+
+    @Test fun onWordsSeesPartialsAndTheFinalBestAndNothingAfterClose() {
+        val rec = Rec(); val mic = Mic()
+        val (c, w, _) = harness(rec, mic)
+        val words = mutableListOf<String>()
+        w.open(rec, 6000, onWords = { words += it }) { }
+        c.advance(ListenWindow.HANDOFF_MS)
+        rec.listener!!.onPartial("open you")
+        rec.listener!!.onPartial("open youtube")
+        rec.listener!!.onFinal(Heard(listOf("open youtube", "open you tube")))
+        assertEquals(listOf("open you", "open youtube", "open youtube"), words)
+        rec.listener!!.onPartial("late")   // after close: nothing more
+        assertEquals(3, words.size)
+    }
 }

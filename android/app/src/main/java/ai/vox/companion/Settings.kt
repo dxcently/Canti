@@ -48,6 +48,8 @@ class Settings(ctx: Context) {
     /** How long an outward action (like, follow, share...) waits for its confirm click ([Outward.windowMs]). */
     var outwardConfirmMs: Long get() = p.getLong("outward_confirm_ms", Outward.DEFAULT_CONFIRM_MS); set(v) = p.edit().putLong("outward_confirm_ms", v).apply()
     var listenWindowMs: Long get() = p.getLong("listen_window_ms", 6000); set(v) = p.edit().putLong("listen_window_ms", v).apply()
+    /** The live transcript strip overlay (TranscriptStrip.kt): live words, a result row, and one retry after a miss. Off: toasts and no retry, exactly as before. */
+    var transcriptStrip: Boolean get() = p.getBoolean("transcript_strip", true); set(v) = p.edit().putBoolean("transcript_strip", v).apply()
     /** Speech in the phrase window: `android` (the phone's SpeechRecognizer) or `off` (a phrase comes only in a message). */
     var asrEngine: String get() = p.getString("asr_engine", "android")!!; set(v) = put("asr_engine", v)
     /** The Android recognizer may use the network. Off: offline only, and a missing offline pack is reported, never bypassed. */
@@ -126,6 +128,7 @@ class Settings(ctx: Context) {
             "timer_app" -> timerApp = o.getString(k).trim()
             "app_prefer" -> { val v = o.getString(k).trim(); AppChoice.parsePrefer(v); appPrefer = v }
             "log_typed_text" -> logTypedText = o.getBoolean(k)
+            "transcript_strip" -> transcriptStrip = o.getBoolean(k)
             "media_lock" -> mediaLock = o.getBoolean(k)
             "media_unlock_mode" -> { val v = o.getString(k); require(v in MediaGate.MODES) { "media_unlock_mode must be one of ${MediaGate.MODES}" }; mediaUnlockMode = v }
             "media_unlock_ms" -> { val v = o.getLong(k); require(v in MediaGate.UNLOCK_MS_RANGE) { "media_unlock_ms must be ${MediaGate.UNLOCK_MS_RANGE.first}..${MediaGate.UNLOCK_MS_RANGE.last}" }; mediaUnlockMs = v }
@@ -157,7 +160,7 @@ class Settings(ctx: Context) {
         .put("enroll_reject_mult", enrollRejectMult).put("enroll_gesture_relabel", enrollGestureRelabel).put("ble_device", bleDevice ?: JSONObject.NULL)
         .put("ollama_endpoint", ollamaEndpoint).put("ollama_model", ollamaModel).put("ollama_key", if (ollamaKey.isBlank()) "" else "set")
         .put("ollama_timeout_ms", ollamaTimeoutMs).put("ollama_target_timeout_ms", ollamaTargetTimeoutMs)
-        .put("auto_scroll_pct", autoScrollPct).put("scroll_step", scrollStep).put("cursor_speed", cursorSpeed).put("cursor_pitch_sens", cursorPitchSens).put("feed_fling_ms", feedFlingMs).put("feed_fling_pct", feedFlingPct).put("timer_app", timerApp).put("app_prefer", appPrefer).put("log_typed_text", logTypedText).put("dictate_speech_hold_ms", dictateSpeechHoldMs)
+        .put("auto_scroll_pct", autoScrollPct).put("scroll_step", scrollStep).put("cursor_speed", cursorSpeed).put("cursor_pitch_sens", cursorPitchSens).put("feed_fling_ms", feedFlingMs).put("feed_fling_pct", feedFlingPct).put("timer_app", timerApp).put("app_prefer", appPrefer).put("log_typed_text", logTypedText).put("dictate_speech_hold_ms", dictateSpeechHoldMs).put("transcript_strip", transcriptStrip)
         .put("media_lock", mediaLock).put("media_unlock_mode", mediaUnlockMode).put("media_unlock_ms", mediaUnlockMs)
         .let { mic.describeInto(it) }   // [phone-mic]
 

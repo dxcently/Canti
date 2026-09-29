@@ -29,7 +29,7 @@ class ListenWindow(
     data class Done(val heard: Heard?, val why: String, val status: String?, val partials: Int, val peakDb: Float?,
                     val readyMs: Long?, val ms: Long, val engine: String, val micYielded: Boolean)
 
-    private inner class Session(val rec: PhraseRecognizer, val onActivity: ((String) -> Unit)?, val onDone: (Done) -> Unit) {
+    private inner class Session(val rec: PhraseRecognizer, val onActivity: ((String) -> Unit)?, val onWords: ((String) -> Unit)?, val onDone: (Done) -> Unit) {
         val t0 = scheduler.now()
         val timers = mutableListOf<() -> Unit>()
         var micHeld = false
@@ -45,10 +45,10 @@ class ListenWindow(
     val isOpen get() = session != null
     val engine get() = session?.rec?.name
 
-    /** [onActivity]: "ready" (the recognizer listens) and "partial" (words so far), while this window is the open one (dictation's silence clock). */
-    fun open(rec: PhraseRecognizer, windowMs: Long, onActivity: ((String) -> Unit)? = null, onDone: (Done) -> Unit) {
+    /** [onActivity]: "ready" (the recognizer listens) and "partial" (words so far), while this window is the open one (dictation's silence clock). [onWords]: the partial text and the final best text, only while this window is the open one. */
+    fun open(rec: PhraseRecognizer, windowMs: Long, onActivity: ((String) -> Unit)? = null, onWords: ((String) -> Unit)? = null, onDone: (Done) -> Unit) {
         session?.let { finish(it, null, "cancelled: superseded", null) }
-        val s = Session(rec, onActivity, onDone)
+        val s = Session(rec, onActivity, onWords, onDone)
         session = s
         rec.status()?.let { st -> finish(s, null, "unavailable", st); return }
         var capturing = false
@@ -78,11 +78,12 @@ class ListenWindow(
 
     private fun listener(s: Session) = object : PhraseRecognizer.Listener {
         override fun onReady() { if (session === s) { s.readyAt = scheduler.now(); s.onActivity?.invoke("ready") } }
-        override fun onPartial(text: String) { if (session === s) { s.lastPartial = text; s.partials++; if (text.isNotBlank()) s.onActivity?.invoke("partial") } }
+        override fun onPartial(text: String) { if (session === s) { s.lastPartial = text; s.partials++; if (text.isNotBlank()) { s.onActivity?.invoke("partial"); s.onWords?.invoke(text) } } }
         override fun onLevel(db: Float) { if (session === s && (s.peakDb == null || db > s.peakDb!!)) s.peakDb = db }
         override fun onFinal(heard: Heard) {
             if (session !== s) return
             val h = heard.takeIf { it.hypotheses.any { t -> t.isNotBlank() } } ?: s.partialHeard()
+            h?.best?.takeIf { it.isNotBlank() }?.let { s.onWords?.invoke(it) }
             finish(s, h, if (h == null) "no speech" else "final", null)
         }
         override fun onError(code: Int, what: String, status: String?) {

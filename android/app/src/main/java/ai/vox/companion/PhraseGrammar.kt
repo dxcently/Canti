@@ -563,6 +563,31 @@ object PhraseGrammar {
         parsed.forEachIndexed { i, c -> val r = rank(c, tapScore); if (r > bestR) { bestR = r; bestI = i } }
         return Pick(bestI, hyps[bestI], parsed[bestI], parsed)
     }
+
+    /**
+     * Every word the grammar itself knows, for the transcript strip's "don't know <word>" rule (additive, read-only:
+     * no parse result changes). The union of the grammar's word sets, the spoken phrase forms, the swipe/type/volume
+     * keywords reachable here, the timer units, and the installed app labels/aliases.
+     */
+    internal fun knownWords(ctx: Context): Set<String> {
+        val out = HashSet<String>()
+        fun addWord(w: String) { val k = TargetQuery.key(w); if (k.isNotEmpty()) out += k }
+        fun addPhrase(p: String) { p.split(' ').forEach(::addWord) }
+        LEAD_WORDS.forEach(::addWord); WAKE.forEach(::addWord); COMMAND_START.forEach(::addWord)
+        TAKES_ARG.forEach(::addWord); SOFT_WORDS.forEach(::addWord); ACK.forEach(::addWord)
+        CHATTER.forEach(::addWord); JOINERS.forEach(::addPhrase); DIRECTIONS.forEach(::addWord)
+        REPEATS.forEach(::addPhrase); APP_ONLY_VERBS.forEach(::addPhrase)
+        LEAD_PHRASES.forEach(::addPhrase); TRAIL_PHRASES.forEach(::addPhrase); SOFT_PHRASES.forEach(::addPhrase)
+        ING.keys.forEach(::addWord); ING.values.forEach(::addWord); REPEATABLE.forEach(::addWord)
+        TargetMatcher.ROLE_WORDS.keys.forEach(::addWord); TargetMatcher.FILLER.forEach(::addWord)
+        Vocab.PHRASES.values.flatten().forEach(::addPhrase)
+        Vocab.PAUSE_WORDS.forEach(::addPhrase); Vocab.PLAY_WORDS.forEach(::addPhrase)
+        SwipeGrammar.HORIZONTAL.forEach(::addWord); SwipeGrammar.VERTICAL.forEach(::addWord)
+        addWord("type"); addWord("write"); TypeGrammar.START.forEach(::addPhrase)
+        Durations.unitWords.forEach(::addWord)
+        ctx.apps.forEach { a -> addPhrase(a.label); a.aliases.forEach(::addPhrase) }
+        return out
+    }
 }
 
 // --- numbers and durations ---------------------------------------------------------------------------------------
@@ -613,6 +638,8 @@ object Durations {
     private val UNIT = mapOf("second" to 1, "seconds" to 1, "sec" to 1, "secs" to 1,
         "minute" to 60, "minutes" to 60, "min" to 60, "mins" to 60, "minuets" to 60,
         "hour" to 3600, "hours" to 3600, "hr" to 3600, "hrs" to 3600)
+    /** The timer unit words the transcript strip counts as known ("second", "minutes", ...). */
+    internal val unitWords: Set<String> get() = UNIT.keys
     /** Heard in place of a number, accepted only directly before a unit with no number of its own. */
     private val SOUNDALIKE = mapOf("for" to 4.0, "fore" to 4.0, "to" to 2.0, "too" to 2.0, "won" to 1.0, "ate" to 8.0, "tree" to 3.0, "free" to 3.0)
 
@@ -790,13 +817,13 @@ object TargetMatcher {
         setOf("photo", "picture", "image"),
     )
     private val SYN: Map<String, Set<String>> = GROUPS.flatMap { g -> g.map { it to g } }.toMap()
-    private val ROLE_WORDS = mapOf("button" to "button", "icon" to "button", "tab" to "tab", "field" to "text field",
+    internal val ROLE_WORDS = mapOf("button" to "button", "icon" to "button", "tab" to "tab", "field" to "text field",
         "box" to "text field", "bar" to "text field", "switch" to "switch", "toggle" to "switch", "checkbox" to "switch",
         "item" to "list item", "row" to "list item", "entry" to "list item", "image" to "image", "link" to "item", "option" to "item")
     private val POSITION_SAY = mapOf("upper left" to "top left", "upper right" to "top right", "lower left" to "bottom left",
         "lower right" to "bottom right", "middle" to "center", "centre" to "center")
     // "one" is a number word ("vocabulary one" = "01 vocabulary"), not filler; "the one"/"this one" still resolve to 1.
-    private val FILLER = setOf("the", "a", "an", "that", "this", "on", "at", "in", "of", "corner", "screen")
+    internal val FILLER = setOf("the", "a", "an", "that", "this", "on", "at", "in", "of", "corner", "screen")
 
     /** [full]: the whole name run together ("in box" = "Inbox", "add item" = "Add item"), checked before the parts. */
     private data class Query(val words: List<String>, val role: String?, val position: String?, val full: String)

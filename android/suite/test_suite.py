@@ -74,7 +74,7 @@ class Ctx:
     def reset(self) -> None:
         self.vox.control("reset")
         self.vox.control("config", decider="rules", gap_ms=600, confirm_timeout_ms=1500, http_timeout_ms=2000, min_confidence=0.5,
-                         target_model="", target_min_confidence=0.6, target_choose_ms=6000, asr_engine="off")
+                         target_model="", target_min_confidence=0.6, target_choose_ms=6000, asr_engine="off", transcript_strip=False)
         self.vox.control("profile", profile=None)
         self.vox.mode("gesture")
 
@@ -1405,6 +1405,82 @@ def ui_flutter_status_screen_is_readable_and_pausable(c: Ctx):
     assert "LegacySettingsActivity" in top, top
     sh("input keyevent KEYCODE_BACK")
     own_targets(c, "Pause Canti", 5)
+
+
+# --- the transcript strip (TranscriptStrip.kt) ----------------------------------------------------------------------
+# UNVERIFIED: these run on the emulator (the coordinator runs `suite/run.sh test`); the per-test baseline config above
+# sets `transcript_strip=False`, so the 47 pre-existing tests keep their toasts and never open a retry window.
+
+
+@test
+def strip_done_row_after_phrase(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    m = c.ev.mark()
+    c.vox.control("listen")
+    assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 3)
+    m2 = c.ev.mark()
+    c.vox.phrase("scroll down")
+    st = c.ev.wait(m2, lambda e: e["ev"] == "strip" and e.get("result") == "done", 5)
+    assert st, [e["ev"] for e in c.ev.since(m2)]
+    assert not any(e["ev"] == "toast" for e in c.ev.since(m2)), "no toast with the strip on"
+    state = c.vox.control("strip_state")
+    assert state.get("visible") and state.get("row_key") == "DO", state
+    end = time.time() + 4
+    while time.time() < end and c.vox.control("strip_state").get("visible"):
+        time.sleep(0.2)
+    ss = c.vox.control("strip_state")
+    assert not ss.get("visible"), (ss, [{k: e.get(k) for k in ("ev", "state", "retry", "result", "reason", "why", "armed")} for e in c.ev.since(m) if e["ev"] in ("strip", "listening", "armed", "ignored", "toast")])
+
+
+@test
+def strip_miss_retries_once(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    m = c.ev.mark()
+    c.vox.control("listen")
+    c.vox.phrase("open the walrus app")
+    st = c.ev.wait(m, lambda e: e["ev"] == "strip" and e.get("result") in ("miss", "fail") and
+                   e.get("reason") in ("not_on_screen", "no_app"), 5)
+    assert st, [e["ev"] for e in c.ev.since(m)]
+    assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("retry") is True, 5), "one retry window"
+    # send nothing and let the retry time out -> a second miss with no second retry window
+    m2 = c.ev.mark()
+    assert c.ev.wait(m2, lambda e: e["ev"] == "strip" and e.get("result") == "miss" and e.get("reason") == "no_words", 12), \
+        [{k: e.get(k) for k in ("ev", "state", "retry", "result", "reason", "why", "armed")} for e in c.ev.since(m) if e["ev"] in ("strip", "listening", "armed", "ignored", "toast")]
+    assert not any(e["ev"] == "listening" and e.get("retry") for e in c.ev.since(m2)), "no second retry"
+
+
+@test
+def strip_retry_not_after_disarm(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    m = c.ev.mark()
+    c.vox.control("listen")
+    c.vox.phrase("open the walrus app")
+    assert c.ev.wait(m, lambda e: e["ev"] == "strip" and e.get("result") in ("miss", "fail"), 5)
+    m2 = c.ev.mark()
+    c.vox.disarm()   # the device disarms: the retry window and the strip end
+    time.sleep(1.0)
+    assert not any(e["ev"] == "listening" and e.get("retry") for e in c.ev.since(m2)), [{k: e.get(k) for k in ("ev", "state", "retry", "result", "reason", "why", "armed")} for e in c.ev.since(m) if e["ev"] in ("strip", "listening", "armed", "ignored", "toast")]
+    ss = c.vox.control("strip_state")
+    assert not ss.get("visible"), (ss, [{k: e.get(k) for k in ("ev", "state", "retry", "result", "reason", "why", "armed")} for e in c.ev.since(m) if e["ev"] in ("strip", "listening", "armed", "ignored", "toast")])
+
+
+@test
+def strip_off_keeps_toasts(c: Ctx):
+    # transcript_strip is already False from the baseline reset
+    m = c.ev.mark()
+    c.vox.control("listen")
+    c.vox.phrase("open the walrus app")
+    toast = c.ev.wait(m, lambda e: e["ev"] == "toast", 5)
+    assert toast and "walrus" in toast.get("text", ""), toast
+    assert not any(e["ev"] == "strip" for e in c.ev.since(m))
+
+
+@test
+def strip_no_text_in_log(c: Ctx):
+    # after tests 1 and 2, the `strip` events carry no text-bearing keys
+    for e in c.ev.since(0):
+        if e["ev"] == "strip":
+            assert "text" not in e and "query" not in e and "words" not in e, e
 
 
 def main() -> None:

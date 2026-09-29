@@ -284,4 +284,22 @@ class VoiceTypingTest {
         assertEquals("Reply: send it\npress send enter", f.value)
         assertTrue(f.actions.all { it == "set_text" || it == "set_selection" })
     }
+
+    @Test fun dictationReportsWordsTypedAndQuiet() {
+        val clock = Clock(); val rec = Rec(); val field = Field()
+        val words = mutableListOf<String>(); val typed = mutableListOf<String>(); val quiets = mutableListOf<Long>()
+        val typer = object : Dictation.Typer {
+            override fun refusal() = TextInsert.refusal(field)
+            override fun type(text: String) = TextInsert.insert(field, text)
+        }
+        val d = Dictation(clock, null, ListenWindow(clock, null), { rec }, typer, { false }, {}, { _, _ -> },
+            onWords = { words += it }, onTyped = { typed += it }, onQuiet = { quiets += it })
+        assertNull(d.start("phrase"))
+        clock.advance(ListenWindow.HANDOFF_MS)
+        rec.say("hello world")
+        assertTrue(words.contains("hello world"))       // the partial and the final best
+        assertEquals(listOf("hello world"), typed)      // one settled utterance
+        assertTrue(quiets.isNotEmpty())
+        assertTrue(quiets.all { it > clock.t || it > 0 })
+    }
 }
