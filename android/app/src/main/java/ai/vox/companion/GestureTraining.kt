@@ -192,6 +192,8 @@ interface TrainHost : Scheduler {
     fun source(): String
     /** Why a take cannot be recorded right now (paused, cursor mode, mic off, ...), or null. */
     fun blocker(): String?
+    /** [rec] Why a training round cannot start at all (the dev test recorder is open), or null. */
+    fun refuseStart(): String? = null
     /** What single action fixes [blocker] (for the training screen's "Not ready" button), or null. */
     fun blockerAction(): String? = null
     /** Sounds the mic heard but dropped since [sinceMs] (level gate, touch, the joystick's filter), as one line, or null. */
@@ -315,6 +317,7 @@ class GestureTrainer(private val host: TrainHost) {
 
     private fun start(gesture: String, cellId: String?, source: String?) {
         require(gesture in TrainPlan.GESTURES) { "gesture must be one of ${TrainPlan.GESTURES}" }
+        host.refuseStart()?.let { throw IllegalArgumentException(it) }   // [rec]
         val cur = host.source()
         require(source == null || source == cur) { "the current sound source is ${srcName(cur)}: switch to ${srcName(source!!)} to train it" }
         s?.let { finish("restart") }

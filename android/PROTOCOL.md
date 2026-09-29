@@ -380,8 +380,8 @@ foreground service stays)),
 `mic_status`), `mic_service{state: foreground|refused}`, `mic_sound{label, text, t_start_ms, t_end_ms, detect_ms, latency_ms,
 gate{like, why, cues, dur_ms, floor_db, level_db, snr_db, voiced_frac, strong_voiced_frac, clarity_med, f0_med_hz,
 onset_flux_db, energy_iqr_db, centroid_hz, peak_centroid_hz, centroid_spread_oct, zcr, lf_ratio, hf_ratio, pitch_jumps_hz,
-voiced_runs, syllable_peaks, ...},
-dropped (touch|below level gate|joystick ...|calibrating|dry_run|null), touch_ms, relabel (e.g. `pop->click`, or null), media, media_speaker, gated}` per phone-mic sound (the extractor's own gate
+voiced_runs, syllable_peaks, ...}, pitch16 (16 floats or `[]`), f0_hz (Hz or null) (both: *Test recorder (dev)*),
+dropped (touch|below level gate|joystick ...|calibrating|recording|dry_run|null), touch_ms, relabel (e.g. `pop->click`, or null), media, media_speaker, gated}` per phone-mic sound (the extractor's own gate
 numbers, never audio; the spectral ones are over 90-7600 Hz of the 16 kHz stream: `centroid_hz` energy-weighted over
 the sound's frames (the media-hiss rule reads it), `peak_centroid_hz` at its loudest frame, `zcr` zero crossings per
 sample, `lf_ratio` / `hf_ratio` the energy share below 1 kHz / above 3.5 kHz; all exactly the raw event's values), `mic_touch{injected, device, source, flags}` (the first 3 touches), `mic_touch_watch{state}`,
@@ -787,6 +787,93 @@ is connected.
 
 The Dart side is `ui/lib/src/channel_backend.dart` (`ChannelBackend`). `FakeBackend` is the in-memory stand-in
 used by the widget tests and the Linux desktop runner.
+
+## Test recorder (dev)
+
+DEV-ONLY (round 7 §3d in-app): the in-app range recorder + quick record, gated by `BuildConfig.DEV_RECORDER` (true in
+debug, false in release; read as `ai.vox.companion.rec.DevRec.enabled`). All code is in package `ai.vox.companion.rec`;
+every hook in existing files is a `// [rec]` one-liner that no-ops when the gate is off. The Pico source is not
+supported (it sends features, never audio): the recorder records the running phone/usb capture only. Audio stays in
+app-private `files/` (run-as only; `allowBackup=false`), is never uploaded or logged; the ring is RAM-only. Removing
+for release = set `DEV_RECORDER` false (or delete package `rec` + the `[rec]` lines).
+
+`uiStatus` gains `dev_recorder` (the gate) and `recording` (a recorder session is open); the UI shows every
+recorder/quick-record entry only when `dev_recorder == true`.
+
+- The recorder runs `extractor/prompts/range_v1.json` (`short` 42 takes; `full` 269 takes + 7 backgrounds), bundled as
+  the asset `range/range_v1.json` by a Gradle copy task, and writes the exact `range_layout.validate_session` layout
+  under `files/range/<name>/` (spec.json verbatim; session.json with `recorder:"app"`/`range_pending`/`app_range`/
+  `skipped_by_sitting` and `range` Hz null; labels.jsonl / backgrounds.jsonl / ratings.jsonl; `takes/` / `backgrounds/`
+  WAVs — tmp + rename before the label row, last row per take_id wins).
+- Quick record snapshots the last ~12 s RAM ring plus the HeardLog window into one pending snapshot; nothing touches
+  storage until `qr_save` writes `files/quickrec/<id>/{clip.wav, meta.json}`.
+
+Ops (method channel `ai.vox/recorder`, main thread; the same names are debug ops on the control socket, flat replies
+like `measure_*`; with the gate off the channel answers `{enabled:false}` and the debug ops `{ok:false,
+"recorder disabled"}`): `rec_list {}`, `rec_start {who:"me"|"other", speaker?, profile:"short"|"full"}`, `rec_open
+{name}`, `rec_status {}`, `rec_next {take_id?}`, `rec_go {}`, `rec_abort {}`, `rec_skip {}`, `rec_redo_last {}`,
+`rec_rate {block, rating:1..5, note}`, `rec_close {}`, `rec_clear {sessions?, quickrec?}`, `qr_snap {}`, `qr_pending
+{}`, `qr_save {id, label, note?, sound?}`, `qr_discard {id}`. Kotlin pushes `rec_status {map}` on every change and every
+100 ms while ready/countdown/recording, and `qr_snapshot {map}` from the badge's QUICK REC menu row (which then opens
+the `quickrec` route).
+
+`rec_status` map: `{enabled, active, name, speaker, profile, mic, rate, state:
+idle|ready|countdown|recording|saved|no_sound|rate|done|error, error, reason, take: {take_id, block, block_title, i,
+n, block_i, block_n, cue, expect, cond, bg, kind, quiet, manual, target_s, max_s, seconds, redo}, countdown_s, rec_s,
+level: {bars_db, min_db, peak_dbfs, note}, heard: [HeardSound...], last: {take_id, saved, dur_ms, reason, f0_hz,
+below_f0_min}|null, blocks: [{id, title, intro, done, total, rating, skipped}], done, total, skipped, bytes,
+backgrounds_done, backgrounds_total, rated_blocks, next: {take_id, cue}|null, defaults: {distances_cm, speed_s, gap_s},
+scale: {low_hz, home_hz, high_hz, from:"calibration"}|null, plan: [{take_id, block}]}`. HeardSound: `{label, t_start_ms, t_end_ms, rel_ms,
+dur_ms, pitch16, f0_hz, dropped, gated, relabel, did: {n, sequence, action, ok}|null, did_text, ago_s?}`.
+
+`plan` is the open profile's whole take list in plan order (the order `range_layout.build_plan` gives; `short` 42,
+`full` 276 with the backgrounds). It is fixed for the session, so it is in every command reply and every state-change
+push but left out of the 10 Hz ready/countdown/recording pushes (about 16 KB for `full`): a UI keeps the last one it got
+and sends `rec_next {take_id}` from it (header arrows, block rows). `next` is the first take neither recorded nor
+skipped this sitting.
+
+Sessions are named like the desktop recorder (`range_layout.default_session_name`): `range-<yyyyMMdd-HHmmss>` for
+`who:"me"` (speaker `self`), `range-<speaker>-<yyyyMMdd-HHmmss>` for another speaker (a pseudonymous id, letters, digits,
+`-`, `_`); a clash within the same second gets `-2`, `-3`, ...
+
+A **missed take** (`no_sound`: the detector heard nothing to keep) is saved and kept, never overwritten by "Try again":
+its WAV is `takes/<block>/<take_id>.a<N>.wav` and its label row carries `no_sound: true, attempt: N` (N = the
+attempt's redo number). A heard attempt keeps the plain `takes/<block>/<take_id>.wav`. The take is its last heard row
+(`range_layout.take_rows`); a take with only missed attempts is its last missed row. `range_layout.validate_session`
+checks every missed attempt's file and fields; `range_suite` counts each one as a gate miss (kept 0) and reports them
+under `no_sound`.
+
+"What Canti did" (`did` / `did_text`), from the in-memory event log only (no audio): a dropped sound is `ignored:
+<why>`; a sound followed within 1 s by `media_gate{dropped:true}` of its kind is `ignored: media lock`; otherwise the
+delivered sounds are taken in time order by the resolves that follow them (each resolve takes the last k delivered
+sounds of the last 3 s, k = its sequence length), then `decision{n}.action` and `exec{n}.ok`; one no resolve took is `no
+action`. A gated sound shows as `UNKNOWN (MEDIA) → <action>`. The log follows the capture generation: a new capture
+clears it, a late event of an older one is ignored.
+
+Quick record: `qr_snap` (or the badge row) holds the ring's current contents atomically (`rate`, capture generation) and
+the heard window; an empty ring (the mic not listening) replies `{id:null, error:"nothing heard yet: the mic is not
+listening"}`. `qr_save {id, label, note?, sound?}` refuses an unknown label or a `sound` index outside the snapshot's
+sounds and writes `clip.wav` (PCM16 mono) + `meta.json {version, id, saved_at_ms, label (rise|fall|dip|arch|pop|pop pop|click|hiss|hum|
+misfire), note, sound, rate, seconds, source (phone|usb), mic, app, mode, sounds: [HeardSound with did/did_text]}`
+(tmp + rename). The snapshot map (`qr_snapshot` / `qr_pending`) also carries `last_action`. `rec_clear {sessions?: [names], quickrec?: [ids] | "all"}` deletes exactly those
+(names and ids are checked, never a path; refused while a session is open) and replies `{ok, deleted: {sessions,
+quickrec}}`.
+
+Events: `rec{event: open|take|skip|rate|close|clear|abort, name, fields}` (take ids, reasons, counts only; never audio).
+
+`mic_sound` (all builds) gains `pitch16` (16 floats, semitones from the sound's start, rounded to 0.1; `[]` when
+unpitched) and `f0_hz` (median f0 from `fp[0]` as `TrainJudge.f0Hz`, rounded to 1 Hz; null when unpitched). While a
+recorder session is open every phone/usb sound is dropped with `mic_sound{dropped:"recording"}` (precedence
+`touch ?: level gate ?: joystick ?: recording ?: dry_run`), so labels/gates/pitch still log and nothing acts.
+
+`rec_start` refuses unless the source is phone|usb, the capture is listening, the mode is gesture ("Switch Canti to
+gesture mode first"), no calibration/training/measurement is open, and ≥ 200 MB is free; the other way round,
+`calib_start` and a training start refuse with "Test recorder is open" while a session is open; `rec_open` refuses a differing
+spec (byte-for-byte), rate or mic. A capture stop/restart aborts only the in-flight take (state `error`, session open);
+the session closes on `rec_close`, UiBridge close, or 10 min idle — never on BackgroundGuard (a background may play on
+the phone). The PC pulls with `android/suite/range_phone.py pull` (see extractor/RANGE.md): every file is
+size-checked and each session validated before anything local is replaced, and the phone copy is deleted only with
+`--clear` and a typed yes (or `--yes`).
 
 ## Decider HTTP call
 

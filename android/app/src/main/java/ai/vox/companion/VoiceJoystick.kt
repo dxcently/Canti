@@ -362,6 +362,7 @@ class VoiceJoystick(
                     require(src != MicSettings.PICO) { "the Pico's mic can't be calibrated yet (phone and USB mics only)" }
                     require(src == source) { "the sound source is $source, not $src: switch to it first" }
                     require(mic?.capturing == true) { "the mic is off (${mic?.state ?: "no mic source"}): resume Canti first" }
+                    require(mic?.recorderRecording != true) { "Test recorder is open" }   // [rec]
                     // calibration v2: an optional ordered subset of the steps (a list, or a JSON array from the debug socket)
                     val steps = when (val a = args["steps"]) {
                         null, JSONObject.NULL -> null

@@ -352,6 +352,7 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
             row("RECENTRE", false) { a.recentre() }
             row("CALIBRATE", false) { a.calibrate() }
         }
+        if (ai.vox.companion.rec.DevRec.enabled) row("QUICK REC", false) { a.quickRec() }   // [rec]
         row(if (a.paused) "RESUME" else "PAUSE", false) { a.setPaused(!a.paused) }
         row("SOUND SOURCE", false, header = true)
         val src = a.source
