@@ -395,6 +395,89 @@ def ask(prompt):
     return input(prompt).strip().lower() in ('y', 'yes')
 
 
+# --- push (contract L): explicit PC -> phone copies under files/range_pc/ ------------------------------------------
+
+PUSH_FILES = ('session.json', 'spec.json', 'labels.jsonl', 'backgrounds.jsonl', 'ratings.jsonl', 'report.json')
+
+
+def _push_files(session):
+    """The relative paths a push copies: the fixed json/jsonl/report files plus every takes/**/*.wav and
+    backgrounds/*.wav. run-*/, trash/ and report.md are never copied."""
+    out = []
+    for name in PUSH_FILES:
+        if (session / name).is_file():
+            out.append(name)
+    for sub in ('takes', 'backgrounds'):
+        for f in sorted((session / sub).rglob('*.wav')):
+            if f.is_file():
+                out.append(f.relative_to(session).as_posix())
+    return out
+
+
+def _write_remote(path, data):
+    """Byte-exact write through `adb exec-in run-as <app> sh -c 'cat > <path>'` (contract L)."""
+    measure.adb("exec-in", "run-as", voxlib.APP, "sh", "-c", f"cat > {path}", binary=True, input=data)
+
+
+def _remote_size(path):
+    return int(measure.adb("exec-out", "run-as", voxlib.APP, "stat", "-c", "%s", path).strip())
+
+
+def _remote_sh(cmd):
+    return measure.adb("exec-out", "run-as", voxlib.APP, "sh", "-c", f"{cmd} 2>/dev/null; true", binary=True)
+
+
+def _pushed_names():
+    return [n for n in _remote_names("files/range_pc") if not n.startswith('.')]
+
+
+def push(sessions, replace=False):
+    """The recorder push (contract L): validate each local session (a private root, the phone owner's own "self"
+    speaker only), copy its fixed files + WAVs into files/range_pc/.staging-<name>/ (size-checked, never run-*/,
+    trash/ or report.md), then swap it in as files/range_pc/<name>/ (the old copy is removed only after the new one is
+    complete). Only your own sessions go to the phone (exit 2, no override)."""
+    existing = set(_pushed_names())
+    pushed = []
+    for s in sessions:
+        s = Path(s).expanduser().resolve()
+        L.private_dir(s)
+        meta = json.loads((s / 'session.json').read_text())
+        if meta.get('speaker', L.DEFAULT_SPEAKER) != L.DEFAULT_SPEAKER:
+            print("only your own sessions go to the phone", file=sys.stderr)
+            sys.exit(2)
+        L.validate_session(s)
+        name = s.name
+        L.safe_name(name)
+        if name in existing and not replace:
+            raise ValueError(f"{name}: already on the phone; pass --replace")
+        staging = f"files/range_pc/.staging-{name}"
+        try:
+            for rel in _push_files(s):
+                data = (s / rel).read_bytes()
+                remote = f"{staging}/{rel}"
+                _write_remote(remote, data)
+                if _remote_size(remote) != len(data):
+                    raise ValueError(f"{rel}: byte size mismatch on device")
+            # all verified: remove the old copy, then move the staging in
+            _remote_sh(f"rm -rf files/range_pc/{name}; mv {staging} files/range_pc/{name}")
+        except BaseException:
+            _remote_sh(f"rm -rf {staging}")
+            raise
+        pushed.append(name)
+    return pushed
+
+
+def remove_pushed(name, yes=False):
+    """--remove: delete one pushed copy (a typed yes unless [yes])."""
+    L.safe_name(name)
+    if name not in _pushed_names():
+        raise ValueError(f"no such pushed session: {name}")
+    if not yes and not ask(f"Remove {name} from the phone? [y/N] "):
+        return False
+    _remote_sh(f"rm -rf files/range_pc/{name}")
+    return True
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     subs = p.add_subparsers(dest='command', required=True)
@@ -418,6 +501,12 @@ def main():
     pull_cmd.add_argument('--clear', action='store_true', help='after verifying, offer to delete them on the phone')
     pull_cmd.add_argument('--yes', action='store_true', help='with --clear: delete without asking')
     pull_cmd.add_argument('--force', action='store_true', help='replace a local copy even if it has rows the phone lacks')
+    push_cmd = subs.add_parser('push', help='copy your own PC range sessions into the app (files/range_pc/)')
+    push_cmd.add_argument('session', type=Path, nargs='*')
+    push_cmd.add_argument('--replace', action='store_true', help='replace an existing pushed copy')
+    push_cmd.add_argument('--list', action='store_true', help='show the pushed names')
+    push_cmd.add_argument('--remove', metavar='NAME', help='delete one pushed copy')
+    push_cmd.add_argument('--yes', action='store_true', help='with --remove: delete without asking')
     args = p.parse_args()
     if args.command == 'finalize':
         from range_session import finalize_range
@@ -435,6 +524,15 @@ def main():
                 print("Next: finalize each session under extractor/run (range_session.py), then range_suite.py.")
         finally:
             vox.close()
+    elif args.command == 'push':
+        if args.list:
+            print(" ".join(_pushed_names()))
+        elif args.remove:
+            print(f"Removed {args.remove}" if remove_pushed(args.remove, yes=args.yes) else "Left on the phone.")
+        else:
+            if not args.session:
+                p.error('push needs at least one session dir (or --list / --remove)')
+            print("Pushed: " + " ".join(push(args.session, replace=args.replace)))
     else:
         run_session(args)
 

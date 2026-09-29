@@ -227,6 +227,7 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
         }
         VoxService.trainSink = trainSink
         VoxService.recSink = recChannel.statusSink; VoxService.qrSink = recChannel.snapshotSink   // [rec]
+        VoxService.recPlaySink = recChannel.playSink   // [rec] contract L playback push
     }
 
     fun close() {
@@ -240,6 +241,7 @@ class UiBridge(private val activity: Activity, messenger: BinaryMessenger) {
         // [rec] the recorder screen is gone: end an open session (its sounds would otherwise stay dropped).
         if (VoxService.recSink === recChannel.statusSink) VoxService.recSink = null
         if (VoxService.qrSink === recChannel.snapshotSink) VoxService.qrSink = null
+        if (VoxService.recPlaySink === recChannel.playSink) VoxService.recPlaySink = null
         recChannel.close()
         VoxService.instance?.recUiClosed()
         permissionResult?.success(mapOf("service" to (VoxService.instance != null))); permissionResult = null
