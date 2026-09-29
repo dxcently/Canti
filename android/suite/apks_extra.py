@@ -18,13 +18,15 @@ from voxlib import adb, sh
 SUITE = Path(__file__).resolve().parent
 INDEX = SUITE.parent / ".state" / "fdroid" / "index-v2.json"
 OUT = SUITE.parent / ".state" / "apks-extra"
+# Not io.github.muntashirakon.AppManager: its ActivityInterceptor claims system intents (STILL_IMAGE_CAMERA -> a chooser)
+# and the shell cannot disable the component, so it breaks the camera test.
 APPS = """org.fossify.calendar org.fossify.notes org.fossify.filemanager org.fossify.contacts org.fossify.clock
 org.fossify.musicplayer org.fossify.messages org.fossify.phone org.fossify.voicerecorder org.fossify.paint org.fossify.math
 de.danoeh.antennapod com.fsck.k9 net.gsantner.markor org.tasks org.isoron.uhabits org.oxycblt.auxio
 com.beemdevelopment.aegis com.kunzisoft.keepass.libre com.nononsenseapps.feeder me.zhanghai.android.files
 me.hackerchick.catima ws.xsoh.etar org.breezyweather com.keylesspalace.tusky org.wikipedia org.kde.kdeconnect_tp
 com.github.ashutoshgngwr.noice org.joinmastodon.android com.github.libretube org.fdroid.fdroid
-io.github.muntashirakon.AppManager com.best.deskclock org.secuso.privacyfriendlytodolist org.secuso.privacyfriendlynotes
+com.best.deskclock org.secuso.privacyfriendlytodolist org.secuso.privacyfriendlynotes
 com.forrestguice.suntimeswidget org.jellyfin.mobile com.gh4a com.darshancomputing.BatteryIndicatorPro""".split()
 
 
