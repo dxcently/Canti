@@ -66,11 +66,15 @@ class EnrollExample(val fp: DoubleArray, val pitch16: DoubleArray, val meta: JSO
     val pitched get() = pitch16.size == SoundFeatures.PITCH_POINTS
     /** The gesture-training cell this example was recorded for (`meta.cell`), or null. */
     val cell: String? get() = meta?.optString("cell")?.takeIf { it.isNotEmpty() }
+    /** A training take whose extractor label differed and the user has not confirmed yet (train_confirm): held back. */
+    val unconfirmed get() = meta?.optBoolean("label_mismatch") == true && !meta.optBoolean("confirmed")
 }
 
 class EnrollClass(val kind: String, val name: String, val examples: MutableList<EnrollExample> = mutableListOf()) {
     /** Only classes with at least MIN_EXAMPLES take part in matching. */
-    val active get() = examples.size >= EnrollmentStore.MIN_EXAMPLES
+    val active get() = confirmed.size >= EnrollmentStore.MIN_EXAMPLES
+    /** The examples that take part in matching (unconfirmed takes are held back until the user confirms them). */
+    val confirmed get() = examples.filter { !it.unconfirmed }
     /** Re-recorded contour gestures are also matched on the pitch track (banded DTW). */
     val contour get() = kind == EnrollmentStore.GESTURE && name in Vocab.CONTOURS
 }
@@ -268,11 +272,12 @@ class Matcher(val store: EnrollmentStore, val rejectMult: Double, val floors: Fp
     val floor: FpFloors.Entry?
     /** For the logs: `provisional`, `final`, `none` (no entry for the version), `mismatch` (length), `empty` (no store). */
     val floorStatus: String
-    private class Prepared(val c: EnrollClass, val z: List<DoubleArray>, val fpThreshold: Double, val dtwThreshold: Double?)
+    private class Prepared(val c: EnrollClass, val z: List<DoubleArray>, val fpThreshold: Double, val dtwThreshold: Double?,
+                           val confirmed: List<EnrollExample>)
     private val prepared: List<Prepared>
 
     init {
-        val all = store.classes.flatMap { it.examples }.map { it.fp }
+        val all = store.classes.flatMap { it.confirmed }.map { it.fp }
         val e = floors[store.fpVersion]
         floor = e?.takeIf { it.floor.size == store.dim }
         floorStatus = when {
@@ -285,10 +290,11 @@ class Matcher(val store: EnrollmentStore, val rejectMult: Double, val floors: Fp
         val st = Personal.standardizer(all, floor?.floor)
         mean = st.first; std = st.second
         prepared = store.classes.filter { it.active }.map { c ->
-            val z = c.examples.map { Personal.standardize(it.fp, mean, std) }
+            val confirmed = c.confirmed
+            val z = confirmed.map { Personal.standardize(it.fp, mean, std) }
             val fpBase = Personal.withinClass(z, Personal::euclid)
-            val dtwBase = if (c.contour) Personal.withinClass(c.examples.map { it.pitch16 }) { a, b -> Personal.dtw(a, b) } else null
-            Prepared(c, z, fpBase * rejectMult, dtwBase?.let { it * rejectMult })
+            val dtwBase = if (c.contour) Personal.withinClass(confirmed.map { it.pitch16 }) { a, b -> Personal.dtw(a, b) } else null
+            Prepared(c, z, fpBase * rejectMult, dtwBase?.let { it * rejectMult }, confirmed)
         }
     }
 
@@ -309,7 +315,7 @@ class Matcher(val store: EnrollmentStore, val rejectMult: Double, val floors: Fp
         if (bestD > p.fpThreshold) return MatchResult("none", nearest = p.c.name, distance = bestD, threshold = p.fpThreshold,
             reason = "fp distance above the threshold")
         if (p.c.contour) {
-            val dtw = p.c.examples.minOf { Personal.dtw(f.pitch16, it.pitch16) }
+            val dtw = p.confirmed.minOf { Personal.dtw(f.pitch16, it.pitch16) }
             if (dtw > p.dtwThreshold!!) return MatchResult("none", nearest = p.c.name, distance = bestD, threshold = p.fpThreshold,
                 dtw = dtw, dtwThreshold = p.dtwThreshold, reason = "pitch track DTW above the threshold")
             return MatchResult(p.c.kind, p.c, p.c.name, bestD, p.fpThreshold, dtw, p.dtwThreshold, "matched")

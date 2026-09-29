@@ -3,6 +3,7 @@ package ai.vox.companion.joystick
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -365,5 +366,131 @@ class JoyCalibrationTest {
         val xs = listOf(10.0, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 12.0, Double.NaN, 11.0, 11.1)
         assertEquals(xs.take(8), JoyCalibration.steady(xs))
         assertEquals(emptyList<Double>(), JoyCalibration.steady(xs.take(7)))
+    }
+
+    /** The service's SharedPreferences for [CalibSaves]: a map; [puts] counts the commits. */
+    private class MapPrefs : CalibPrefs {
+        val m = mutableMapOf<String, String>()
+        var puts = 0
+        override fun get(key: String) = m[key]
+        override fun put(entries: Map<String, String?>) { puts++; entries.forEach { (k, v) -> if (v == null) m.remove(k) else m[k] = v } }
+    }
+
+    private fun savedProfile(p: MapPrefs, src: String = "phone") = JoyProfile.fromJson(JSONObject(p.m["calib_$src"]!!))
+    private fun savedDone(p: MapPrefs, src: String = "phone") = CalibProgress.doneStepsOf(JSONObject(p.m["calib_progress_$src"]!!))
+
+    /** E9 contract C: each step is saved on its own as it finishes; a cancel (the service just drops the run: the
+     *  BackgroundGuard, UiBridge.close, idle, calib_cancel) keeps them, and a new service (restart / app kill) resumes
+     *  at the first undone step. */
+    @Test fun perStepSaveKeepsFinishedStepsAcrossACancelAndResume() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        assertFalse(saves.resumed); assertEquals(JoyCalibration.STEPS, cal.steps)
+        assertFalse(saves.check(cal, 1_000))                          // nothing finished: no write
+        // hum finishes (the golden's home ends at 4800 ms): saved at once, before glide even starts
+        feed(cal, c, 0.0, 4800.0)
+        assertTrue(saves.check(cal, 2_000))
+        assertEquals(listOf("hum"), savedDone(prefs))
+        assertEquals(cal.draft.homeSt, savedProfile(prefs).homeSt); assertNull(savedProfile(prefs).loSt)
+        assertFalse(savedProfile(prefs).complete)
+        // glide (ends at 10600 ms)
+        feed(cal, c, 4800.0, 10600.0)
+        assertTrue(saves.check(cal, 3_000))
+        assertEquals(listOf("hum", "glide"), savedDone(prefs))
+        val home = cal.draft.homeSt; val lo = cal.draft.loSt
+        assertTrue(home != null && lo != null && savedProfile(prefs).loSt == lo)
+        // vowels starts, then the run is cancelled mid-step (nothing more is written) and the service restarts
+        feed(cal, c, 10600.0, 11000.0)
+        assertEquals("vowels", cal.step); assertFalse(saves.check(cal, 3_500))
+        val saves2 = CalibSaves(prefs)
+        assertEquals(mapOf("step" to "vowels", "done_steps" to listOf("hum", "glide")), saves2.resume("phone"))
+        // calib_start (resume by default: the progress is < 24 h old) picks up at vowels with hum + glide kept
+        val again = saves2.start(spec, "phone", null, null, 4_000)
+        assertTrue(saves2.resumed)
+        assertEquals("vowels", again.step); assertEquals(listOf("vowels", "pops", "clicks", "whistle", "hiss", "room"), again.steps)
+        assertEquals(home, again.draft.homeSt); assertEquals(lo, again.draft.loSt)
+        // an old progress (> 24 h) does not resume by itself, but {resume: true} still does
+        assertFalse(CalibSaves(prefs).let { it.start(spec, "phone", null, null, 3_000 + CalibProgress.FRESH_MS + 1); it.resumed })
+        assertTrue(CalibSaves(prefs).let { it.start(spec, "phone", null, true, 3_000 + CalibProgress.FRESH_MS + 1); it.resumed })
+        assertFalse(CalibSaves(prefs).let { it.start(spec, "phone", null, false, 4_000); it.resumed })
+    }
+
+    /** A recalibration over a complete profile: done_steps are the steps THIS run finished (not every step the old
+     *  profile has), calib_save clears the progress, and the next calib_start is a full run (never refused). */
+    @Test fun recalibrationProgressAndSaveClearIt() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val first = CalibSaves(prefs)
+        val cal = first.start(spec, "phone", null, null, 1_000)
+        feed(cal, c, 0.0)                                              // the whole golden run (room fails, skipped)
+        if (cal.state == "failed") cal.skip()
+        assertEquals("done", cal.state)
+        first.check(cal, 2_000)
+        first.complete(cal, 2_000)
+        assertTrue(savedProfile(prefs).complete); assertNull(prefs.m["calib_progress_phone"]); assertNull(first.resume("phone"))
+        // recalibrate: the next start is a full run (not "every step is recorded"), and after hum the resume is glide
+        val saves = CalibSaves(prefs)
+        val re = saves.start(spec, "phone", null, null, 3_000)
+        assertFalse(saves.resumed); assertEquals("hum", re.step)
+        feed(re, c, 0.0, 4800.0)
+        saves.check(re, 4_000)
+        assertEquals(listOf("hum"), savedDone(prefs))
+        assertEquals("glide", saves.resume("phone")!!["step"])
+        assertFalse(savedProfile(prefs).complete)
+        assertTrue(savedProfile(prefs).room != null || "room" in savedProfile(prefs).skipped)   // the old values stay
+    }
+
+    /** A redo of a finished step (calib_redo / the arrows back) is saved again when it finishes. */
+    @Test fun aRedoneStepIsSavedAgain() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", listOf("hum"), null, 1_000)
+        feed(cal, c, 0.0, 4800.0)
+        assertTrue(saves.check(cal, 2_000)); val n = prefs.puts
+        cal.startStep("hum", 4800.0, force = true)
+        feed(cal, c, 0.0, 4800.0, shift = 4800.0)                      // the same hum again, later on the clock
+        assertEquals("done", cal.state)
+        assertTrue(saves.check(cal, 3_000)); assertEquals(n + 1, prefs.puts)
+    }
+
+    /** The phone's existing prefs: a version 1 profile and no progress still load; nothing resumes; a damaged progress
+     *  entry reads as none. */
+    @Test fun existingSavedProfileMigrates() {
+        val prefs = MapPrefs()
+        prefs.m["calib_phone"] = v1Json
+        val saves = CalibSaves(prefs)
+        assertNotNull(saves.load("phone")); assertFalse(saves.load("phone")!!.complete)
+        assertNull(saves.resume("phone"))
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        assertFalse(saves.resumed); assertEquals("hum", cal.step)
+        prefs.m["calib_progress_phone"] = "{not json"
+        assertNull(CalibSaves(prefs).resume("phone"))
+        prefs.m["calib_progress_phone"] = """{"done_steps": ["hum", 3, "bogus"], "updated_ms": 1}"""
+        assertEquals(listOf("hum"), CalibSaves(prefs).progress("phone").let { CalibProgress.doneStepsOf(it) })
+    }
+
+    /** E9 contract C: calib_step mid-take drops only the in-flight step (a saved step stays). */
+    @Test fun calibStepMidTakeDropsTheInFlightStep() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        feed(cal, c, 0.0, 4800.0); saves.check(cal, 2_000)             // hum saved
+        cal.startStep("clicks", 22140.0)
+        assertEquals("recording", cal.state)
+        feed(cal, c, 22140.0, 24000.0)                                  // a couple of seconds into the clicks window
+        assertEquals("clicks", cal.step)
+        cal.startStep("whistle", 24000.0)                               // the arrows: jump mid-take
+        assertEquals("whistle", cal.step); assertEquals("waiting", cal.state)
+        assertEquals(setOf("hum"), cal.finished)
+        assertFalse(saves.check(cal, 3_000)); assertEquals(listOf("hum"), savedDone(prefs))
+        // the status: the whistle glide's expected shape (an arch, up and back) and this step's own live trace
+        val s = cal.status(false)
+        assertEquals("whistle", s["step"]); assertEquals(listOf("arch"), (s["expect"] as Map<*, *>)["sequence"])
+        assertEquals(emptyList<Any?>(), (s["live"] as Map<*, *>)["trace_hz"])
+        assertEquals(mapOf("i" to 6, "n" to 8), s["pos"])
     }
 }

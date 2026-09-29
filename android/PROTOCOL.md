@@ -231,8 +231,8 @@ feature message only gains optional `timing` fields.
 | `badge_hide` | `hide` (bool, default true), `ms` (500-60000, default 10000) | Hides Canti's head and its menu for a screen capture (`harvest_v3.py` wraps its `screencap` in it); `hide: false` shows it again, and it comes back by itself after `ms`. Reply `hidden`. A tucked head stays hidden. |
 | `joy_state` | | `joystick`: the voice joystick (*Voice joystick* below): `on`, `source`, `calibrated`, `mode`, `x_dp`, `y_dp`, `snapped`, `phase`, `mid_st`, `range_st`, `speed_mul`, `pitch_sens`, `elements` (magnet candidates), `ticks`, `pops` (tick-detector pops delivered), `merged`, `calibrating`; null if it did not start. |
 | `joy_recentre` | | Moves the joystick cursor to the screen centre (logged `joystick{event: recentre, by: ctl}`). Reply as `joy_state`. |
-| `calib_start` / `calib_step` / `calib_redo` / `calib_retry` / `calib_skip` / `calib_save` / `calib_cancel` / `calib_status` / `calib_get` | as the UI methods (`source`, `step`) | The joystick calibration, exactly as the UI channel's methods (*Voice joystick*, Calibration). Reply `calib`: the calib_status map (`calib_get`: the saved profile, or null); a command error also sets `ok: false, error`. |
-| `train_status` / `train_start` / `train_record` / `train_retry` / `train_skip` / `train_keep` / `train_next` / `train_cancel` / `train_delete` | as the UI methods (`gesture`, `cell`, `source`, `record`) | Gesture training, exactly as the `ai.vox/train` channel (*Gesture training*). Reply `train`: the train_status map; a refused command also sets `ok: false, error`. |
+| `calib_start` / `calib_step` / `calib_redo` / `calib_retry` / `calib_skip` / `calib_save` / `calib_cancel` / `calib_status` / `calib_get` | as the UI methods (`source`, `step`, `steps`, `resume`) | The joystick calibration, exactly as the UI channel's methods (*Voice joystick*, Calibration). Reply `calib`: the calib_status map (`calib_get`: the saved profile, or null); a command error also sets `ok: false, error`. |
+| `train_status` / `train_start` / `train_record` / `train_retry` / `train_skip` / `train_keep` / `train_next` / `train_goto` / `train_confirm` / `train_cancel` / `train_delete` | as the UI methods (`gesture`, `cell`, `source`, `record`, `id`, `keep`) | Gesture training, exactly as the `ai.vox/train` channel (*Gesture training*). Reply `train`: the train_status map; a refused command also sets `ok: false, error`. |
 | `mic_level` | | `mic`: `state`, `routed`, `level{rms_dbfs, peak_dbfs, ms, band_hz, bands_dbfs}` of the last second, `floor_db`, `gate_open`, `silent_input`. For checking a mic (e.g. a USB mic) without making sounds count. |
 | `mic_feed` | `pcm_b64` (PCM16 LE mono), `rate` (16000\|48000), `chunk_ms` (20), `repeat` (1-1000), `raw` (bool), `deliver` (bool) | Runs the PCM through a fresh JNI extractor, the live path's code (direct buffer, `chunk_ms` pushes), independent of the mic. `mic`: `events` (with `raw`: the full event JSON as in `extractor/vectors`), `stats` (as above, over all repeats), `wall_ms`, `audio_ms`, `native`. `deliver` also hands the sounds to the service as source `phone-mic-feed`. `tools/mic_parity.py` uses it for device parity and speed. |
 | `measure_start` | `phase` (string, e.g. `1-media-30`), `every_ms` (2000-30000, default 5000), `gestures` (list of strings, default `["rise","fall","click","click click","hiss"]`), `prompt` (bool, default true), `record` (bool, default true), `stereo` (bool, default false), `max_s` (30-1200, default 300) | Starts the near-field measurement (below). Refused (`ok:false, error`) unless the sound source is `phone`/`usb` and the capture is listening, or if one session already runs. Reply: `sid` (the wall-clock ms at the start, unique across service restarts; an existing `measure/<sid>/` is never reused), `file` (`measure/<sid>/audio.wav`), `rate`, `channels` (1 or 2; the requested count, the `measure_start` event has the actual one). |
@@ -453,13 +453,13 @@ While a calibration runs, every mic sound is dropped (`mic_sound{dropped: "calib
 
 | Command | What it does |
 | --- | --- |
-| `calib_start {source, steps?}` | Starts a run. `steps` (optional) is an ordered subset of the 8 steps, no repeats (e.g. `["clicks", "whistle", "hiss", "room"]` to bring a version 1 profile up to date); without it, all 8 in order. The run starts directly on `steps[0]` and covers only those steps. `source` must be the current sound source, and the mic must be capturing (Canti resumed). The draft is the saved profile with the run's steps taken out of `skipped`: a step outside the run keeps its saved values and skip state (the save merges), and a step in the run that was skipped before is recorded again. The first tick after the start times the first step (the stream may have run for minutes). |
-| `calib_step {step}` | Records `step`. It is a no-op when that step is already waiting or recording. After `step_done`, the UI sends it for the next step of the run (`remaining[0]`). A step outside the run joins it. |
-| `calib_redo {step}` | Records a finished step again, for example from the result. When it finishes (or is skipped) the state goes back to `done` if every step of the run is finished; no other step starts. A step outside the run joins it. |
+| `calib_start {source, steps?, resume?}` | Starts a run. `steps` (optional) is an ordered subset of the 8 steps, no repeats (e.g. `["clicks", "whistle", "hiss", "room"]` to bring a version 1 profile up to date); without it, all 8 in order. `resume` (default true when `calib_progress_<source>` exists and is < 24 h old; never with `steps`) runs the steps not in the saved `done_steps`, starting at the first; with none left it is a full run. The run starts directly on its first step and covers only those steps. `source` must be the current sound source, and the mic must be capturing (Canti resumed). The draft is the saved profile with the run's steps taken out of `skipped`: a step outside the run keeps its saved values and skip state (the save merges), and a step in the run that was skipped before is recorded again. The first tick after the start times the first step (the stream may have run for minutes). |
+| `calib_step {step}` | Records `step`. It works in any state (a step already waiting or recording is left alone unless it is a different step, in which case the in-flight step is dropped; saved steps stay). With no run open (the hub's rows, after a cancel) it first opens one on the current source as `calib_start` without args would (resumed). After `step_done`, the UI sends it for the next step of the run (`remaining[0]`). A step outside the run joins it. |
+| `calib_redo {step}` | Records a finished step again, for example from the result (it is saved again when it finishes). With no run open it opens one, as `calib_step`. When it finishes (or is skipped) the state goes back to `done` if every step of the run is finished; no other step starts. A step outside the run joins it. |
 | `calib_retry` | Only from `failed`: records the failed step again. |
 | `calib_skip` | Allowed from `failed`, from `waiting`, on `pops` / `clicks` / `hiss` before anything countable was heard, or during `room`. The step keeps its defaults and goes into `skipped`. **The run's next unfinished step after it then starts by itself** (the UI sends no `calib_step` after a skip). It never wraps round and never starts a step outside the run: with none after it, the state is `done` when every step of the run is finished, else `step_done` (an earlier step is still open: the UI picks it). |
-| `calib_save` | Stores the draft (`saved_at_ms`), applies it to the joystick, and ends the run. It answers the inactive map. |
-| `calib_cancel` | Ends the run without saving. It answers the inactive map. The service also ends an open run by itself (log `calib{event: cancel, by}`): `idle` (no command for 5 min), `app background` (every Canti screen stopped for 10 s: Home, another app, the screen off), `ui closed` (the Flutter screen that owned it went away); for the first two a `calib_status` push carries the inactive map with an `error` saying so. A refused `calib_start` logs `calib{event: refused, reason, source}`. |
+| `calib_save` | Stores the draft (`saved_at_ms`, `complete: true`), removes `calib_progress_<source>` (the run is complete: the next `calib_start` begins at the top), applies it to the joystick, and ends the run. It answers the inactive map. |
+| `calib_cancel` | Ends the run. **Finished steps are already saved** (per-step save): only the in-flight step is lost. It answers the inactive map (with `resume`). The service also ends an open run by itself (log `calib{event: cancel, by}`): `idle` (no command for 5 min), `app background` (every Canti screen stopped for 10 s: Home, another app, the screen off), `ui closed` (the Flutter screen that owned it went away); for the first two a `calib_status` push carries the inactive map with an `error` saying so. A refused `calib_start` logs `calib{event: refused, reason, source}`. |
 | `calib_status` | Changes nothing. |
 | `calib_get {source}` | Answers the saved profile, or null. |
 
@@ -478,18 +478,39 @@ with `error`. The debug op also sets `ok: false`.
   - `step_done` (bool: the step just succeeded);
   - `reason` (the failure, or null);
   - `skipped` (the steps skipped in this run; `result.skipped` is the merged profile's).
-- Live readout: `live{voiced, pitch_hz, level_db, vowel, vowel_conf}` and `heard{pops_n, pops_need: 3, clicks_n, clicks_need: 3, hiss_n, hiss_need: 2}`
+- Live readout: `live{voiced, pitch_hz, level_db, vowel, vowel_conf, trace_hz (the joystick ticks, 20 ms, the last 5 s,
+  null = unvoiced), checks (the provisional grade)}` and `heard{pops_n, pops_need: 3, clicks_n, clicks_need: 3, hiss_n, hiss_need: 2}`
   (`*_n`: the countable sounds heard so far in that step; `*_need` is what is asked, the step passes on 2).
+- `expect`: the wanted shape for a pitched step, as the training `expect` plus `tone`: `hum` = flat at home over 3 s;
+  `glide` = an ARCH from low over 5 s (the prompt says lowest to highest AND BACK, which a rise check would fail);
+  `whistle` = an arch from low, whistled, over the spec's glide time. Null for the others.
+- `scale`: `{low_hz, home_hz, high_hz}` from the draft so far (during `whistle`: the whistle range, else null), or null.
+- `live.trace_hz` and `live.checks` are the current step's: the trace starts empty at each step.
+- `pos`: `{i, n}` (1..8 over `JoyCalibration.STEPS`).
+- `hub`: `[{id, done, result_word}]` over all 8 steps (`result_word`: `ok` | `skipped` | `·`), for the hub rows. (The E9
+  contract calls this `steps`; that name was already the run's step list, so it is `hub`. `done` = the draft has the
+  step's values, from this run or the saved profile.)
 - `result`: the draft profile, once any step has finished.
 - `calibrated`: whether a profile is saved for that source.
 - `error`: the last command's error, if any.
 
-The inactive map, with no run, is `{active: false, source, state: null, calibrated, skipped, error}`.
+The inactive map, with no run, is `{active: false, source, state: null, calibrated, skipped, resume, error}`, where
+`resume` is `{step, done_steps}` (where `calib_start {resume: true}` begins, and the steps done so far) when a progress
+is saved with a step left, else null.
+
+**Per-step save and resume.** When a step finishes (measured or skipped, a redo too) its values are merged into the
+profile `calib_<source>` at once (the same JSON as `calib_save` with `complete: false`; unfinished steps keep their
+saved values), and `calib_progress_<source>` = `{done_steps, current, updated_ms}` is written in the same
+SharedPreferences commit (synchronous, so an app kill right after keeps it). `done_steps` = the steps this run finished
+plus the ones done before it (a resumed run's earlier steps; a `steps` subset run's other steps the profile has), in
+step order. A cancel (BackgroundGuard, UiBridge.close, idle, `calib_cancel`), a service restart or an app kill therefore
+loses only the in-flight step. `calib_start {resume: true}` (the default while the progress is < 24 h old) runs the
+steps not in `done_steps`. Existing profiles load as before (no `complete` = false; no progress = no resume).
 
 **The profile:**
 
 - The contract fields:
-  - `source`, `version: 2`, `saved_at_ms`;
+  - `source`, `version: 2`, `saved_at_ms`, `complete` (true only after `calib_save`);
   - `home_hz`, `range_lo_hz`, `range_hi_hz`, `voicing_threshold`;
   - `vowels{ee, ah, oo: {acc}}`;
   - `pops_heard`, `skipped`;
@@ -759,7 +780,7 @@ connects it to the running accessibility service through two platform channels. 
   - `levelGateSettings` answers `{level_gate, level_gate_offset_db}` (the calibration-v2 level gate: bool, default
     true; -10..10 dB, default 0, + = stricter); `setLevelGateSettings {level_gate?, level_gate_offset_db?}` stores
     them (the offset clamped, logs `setting{level_gate, level_gate_offset_db, by: app}`) and answers the same map;
-  - `calib_start {source, steps?}`, `calib_step {step}`, `calib_redo {step}`, `calib_retry`, `calib_skip`, `calib_save`,
+  - `calib_start {source, steps?, resume?}`, `calib_step {step}`, `calib_redo {step}`, `calib_retry`, `calib_skip`, `calib_save`,
     `calib_cancel`, `calib_status` answer the calib_status map, and `calib_get {source}` the saved profile or null
     (*Voice joystick*, Calibration). Kotlin also calls `calib_status {map}` on this channel about every 100 ms while a
     calibration runs and after every command (also one from the debug socket);
@@ -1182,16 +1203,43 @@ take records from `train_record` until 0.9 s after its first sound (so a split a
 | a sound was heard | `nothing` | "Heard nothing in 8 s." (sounds heard but dropped by the mic: "Heard 3 sounds, all below the level gate.") |
 | exactly one sound | `count` | "Heard 2 sounds (rise then fall): make it one unbroken sound." |
 | it carries an fp1 fingerprint | `features` | |
-| the extractor's label is the prompted gesture | `label` | "Heard a dip (down then up): an arch goes up then down." |
-| contours: hum vs whistle by the fingerprint's median f0 (whistle >= 600 Hz, the extractor's `whistle_min_hz`) | `tone` | "Heard a hum (about 220 Hz): a whistle is 600 Hz or higher. Whistle it." |
-| contours: `quick`/`short` <= 1.0 s, `slow`/`long` >= 0.8 s | `speed` | "It took 1.4 s: a QUICK dip takes about half a second (at most 1.0 s)." |
+| the extractor counted it as a gesture (not `unknown`) | `label` | "Canti did not count that as a gesture (too quiet, too short, or media playing): ..." |
+| then the tolerant grade (below); the FIRST miss gives the one reason: PITCH | `pitch` | "It started too high: start LOW, near the bottom of your range." |
+| SHAPE | `shape` | "Heard a dip (down then up): an arch goes up then down." |
+| LENGTH | `speed` | "It took 1.6 s: a QUICK dip takes about half a second (at most 1.0 s)." |
+| SOUND | `tone` | "Heard a hum (about 220 Hz): a whistle is 600 Hz or higher. Whistle it." (a low hum with no pitch: "..., a little above your very lowest note.") |
+| LOUD | `loud` | "Too quiet for Canti: a little louder." |
 
 Also `blocked` (the take could not start: paused, not armed, cursor mode, mic not listening, Canti device not
-connected) and `store` (the store refused it). Start pitch (`low`/`high`) and loudness (`soft`/`loud`) are recorded,
-not checked: there is no fixed reference for either. A failed take **stops** with the reason and waits for
-`train_retry` or `train_skip`; when the only reason is `label` (and a contour take has a pitch track),
-`train_keep` stores it anyway (logged `train{event: keep}`, `meta.kept: true`). Nothing is skipped or recorded again
-without a command.
+connected) and `store` (the store refused it). Nothing is skipped or recorded again without a command.
+
+**Tolerant grade** (E9 §9b, `ShapeGrade`). The judge now grades the take against the wanted shape with thresholds
+*looser* than the extractor's own classifier (`flat_max_range_st` 1.5, `shape_min_st` 1.0 in `extractor/config.py`),
+and a *near* miss is a pass (shown `~`); only a clear `miss` fails. Each check is `{id, label, state: ok|near|miss|pending,
+value, want}`, in this order, only the ids that apply:
+
+| id | ok | near | miss |
+| --- | --- | --- | --- |
+| `PITCH` | start note within 3 st of the mark (low: HOME−2 st, so ok at/below HOME+1 st; high: HOME+2 st, so ok at/above HOME−1 st; home: ±3 st), on the voice range for a hum and the WHISTLE range for a whistle | within 5 st | further (no scale → `pending`, which passes) |
+| `SHAPE` | the extractor labelled it the wanted gesture; or rise/fall net move ≥ ±0.7 st; arch/dip peak/trough ≥ 0.7 st above/below both ends; flat range ≤ 2.0 st (a single point ≥ 5 st off both neighbours, an octave error, is ignored) | ≥ 0.4 st (flat ≤ 3.0 st) | less; discrete = the right label (pop/click/hiss), else miss |
+| `LENGTH` | quick/short ≤ 1.0 s; slow/long ≥ 0.8 s; untagged 0.2–2.5 s (none for pop/click/hiss) | ≤ 1.4 s / ≥ 0.6 s / ≤ 4 s | further |
+| `SOUND` | hum/whistle as tagged (whistle ≥ 600 Hz: ok ≥ 660, hum ok < 540); unpitched stays unpitched (or the extractor gave it the wanted discrete label) | within 10 % of 600 Hz | the other band / pitched when unpitched |
+| `LOUD` | level gate passed and not clipped (training takes carry no level yet: always ok) | within 3 dB of the gate | gated / clipped / too quiet |
+| `COUNT` | (combos) the right number of sounds | — | wrong number |
+| `GAP` | (combos) the gap within `gap_s` ± 0.6 s | — | outside |
+
+A pass = no `miss`. The store keeps a passing take **even when the extractor label differs** (the meta gets
+`label_mismatch: true` + the heard label + `confirmed: false`); Personal matching and relabel skip it until the user
+confirms it via `train_confirm {id, keep}` (`keep: true` → `confirmed: true`; `keep: false` → deleted). The flag is
+in the store file, so it holds across restarts. `train_status` carries `unconfirmed: [{id, gesture, heard, pos}]` for the
+review screen. `train_keep` ("keep it anyway") stays for a take whose only miss is the shape (a contour take needs a
+pitch track); a kept take the extractor labelled otherwise is held the same way. After a pass the next UNDONE cell of
+the round (after this one, then one the arrows jumped over; not a skipped one) starts recording 1.2 s later and the
+status is pushed, unless any command other than `train_status` came first.
+
+**Live grade.** `live.checks` is the same grade on the take's live trace so far: `pending` until there is enough data
+(PITCH after 150 ms voiced, the start being the median of the first 8 voiced ticks; SHAPE after 60 % of the wanted
+length voiced; LENGTH always pending live).
 
 **Commands** (the `ai.vox/train` channel, and the debug socket's ops of the same names). All answer the status map;
 a refused one adds `error`.
@@ -1203,7 +1251,9 @@ a refused one adds `error`.
 | `train_record` | | records the current cell (state `ready`, `failed` or `passed`) |
 | `train_retry` | | records the failed cell again (state `failed` only) |
 | `train_skip` | | leaves the cell unrecorded; the next one waits in `ready` (it does not record by itself) |
-| `train_keep` | | stores a take that failed only on its label |
+| `train_keep` | | stores a take that failed only on its shape |
+| `train_goto` | `gesture`, `cell`, `source?` | switches the current take to that cell at any time (an in-flight take is dropped, a stored take stays; a recorded cell is recorded again, replacing its example); the header arrows ◀ ▶ use it to move over the whole plan, crossing gestures. With no round open (the hub's rows) it opens one. Refused while blocked (`error` = the blocker) |
+| `train_confirm` | `id`, `keep`, `source?` | confirms a `label_mismatch` take (`keep: true` → `confirmed: true`) or deletes it (`keep: false`). Only a take stored with `label_mismatch` has an addressable `id` (`meta.id`, unique in the store) |
 | `train_next` | `record?` (default true) | after a stored take: the next cell (recording at once), or `done` after the last |
 | `train_cancel` | | ends the round (stored takes stay). Also on a sound-source change, UI close, or 5 min without a command |
 | `train_delete` | `gesture`, `cell?`, `source?` | deletes the gesture's class (Delete / redo) or one cell's example, in any source's store |
@@ -1218,11 +1268,17 @@ examples, extra (examples not from training), active (3+), kept, cells[{id, prom
 (null when no round is open): `source`, `gesture`, `state`, `cell`, `prompt`, `hint`, `tags`, `index`, `count`,
 `next_prompt`, `reason`, `reasons` (codes), `can_keep`, `heard{label, line, sounds, labels, dur_ms, f0_hz, start_hz,
 tone, loudness, pitch16, shape}`, `heard_n`, `left_ms`, `live{trace_hz (one per 20 ms tick, null = unvoiced, at most
-250), level_db, pitch_hz}`, `passed`, `skipped`, `kept`.
+250), level_db, pitch_hz, checks (the provisional grade)}`, `result{checks (the final grade)}`, `expect{sequence,
+start, span_st: 4, tol_st: 1.5, dur_s (quick 0.6 / slow 1.5 / untagged 0.8), gap_s: null}`, `pos{i, n, gesture_i,
+gesture_n}` (1-based: i of n = 52 over the whole plan in TrainPlan order, gesture_i of gesture_n within the gesture),
+`can_prev`, `can_next`, `passed`, `skipped`, `kept`. Top level also carries `scale{low_hz, home_hz, high_hz}|null` (the
+current source's saved calibration: the voice range, or the whistle range while the current cell is a whistle; null
+when not calibrated) and `unconfirmed[{id, gesture, heard, pos}]` (`pos`: the example's index in its class).
 
 **Stored example.** `enroll_add` semantics into class `gesture:<name>` of the round's source, with
-`meta{train: 1, cell, <tags: tone, pitch, speed|length | loudness, take>, heard{label, dur_ms, f0_hz, start_hz, tone,
-loudness}, kept?, at_ms}`. A cell counts as recorded when an example of the class carries its `meta.cell`.
+`meta{train: 1, cell, id, <tags: tone, pitch, speed|length | loudness, take>, heard{label, dur_ms, f0_hz, start_hz, tone,
+loudness}, kept?, label_mismatch?, confirmed?, at_ms}`. A cell counts as recorded when an example of the class carries its
+`meta.cell`; a take whose `label_mismatch` is set but `confirmed` is not is held out of matching and relabel.
 
 **What it changes.** From 3 takes a gesture class takes part in matching (*Personalization*): a sound it matches
 that the extractor labelled otherwise becomes that gesture (`match{result: gesture, relabel{from, to}}`), unless

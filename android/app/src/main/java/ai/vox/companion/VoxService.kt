@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import ai.vox.companion.joystick.JMath
 import org.json.JSONObject
 import java.util.concurrent.Executors
 
@@ -1640,6 +1641,11 @@ class VoxService : AccessibilityService() {
             m.setTrainTicks(on)
         }
         override fun profile() = profile.name
+        // a whistle is judged on the whistle range (a voice-range mark would fail every whistle start)
+        override fun scale(tone: String): ShapeGrade.Scale? = joy?.load(settings.mic.source)?.let {
+            if (tone == "whistle") it.whistle?.let { w -> ShapeGrade.Scale(JMath.hz(w.loSt), JMath.hz(w.homeSt), JMath.hz(w.hiSt)) }
+            else ShapeGrade.Scale(it.loSt?.let(JMath::hz), it.homeSt?.let(JMath::hz), it.hiSt?.let(JMath::hz))
+        }
         override fun store(source: String) = loadStore(source)
         override fun change(source: String, what: String, change: (EnrollmentStore) -> Unit) = changeStore(source, what, change)
         override fun wallMs() = System.currentTimeMillis()
@@ -1786,7 +1792,7 @@ class VoxService : AccessibilityService() {
             }
             "enroll_list" -> reply.put("enrollment", enrollSummary(m.optString("source").ifEmpty { settings.mic.source }))
             // [train] gesture training (GestureTraining.kt): the UI channel's train_* methods, same args and reply
-            "train_status", "train_start", "train_record", "train_retry", "train_skip", "train_keep", "train_next", "train_cancel", "train_delete" -> {
+            "train_status", "train_start", "train_record", "train_retry", "train_skip", "train_keep", "train_next", "train_goto", "train_confirm", "train_cancel", "train_delete" -> {
                 val args = m.keys().asSequence().filter { it != "op" && it != "type" }.associateWith { m.get(it) as Any? }
                 val r = (train ?: throw IllegalArgumentException("gesture training did not start")).command(op, args)
                 reply.put("train", trainJson(r))
