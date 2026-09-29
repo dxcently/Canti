@@ -4,19 +4,21 @@
 #   start    boot headless (-no-window -no-audio) and wait for sys.boot_completed (VOX_WIPE=1: factory-fresh -wipe-data)
 #   stop     kill the emulator (only the one this script started)
 #   status   print whether it is running
-# Only one emulator at a time: start refuses if one is already attached to adb.
+# One emulator per port: start refuses if this serial is already attached to adb. A second AVD runs beside the suite's:
+#   VOX_AVD=vox35-play VOX_EMU_PORT=5582 VOX_AVD_IMAGE="$VOX_ANDROID_PLAY_IMAGE" VOX_WINDOW=1 ../dev suite/emu.sh start
+# (Google Play image, hand-driven: sign in once on its window; the suite never runs on it.)
 set -euo pipefail
 : "${VOX_STATE:?run inside ./dev}"
 AVD="${VOX_AVD:-vox35}"
 PORT="${VOX_EMU_PORT:-5580}"
 SERIAL="emulator-$PORT"
-PIDFILE="$VOX_STATE/emulator.pid"
-LOG="$VOX_STATE/logs/emulator.log"
+PIDFILE="$VOX_STATE/emulator.pid"; [ "$AVD" = vox35 ] || PIDFILE="$VOX_STATE/emulator-$AVD.pid"
+LOG="$VOX_STATE/logs/emulator.log"; [ "$AVD" = vox35 ] || LOG="$VOX_STATE/logs/emulator-$AVD.log"
 mkdir -p "$VOX_STATE/logs"
 
 create() {
   if [ -d "$ANDROID_AVD_HOME/$AVD.avd" ]; then echo "avd $AVD exists"; return; fi
-  echo no | JAVA_TOOL_OPTIONS="-Duser.home=$VOX_STATE/home" avdmanager create avd -n "$AVD" -k "$VOX_ANDROID_IMAGE" -d pixel_6 --force
+  echo no | JAVA_TOOL_OPTIONS="-Duser.home=$VOX_STATE/home" avdmanager create avd -n "$AVD" -k "${VOX_AVD_IMAGE:-$VOX_ANDROID_IMAGE}" -d pixel_6 --force
   cfg="$ANDROID_AVD_HOME/$AVD.avd/config.ini"
   # Deterministic, light headless device: 1080x2400 @ 420 dpi, no camera, no snapshot.
   {
@@ -39,13 +41,16 @@ running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 start() {
   create
   if running; then echo "already running (pid $(cat "$PIDFILE"))"; return; fi
-  if adb devices | grep -q '^emulator-'; then
-    echo "another emulator is attached to adb; refusing to start a second one" >&2; exit 1
+  if adb devices | grep -q "^$SERIAL\b"; then
+    echo "$SERIAL is already attached to adb; refusing to start another on that port" >&2; exit 1
   fi
   echo "booting $AVD on port $PORT (log: $LOG)"
   local wipe=(); [ "${VOX_WIPE:-0}" = 1 ] && wipe=(-wipe-data)
+  local win=(-no-window); [ "${VOX_WINDOW:-0}" = 1 ] && win=()
+  # The SDK's Qt has no wayland plugin: a window goes through XWayland.
+  [ "${VOX_WINDOW:-0}" = 1 ] && export QT_QPA_PLATFORM=xcb
   # HOME inside .state: the emulator writes ~/.emulator_console_auth_token otherwise.
-  HOME="$VOX_STATE/home" nohup emulator -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot \
+  HOME="$VOX_STATE/home" nohup emulator -avd "$AVD" -port "$PORT" "${win[@]}" -no-audio -no-boot-anim -no-snapshot \
     -gpu swiftshader_indirect -accel on -camera-back none -camera-front none "${wipe[@]}" \
     >"$LOG" 2>&1 &
   echo $! > "$PIDFILE"

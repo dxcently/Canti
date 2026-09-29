@@ -20,6 +20,7 @@ pkgs.mkShell {
   VOX_ANDROID_API = sdk.versions.platform;
   VOX_ANDROID_BUILD_TOOLS = sdk.versions.buildTools;
   VOX_ANDROID_IMAGE = "system-images;android-${sdk.versions.platform};${sdk.versions.image};${sdk.versions.abi}";
+  VOX_ANDROID_PLAY_IMAGE = "system-images;android-${sdk.versions.platform};${sdk.versions.playImage};${sdk.versions.abi}";
   VOX_ANDROID_NDK = sdk.versions.ndk;
   VOX_CMAKE_VERSION = pkgs.cmake.version;
   LANG = "C.UTF-8";

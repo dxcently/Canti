@@ -4,7 +4,8 @@ let
   versions = {
     platform = "35";        # compileSdk / targetSdk, and the emulator image's API level
     buildTools = "35.0.0";
-    image = "default";      # AOSP image: no Google apps, no login prompts
+    image = "default";      # AOSP image: no Google apps, no login prompts (the suite's AVD)
+    playImage = "google_apis_playstore";  # the hand-driven second AVD (vox35-play) for real Play apps; never the suite
     abi = "x86_64";         # KVM-accelerated on this x86_64 box
     flutterPlatform = "36"; # Flutter 3.47 compiles its embedding and module (../ui) against android-36
     # Flutter 3.47's NDK (FlutterExtension.ndkVersion). The Flutter Gradle plugin insists on it being installed (it
@@ -16,7 +17,7 @@ let
     buildToolsVersions = [ versions.buildTools ];
     includeEmulator = true;
     includeSystemImages = true;
-    systemImageTypes = [ versions.image ];
+    systemImageTypes = [ versions.image versions.playImage ];
     abiVersions = [ versions.abi ];
     includeNDK = true;
     ndkVersions = [ versions.ndk ];
