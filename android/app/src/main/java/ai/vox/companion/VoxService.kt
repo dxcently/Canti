@@ -123,10 +123,12 @@ class VoxService : AccessibilityService() {
     // Per-feature std floors by fp_version: assets/fp_floors.json, overridden by files/fp_floors.json (op fp_floors).
     private var floors: FpFloors = FpFloors.EMPTY
 
-    // Intent cursor mode: the highlighted candidates, while the user picks one with sounds.
+    // Intent cursor mode: the highlighted candidates, while the user picks one with sounds or speech.
     private var choice: TargetChoice? = null
     private var choiceN = 0L
     private var choiceTimeout: Runnable? = null
+    private val CHOICE_MS = 8000L
+    private val CHOICE_HINT = "say a number or more words · rise/fall · click taps · hiss cancels"
 
     private val shotExecutor = Executors.newSingleThreadExecutor()
 
@@ -496,8 +498,9 @@ class VoxService : AccessibilityService() {
                 onHeard(Heard(listOf(m.phrase)), "message", window = true)
             }
         }
-        // While the phrase window is open the user is talking: speech is not gestures (the Pico still hears it).
-        if (listenWindow.isOpen && m.sequence.isNotEmpty()) {
+        // While the phrase window is open the user is talking: speech is not gestures (the Pico still hears it). A
+        // choice's own window is the exception: there, sounds still pick (rise/fall/click/pop/hiss) alongside speech.
+        if (listenWindow.isOpen && choice == null && m.sequence.isNotEmpty()) {
             EventLog.ev("ignored", "reason" to "phrase window open (speech is not gestures)", "sequence" to m.sequence.joinToString(" "))
             return ok()
         }
@@ -894,6 +897,9 @@ class VoxService : AccessibilityService() {
 
     /** A phrase (the recognizer's n-best, or a message's phrase): the grammar first, then the phrase decider. */
     private fun onHeard(h: Heard, source: String, window: Boolean) {
+        // A choice's own listening window answers spoken picking first, not the normal grammar (or typing). This is
+        // shared by every spoken source so a narrowing/pick phrase is handled the same however it arrived.
+        if (choice != null) { choicePhrase(h); return }
         // Typing by voice, in a listen window only: the best hypothesis as said, never the grammar's cleaned words.
         if (window) h.best?.let { TypeGrammar.parse(it) }?.let { runTyping(it, source); return }
         val t0 = System.nanoTime()
@@ -1075,15 +1081,13 @@ class VoxService : AccessibilityService() {
         EventLog.ev("target_match", "n" to n, "query" to query, "query_raw" to c.query.takeIf { it != query }, "targets" to targets.size,
             "result" to when (out) { is Targets.Outcome.Tap -> "tap"; is Targets.Outcome.Choose -> "choose"; else -> "not on screen" },
             "top" to org.json.JSONArray(TargetMatcher.rank(targets, query).take(3).map {
-                JSONObject().put("option", it.target.option).put("score", Math.round(it.score * 100) / 100.0) }))
+                JSONObject().put("option", it.target.option).put("score", Math.round(it.score * 100) / 100.0)
+                    .putOpt("context", it.target.context) }))
         trace("target", JSONObject().put("query", query).put("query_raw", c.query).put("targets", targets.size).put("result", when (out) {
             is Targets.Outcome.Tap -> "tap"; is Targets.Outcome.Choose -> "choose"; else -> "not on screen" }))
         when (out) {
             is Targets.Outcome.Tap -> tapTarget(n, out.target, "named")
-            is Targets.Outcome.Choose -> {
-                startChoice(n, out.targets)
-                toast(if (out.targets.size == 1) "pop to tap \"${out.targets[0].label}\", hiss to cancel" else "rise/fall to pick, pop to tap, hiss to cancel")
-            }
+            is Targets.Outcome.Choose -> startChoice(n, out.targets)
             is Targets.Outcome.NotOnScreen -> when {
                 c.fallback != null -> runCommand(c.fallback) { targets }
                 // The model decider can still find it by meaning ("the thing to write a message").
@@ -1400,7 +1404,9 @@ class VoxService : AccessibilityService() {
         choice = c; choiceN = n
         try { overlay.showTargets(candidates, 0) } catch (e: Exception) { EventLog.ev("error", "where" to "highlight", "error" to e.toString()) }
         EventLog.ev("target", "n" to n, "result" to "choose", "candidates" to org.json.JSONArray(candidates.map { it.option }), "selected" to 1)
+        toast(CHOICE_HINT)
         armChoiceTimeout()
+        openChoiceListening()
         updateBadge("pick 1-${candidates.size}")
     }
 
@@ -1408,7 +1414,16 @@ class VoxService : AccessibilityService() {
         choiceTimeout?.let { main.removeCallbacks(it) }
         val r = Runnable { cancelChoice("timeout") }
         choiceTimeout = r
-        main.postDelayed(r, settings.targetChooseMs)
+        main.postDelayed(r, CHOICE_MS)
+    }
+
+    /** The choice's own listening window: the mic listens on its own while candidates are up (reused on every input). */
+    private fun openChoiceListening() {
+        if (choice == null || !armed) return
+        val engine = asr
+        val gen = generation
+        listenWindow.open(engine, CHOICE_MS) { d -> listenDone(d, gen) }
+        updateBadge("pick 1-${choice?.candidates?.size ?: 0}")
     }
 
     private fun cancelChoice(why: String?) {
@@ -1416,8 +1431,112 @@ class VoxService : AccessibilityService() {
         if (choice == null) return
         choice = null
         choiceTimeout?.let { main.removeCallbacks(it) }; choiceTimeout = null
+        listenWindow.cancel("choice ended")
         try { overlay.hideTargets() } catch (_: Exception) {}
         if (why != null) { EventLog.ev("choice", "n" to choiceN, "event" to "cancelled", "why" to why); updateBadge("cancelled") }
+    }
+
+    /** The spoken text of a choice listen window: a number picks, a narrowing re-ranks, else it runs normally. */
+    private fun choicePhrase(h: Heard) {
+        val c = choice ?: return
+        val text = h.best ?: return
+        EventLog.ev("choice", "n" to choiceN, "event" to "spoken", "text" to text)
+        when (val r = SpokenPick.parse(text, c.candidates)) {
+            is SpokenPick.Result.Tap -> pickChoice(r.index)
+            SpokenPick.Result.Cancel -> cancelChoice("spoken cancel")
+            is SpokenPick.Result.Narrow -> {
+                if (r.targets.size == 1) {
+                    val t = r.targets[0]
+                    EventLog.ev("choice", "n" to choiceN, "event" to "narrowed", "text" to text, "remaining" to 1, "option" to t.option)
+                    tapPicked(t, "spoken ${text}")
+                } else {
+                    EventLog.ev("choice", "n" to choiceN, "event" to "narrowed", "text" to text, "remaining" to r.targets.size,
+                        "options" to org.json.JSONArray(r.targets.map { it.option }))
+                    if (settings.decider != "rules") narrowByModel(text, r.targets)
+                    else renumberChoice(r.targets)
+                }
+            }
+            is SpokenPick.Result.Hint -> {
+                EventLog.ev("choice", "n" to choiceN, "event" to "no_match", "text" to text)
+                toast(r.text)
+                armChoiceTimeout()
+                openChoiceListening()
+            }
+            SpokenPick.Result.RunNormally -> {
+                EventLog.ev("choice", "n" to choiceN, "event" to "cancelled", "why" to "full command", "text" to text)
+                cancelChoice(null)
+                val targets = { try { Targets.build(TreeReader.targetLayers(this), screenW(), screenH(), format = optionFormat) }
+                    catch (e: Exception) { EventLog.ev("error", "where" to "targets", "error" to e.toString()); emptyList() } }
+                runCommand(PhraseGrammar.parse(text, PhraseGrammar.Context(apps = launchableApps(),
+                    userPhrases = profile.phraseBindings().mapNotNull { it.say }.toSet(), cursor = deviceMode == "cursor", window = true)), targets)
+            }
+        }
+    }
+
+    /** Tap candidate [idx] (1-based) by a number or a single-word narrowing result. */
+    private fun pickChoice(idx: Int) {
+        val c = choice ?: return
+        val t = c.candidates[idx - 1]
+        EventLog.ev("choice", "n" to choiceN, "event" to "spoken_pick", "selected" to idx, "option" to t.option)
+        tapPicked(t, "spoken $idx")
+    }
+
+    private fun tapPicked(t: Target, why: String) {
+        val n = choiceN; val gen = generation
+        cancelChoice(null)
+        // Let the highlight window disappear before the tap (and before the confirmer's first screenshot).
+        main.postDelayed({ if (gen == generation && armed) tapTarget(n, t, why) }, 120)
+    }
+
+    /** The rules-only narrowing path: show only [targets], renumbered, and keep listening (user decision). */
+    private fun renumberChoice(targets: List<Target>) {
+        choice = TargetChoice(targets)
+        try { overlay.showTargets(targets, 0) } catch (e: Exception) { EventLog.ev("error", "where" to "highlight", "error" to e.toString()) }
+        toast(CHOICE_HINT)
+        armChoiceTimeout()
+        openChoiceListening()
+        updateBadge("pick 1-${targets.size}")
+    }
+
+    /** A narrowing phrase that leaves several candidates with a model decider: ask the model among them. */
+    private fun narrowByModel(phrase: String, candidates: List<Target>) {
+        val n = choiceN
+        val pkg = currentApp()
+        val screen = try { summarize(pkg).first } catch (e: Exception) { ScreenContext("other", "none", "not scrollable", "hidden") }
+        val query = TargetQuery.forPicker(phrase)
+        val state = Targets.stateText(StateBuilder.appName(pkg, appLabel(pkg)), pkg, screen, query)
+        val options = Targets.options(candidates)
+        EventLog.ev("target_state", "n" to n, "app" to pkg, "text" to state, "query_raw" to phrase.takeIf { it != query },
+            "options" to org.json.JSONArray(options), "narrowed" to true)
+        val client = SystemOneClient(settings.baseUrl, settings.targetModel.ifBlank { settings.model }, { settings.apiKey }, settings.httpTimeoutMs)
+        val esc = decider as? EscalatingDecider
+        esc?.submitted()
+        val gen = generation
+        armChoiceTimeout()
+        updateBadge("naming...")
+        worker.execute {
+            val res = try { Result.success(esc?.pickTarget(state, options) ?: client.choice(state, "target", TargetVocab.POLICY, options)) }
+                catch (e: Exception) { Result.failure(e) }
+            main.post { onNarrowAnswer(n, gen, candidates, res) }
+        }
+    }
+
+    private fun onNarrowAnswer(n: Long, gen: Long, candidates: List<Target>, res: Result<ChoiceAnswer>) {
+        val a = res.getOrElse { e ->
+            EventLog.ev("target_decision", "n" to n, "error" to "${e.javaClass.simpleName}: ${e.message?.take(160)}")
+            toast("couldn't pick a target"); updateBadge("target failed"); return
+        }
+        EventLog.ev("target_decision", "n" to n, "choice" to a.choice, "confidence" to if (a.unscored) null else a.confidence,
+            "top" to topJson(a.top(3)), "ms" to a.ms, "min_confidence" to settings.targetMinConfidence, "narrowed" to true)
+        if (gen != generation || !armed || choice == null) { EventLog.ev("ignored", "n" to n, "reason" to "disarmed while deciding"); return }
+        val out = try { Targets.resolve(candidates, a, settings.targetMinConfidence) } catch (e: IllegalArgumentException) {
+            EventLog.ev("target", "n" to n, "result" to "error", "error" to e.message); return
+        }
+        when (out) {
+            is Targets.Outcome.NotOnScreen -> { toast("not on screen"); EventLog.ev("target", "n" to n, "result" to "not on screen"); updateBadge("not on screen") }
+            is Targets.Outcome.Tap -> { EventLog.ev("choice", "n" to n, "event" to "narrowed", "remaining" to 1, "option" to out.target.option); cancelChoice(null); tapTarget(n, out.target, "spoken narrowed") }
+            is Targets.Outcome.Choose -> startChoice(n, out.targets)
+        }
     }
 
     /** While candidates are highlighted, sounds pick among them instead of going to the decider. */
@@ -1436,16 +1555,16 @@ class VoxService : AccessibilityService() {
                     armChoiceTimeout()
                     EventLog.ev("choice", "n" to choiceN, "event" to "select", "sound" to label, "selected" to c.index + 1, "option" to c.selected.option)
                 }
-                "pop" -> {
+                "pop", "click" -> {
                     val t = c.selected; val idx = c.index + 1; val n = choiceN; val gen = generation
-                    EventLog.ev("choice", "n" to n, "event" to "picked", "selected" to idx, "option" to t.option)
+                    EventLog.ev("choice", "n" to n, "event" to "picked", "sound" to label, "selected" to idx, "option" to t.option)
                     cancelChoice(null)
                     // Let the highlight window disappear before the tap (and before the confirmer's first screenshot).
                     main.postDelayed({ if (gen == generation && armed) tapTarget(n, t, "picked $idx of ${c.candidates.size}") }, 120)
                     return
                 }
                 "hiss" -> { cancelChoice("hiss"); return }
-                else -> EventLog.ev("choice", "n" to choiceN, "event" to "ignored", "sound" to label, "why" to "rise/fall cycle, pop taps, hiss cancels")
+                else -> EventLog.ev("choice", "n" to choiceN, "event" to "ignored", "sound" to label, "why" to "rise/fall cycle, click/pop taps, hiss cancels")
             }
         }
     }

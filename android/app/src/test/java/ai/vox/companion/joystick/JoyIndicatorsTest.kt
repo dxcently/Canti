@@ -73,4 +73,38 @@ class JoyIndicatorsTest {
         assertTrue(JoyIndicators.faceState(mv), JoyIndicators.faceState(mv).startsWith("joy_up"))
         assertTrue(JoyIndicators.cursorKey(mv), JoyIndicators.cursorKey(mv).startsWith("N-"))
     }
+
+    @Test fun paletteMatchesArtAndFallsBackToTheSameGeometry() {
+        val art = JoyIndicators.CursorArt(File("src/main/assets/joystick_cursor.json").readText())
+        val p = JoyIndicators.Palette.of(art, 2.625f)
+        assertEquals(art.ink, p.ink); assertEquals(art.paper, p.paper); assertEquals(art.cellPx(2.625f), p.cellPx)
+        // No art: the same navy/mint and the same cell size the default art would use, so the bracket geometry matches.
+        for (d in listOf(1f, 1.5f, 2f, 2.625f, 3f)) {
+            val fallback = JoyIndicators.Palette.of(null, d)
+            assertEquals("ink @$d", JoyIndicators.Palette.DEFAULT_INK, fallback.ink)
+            assertEquals("paper @$d", JoyIndicators.Palette.DEFAULT_PAPER, fallback.paper)
+            assertEquals("cell @$d", art.cellPx(d), fallback.cellPx)
+        }
+        assertEquals(1.5238095238095237, JoyIndicators.Palette.DEFAULT_ART_PX_DP, 1e-9)
+        // A non-null art never uses the defaults, even if its own art_px_dp were to differ.
+        val custom = JoyIndicators.Palette.of(art, 1f)
+        assertEquals(art.cellPx(1f), custom.cellPx)
+    }
+
+    @Test fun targetBracketsInkWithPaperOutlineSelectedAndPaperOnlyOtherwise() {
+        // showTargets draws JoyIndicators.brackets for every candidate: value 1 (ink) and 2 (the one-cell paper
+        // outline) for the selected look, and paper-only (draw 1 as paper) for the rest. The grid geometry is shared.
+        val g = JoyIndicators.brackets(40, 300, 1040, 390, 4)
+        assertTrue(g.rows().toString(), g.rows().any { it.contains("1") })
+        assertTrue(g.rows().toString(), g.rows().any { it.contains("2") })
+        // The paper outline hugs the ink: every paper cell borders an ink cell (JoyIndicators.outline's invariant).
+        for (y in 0 until g.h) for (x in 0 until g.w) if (g[x, y] == 2) {
+            var near = false
+            for (dy in -1..1) for (dx in -1..1) {
+                val xx = x + dx; val yy = y + dy
+                if (xx in 0 until g.w && yy in 0 until g.h && g[xx, yy] == 1) near = true
+            }
+            assertTrue("($x,$y) paper cell not adjacent to ink", near)
+        }
+    }
 }

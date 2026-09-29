@@ -47,7 +47,8 @@ class MenuActivity : Activity() {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 120, 48, 48) }
         col.addView(label(R.id.title, "VOX fixture menu", 22f))
         for ((name, cls) in listOf("Feed" to FeedActivity::class.java, "List" to ListActivity::class.java,
-                "Controls" to ControlsActivity::class.java, "Static" to StaticActivity::class.java)) {
+                "Controls" to ControlsActivity::class.java, "Static" to StaticActivity::class.java,
+                "Tree" to TreeActivity::class.java)) {
             col.addView(Button(this).apply { text = name; setOnClickListener { startActivity(Intent(this@MenuActivity, cls)) } })
         }
         setContentView(col)
@@ -229,5 +230,59 @@ class StaticActivity : Activity() {
         val root = FrameLayout(this).apply { setBackgroundColor(0xFF37474F.toInt()) }
         root.addView(label(R.id.static_label, "Static screen: nothing here reacts"), FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = 160 })
         setContentView(root)
+    }
+}
+
+/**
+ * An AnkiDroid-style deck tree: parent rows L05/L06/L07 with indented children "01 Vocabulary" / "02 Grammar". The
+ * indentation is a left margin on the row, so the accessibility bounds (what VOX's tree context reads) are genuinely
+ * indented. A framework ListView lays rows out full-width, so its padding would not move the bounds; [TreeList] reports
+ * a CollectionInfo instead so its clickable rows still read as "list item"s with a list container.
+ */
+class TreeActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(0xFF263238.toInt()) }
+        val echo = label(R.id.tree_tap, "tapped: -", 16f)
+        root.addView(echo, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            setMargins((24 * density).toInt(), (24 * density).toInt(), (24 * density).toInt(), (8 * density).toInt())
+        })
+        val list = TreeList(this).apply { id = R.id.tree }
+        var parent = ""
+        for ((text, depth) in TREE_ROWS) {
+            if (depth == 0) parent = text
+            val full = if (depth > 0) "$parent › $text" else text
+            list.addView(TextView(this).apply {
+                this.text = text; textSize = 18f; setTextColor(Color.WHITE)
+                setPadding(0, (12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt())
+                isClickable = true
+                tag = full
+                setOnClickListener { echo.text = "tapped: $full" }
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                leftMargin = ((if (depth > 0) 48 else 8) * density).toInt()
+            })
+        }
+        root.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        setContentView(root)
+    }
+
+    private val density get() = resources.displayMetrics.density
+
+    private companion object {
+        val TREE_ROWS = listOf(
+            "L05" to 0, "01 Vocabulary" to 1, "02 Grammar" to 1,
+            "L06" to 0, "01 Vocabulary" to 1, "02 Grammar" to 1,
+            "L07" to 0, "01 Vocabulary" to 1, "02 Grammar" to 1,
+        )
+    }
+}
+
+/** A vertical list of clickable rows that reports a CollectionInfo (rows), so VOX reads its children as "list item"s
+ *  in a list container (Targets.listContainer / isListItem) while the rows' left margins indent them. */
+class TreeList(ctx: Context) : LinearLayout(ctx) {
+    init { orientation = LinearLayout.VERTICAL }
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.collectionInfo = AccessibilityNodeInfo.CollectionInfo.obtain(childCount, 1, false)
     }
 }

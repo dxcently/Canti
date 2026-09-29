@@ -24,8 +24,8 @@ import urllib.request
 from pathlib import Path
 
 from servers import FakeSystemOne, WebServer
-from voxlib import (EventStream, Vox, adb, device_ms, dismiss_first_run, force_stop, launch, node_by_id, prime_organic_maps,
-                    screen_diff, screenshot, sh, tap_node, start_activity, talking)
+from voxlib import (EventStream, Vox, adb, device_ms, dismiss_first_run, force_stop, foreground_package, launch,
+                    node_by_id, prime_organic_maps, screen_diff, screenshot, sh, tap_node, start_activity, talking)
 
 OUT = Path(__file__).resolve().parent / "out"
 sys.dont_write_bytecode = True   # read-only import of the training schema (never write into finetune/)
@@ -40,8 +40,8 @@ TESTS: list[tuple[str, callable]] = []
 
 class Skip(Exception):
     """A test that cannot run in this environment (reported as SKIP, not as a pass)."""
-FEED, MENU, LIST, CONTROLS, STATIC = (f"ai.vox.fixture/.{a}" for a in
-                                      ("FeedActivity", "MenuActivity", "ListActivity", "ControlsActivity", "StaticActivity"))
+FEED, MENU, LIST, CONTROLS, STATIC, TREE = (f"ai.vox.fixture/.{a}" for a in
+    ("FeedActivity", "MenuActivity", "ListActivity", "ControlsActivity", "StaticActivity", "TreeActivity"))
 
 
 def test(fn):
@@ -717,7 +717,6 @@ def intent_cursor_not_on_screen_cancel_and_timeout(c: Ctx):
     srv = FakeSystemOne()
     try:
         use_fake_targets(c, srv)
-        c.vox.control("config", target_choose_ms=1500)
         c.open(CONTROLS)
         enter_cursor(c)
         m0 = c.ev.mark()
@@ -736,11 +735,12 @@ def intent_cursor_not_on_screen_cancel_and_timeout(c: Ctx):
         m = c.ev.mark()
         c.vox.sounds("hiss", mode="cursor")
         assert c.ev.wait(m, lambda e: e["ev"] == "choice" and e.get("event") == "cancelled" and e.get("why") == "hiss", 2)
-        # ...and the timeout cancels (target_choose_ms = 1500 here; 6000 by default)
+        # ...and the timeout cancels (the choice timeout is the fixed CHOICE_MS = 8 s; target_choose_ms no longer
+        # controls it, it only sets the risky-action confirm window via Outward.windowMs)
         r = name_target(c, "the switch")
         assert r["target"]["result"] == "choose", r["target"]
         t0 = time.time()
-        e = c.ev.wait(r["mark"], lambda e: e["ev"] == "choice" and e.get("event") == "cancelled", 4)
+        e = c.ev.wait(r["mark"], lambda e: e["ev"] == "choice" and e.get("event") == "cancelled", 10)
         assert e and e["why"] == "timeout", e
         c.note(f"timeout cancel after {time.time() - t0:.1f}s")
         time.sleep(0.3)
@@ -757,6 +757,121 @@ def intent_cursor_not_on_screen_cancel_and_timeout(c: Ctx):
         t = c.ev.wait(m4, lambda e: e["ev"] == "toast" and "on screen" in e.get("text", ""), 3)
         assert t, [e["ev"] for e in c.ev.since(m4)]
         assert not any(x["ev"] == "target" for x in c.ev.since(m4)), "no model to ask: nothing may be tapped or highlighted"
+    finally:
+        srv.close()
+
+
+# --- spoken target picking on the indented fixture tree -----------------------------------------------------------------
+
+
+def enable_tree_context(c: Ctx, srv: FakeSystemOne) -> None:
+    """Point the app at a local /health that declares option_format v2i (the model-facing tree context is v2i-only),
+    while the rules decider still handles every pick locally. refreshOptionFormat fetches /health once on the config
+    change."""
+    m = c.ev.mark()
+    c.vox.control("config", decider="rules", base_url=f"http://127.0.0.1:{srv.port}", model="vox-test",
+                  target_model="", http_timeout_ms=2000)
+    e = c.ev.wait(m, lambda e: e["ev"] == "option_format" and e.get("format") == "v2i", 8)
+    assert e, [x for x in c.ev.since(m) if x["ev"] == "option_format"]
+
+
+def tree_listen(c: Ctx) -> int:
+    """Cursor mode, the fixture tree, pop pop: returns a mark taken just after the app's listen window opened."""
+    enter_cursor(c)
+    c.open(TREE)
+    m = c.ev.mark()
+    assert c.vox.sounds("pop", mode="cursor")["waiting"] is True, "in cursor mode pop must wait for a second pop"
+    time.sleep(0.15)
+    c.vox.sounds("pop", mode="cursor")
+    d = c.ev.wait(m, lambda e: e["ev"] == "decision" and e.get("source") == "app:cursor-listen", 3)
+    assert d and d["action"] == "listen_for_phrase", [e["ev"] for e in c.ev.since(m)]
+    assert c.ev.wait(m, lambda e: e["ev"] == "listening" and e.get("state") == "open", 2), "listening window not opened"
+    return c.ev.mark()
+
+
+def tree_choose(c: Ctx, phrase: str) -> dict:
+    """The phrase names several tree children: returns the `target` choose event (3 "01 Vocabulary" candidates)."""
+    m = tree_listen(c)
+    c.vox.phrase(phrase)
+    t = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "choose", 5)
+    assert t, [e["ev"] for e in c.ev.since(m)]
+    return t
+
+
+@test
+def tree_open_lesson_6_vocabulary_one_taps_the_child(c: Ctx):
+    srv = FakeSystemOne()
+    try:
+        srv.option_format = "v2i"
+        enable_tree_context(c, srv)
+        m = tree_listen(c)
+        c.vox.phrase("open lesson 6 vocabulary one")
+        t = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "tap", 5)
+        assert t, [e["ev"] for e in c.ev.since(m)]
+        assert "01 Vocabulary · L06" in t["option"], t
+        cf = c.ev.wait(m, lambda e: e["ev"] == "confirm" and e.get("watch") == t["watch"], 5)
+        assert cf and cf["result"] == "confirmed (events)", cf
+        c.texts_until("tree_tap", "tapped: L06 › 01 Vocabulary")
+    finally:
+        srv.close()
+
+
+@test
+def tree_spoken_narrowing_lesson_6_taps_the_child(c: Ctx):
+    srv = FakeSystemOne()
+    try:
+        srv.option_format = "v2i"
+        enable_tree_context(c, srv)
+        t = tree_choose(c, "open vocabulary")
+        assert len(t["candidates"]) == 3, t
+        assert all("01 Vocabulary · L0" in o for o in t["candidates"]), t["candidates"]
+        m = c.ev.mark()
+        c.vox.phrase("lesson 6")
+        n = c.ev.wait(m, lambda e: e["ev"] == "choice" and e.get("event") == "narrowed" and e.get("remaining") == 1, 3)
+        assert n and "01 Vocabulary · L06" in n["option"], [x for x in c.ev.since(m) if x["ev"] == "choice"]
+        tap = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
+        assert tap and "01 Vocabulary · L06" in tap["option"], tap
+        c.texts_until("tree_tap", "tapped: L06 › 01 Vocabulary")
+    finally:
+        srv.close()
+
+
+@test
+def tree_spoken_number_two_taps_the_second_candidate(c: Ctx):
+    srv = FakeSystemOne()
+    try:
+        srv.option_format = "v2i"
+        enable_tree_context(c, srv)
+        t = tree_choose(c, "open vocabulary")
+        assert len(t["candidates"]) == 3, t
+        m = c.ev.mark()
+        c.vox.phrase("2")
+        p = c.ev.wait(m, lambda e: e["ev"] == "choice" and e.get("event") == "spoken_pick" and e.get("selected") == 2, 3)
+        assert p and "01 Vocabulary · L06" in p["option"], [x for x in c.ev.since(m) if x["ev"] == "choice"]
+        tap = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
+        assert tap and "01 Vocabulary · L06" in tap["option"], tap
+        c.texts_until("tree_tap", "tapped: L06 › 01 Vocabulary")
+    finally:
+        srv.close()
+
+
+@test
+def tree_spoken_go_home_cancels_the_choice_and_goes_home(c: Ctx):
+    srv = FakeSystemOne()
+    try:
+        srv.option_format = "v2i"
+        enable_tree_context(c, srv)
+        t = tree_choose(c, "open vocabulary")
+        assert len(t["candidates"]) == 3, t
+        m = c.ev.mark()
+        c.vox.phrase("go home")
+        e = c.ev.wait(m, lambda e: e["ev"] == "choice" and e.get("event") == "cancelled" and e.get("why") == "full command", 3)
+        assert e, [x for x in c.ev.since(m) if x["ev"] == "choice"]
+        end = time.time() + 4
+        while time.time() < end and foreground_package() == "ai.vox.fixture":
+            time.sleep(0.3)
+        assert foreground_package() != "ai.vox.fixture", "go home must leave the fixture"
+        assert c.vox.texts().get("tree_tap", "tapped: -") == "tapped: -", "nothing may have been tapped"
     finally:
         srv.close()
 

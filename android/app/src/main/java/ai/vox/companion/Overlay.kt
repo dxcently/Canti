@@ -390,27 +390,43 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     private var hlTargets: List<Target> = emptyList()
     private var hlSelected = 0
 
-    /** Full-screen, not touchable: a numbered box on each candidate (1 = most probable); [selected] drawn thicker. */
+    /**
+     * Full-screen, not touchable: each candidate drawn like the cursor mode's snap-to-element selection — the corner
+     * brackets come from [JoyIndicators.brackets] and are drawn with [drawGrid], i.e. non-anti-aliased pixel cells with
+     * the one-cell paper outline, not lines. The selected one uses the snap's ink brackets with the paper outline;
+     * the others are paper-only brackets. Each has a number badge 1..N in the same pixel style (non-AA, the pixel font,
+     * the ink/paper palette). The palette and cell size come from the joystick art when present, else the default
+     * navy/mint at the default art's geometry ([JoyIndicators.Palette]), so the geometry matches the snap either way.
+     */
     fun showTargets(targets: List<Target>, selected: Int) {
         hideTargets()
         hlTargets = targets; hlSelected = selected
+        val pal = JoyIndicators.Palette.of(joyArt, density)
         val v = object : View(svc) {
-            val box = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-            val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-            val txt = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 46f; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
+            val p = Paint().apply { isAntiAlias = false }
+            val fill = Paint().apply { isAntiAlias = false }
+            val txt = Paint().apply { isAntiAlias = false; typeface = pixelFont; textAlign = Paint.Align.CENTER }
             val loc = IntArray(2)
             override fun onDraw(c: Canvas) {
                 getLocationOnScreen(loc)
                 hlTargets.forEachIndexed { i, t ->
                     val sel = i == hlSelected
-                    val col = if (sel) 0xFFFF9800.toInt() else 0xFF2196F3.toInt()
-                    box.color = col; box.strokeWidth = if (sel) 14f else 6f
-                    val l = (t.left - loc[0]).toFloat(); val tp = (t.top - loc[1]).toFloat()
-                    c.drawRect(l, tp, (t.right - loc[0]).toFloat(), (t.bottom - loc[1]).toFloat(), box)
-                    fill.color = col
-                    c.drawCircle(l + 34f, tp + 34f, 34f, fill)
-                    c.drawText("${i + 1}", l + 34f, tp + 50f, txt)
+                    val l = t.left - loc[0]; val tp = t.top - loc[1]
+                    val r = t.right - loc[0]; val b = t.bottom - loc[1]
+                    val g = JoyIndicators.brackets(l, tp, r, b, pal.cellPx)
+                    // Selected = the snap's ink brackets with their paper outline; else paper-only brackets.
+                    drawGrid(c, g, pal.cellPx, if (sel) pal.ink else pal.paper, pal.paper, p)
+                    drawBadge(c, i + 1, l, tp, pal, sel)
                 }
+            }
+            /** A filled pixel square (cell-aligned) at the target's top-left, with the 1-based number in the pixel font. */
+            private fun drawBadge(c: Canvas, n: Int, l: Int, tp: Int, pal: JoyIndicators.Palette, sel: Boolean) {
+                val side = 12 * pal.cellPx
+                fill.color = if (sel) pal.ink else pal.paper
+                c.drawRect(l.toFloat(), tp.toFloat(), (l + side).toFloat(), (tp + side).toFloat(), fill)
+                txt.color = if (sel) pal.paper else pal.ink
+                txt.textSize = 7 * pal.cellPx.toFloat()
+                c.drawText("$n", l + side / 2f, tp + side / 2f + txt.textSize / 3f, txt)
             }
         }
         wm.addView(v, params(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT).apply {
@@ -541,18 +557,18 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         val cell = cellPx
         val v = object : View(svc) {
             val p = Paint().apply { isAntiAlias = false }
-            override fun onDraw(c: Canvas) = drawGrid(c, g, cell, art, p)
+            override fun onDraw(c: Canvas) = drawGrid(c, g, cell, art.ink, art.paper, p)
         }
         wm.addView(v, params(g.w * cell, g.h * cell).apply { gravity = Gravity.TOP or Gravity.START; x = g.x; y = g.y })
         OwnWindows.note(v)
         bracketView = v
     }
 
-    private fun drawGrid(c: Canvas, g: JoyIndicators.Grid, cell: Int, art: JoyIndicators.CursorArt, p: Paint) {
+    private fun drawGrid(c: Canvas, g: JoyIndicators.Grid, cell: Int, ink: Int, paper: Int, p: Paint) {
         for (yy in 0 until g.h) for (xx in 0 until g.w) {
             val v = g[xx, yy]
             if (v == 0) continue
-            p.color = if (v == 1) art.ink else art.paper
+            p.color = if (v == 1) ink else paper
             c.drawRect((xx * cell).toFloat(), (yy * cell).toFloat(), ((xx + 1) * cell).toFloat(), ((yy + 1) * cell).toFloat(), p)
         }
     }
@@ -561,7 +577,7 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         val p = Paint().apply { isAntiAlias = false }
         override fun onDraw(c: Canvas) {
             val g = art.grids[joyKey] ?: art.grids.getValue("plain")
-            drawGrid(c, g, art.cellPx(density), art, p)
+            drawGrid(c, g, art.cellPx(density), art.ink, art.paper, p)
         }
     }
 

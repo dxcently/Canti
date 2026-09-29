@@ -14,4 +14,6 @@
     <item name="long_state" type="id" />
     <item name="text_field" type="id" />
     <item name="static_label" type="id" />
+    <item name="tree" type="id" />
+    <item name="tree_tap" type="id" />
 </resources>

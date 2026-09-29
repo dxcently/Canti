@@ -728,7 +728,8 @@ object TargetMatcher {
         "item" to "list item", "row" to "list item", "entry" to "list item", "image" to "image", "link" to "item", "option" to "item")
     private val POSITION_SAY = mapOf("upper left" to "top left", "upper right" to "top right", "lower left" to "bottom left",
         "lower right" to "bottom right", "middle" to "center", "centre" to "center")
-    private val FILLER = setOf("the", "a", "an", "that", "this", "on", "at", "in", "of", "one", "corner", "screen")
+    // "one" is a number word ("vocabulary one" = "01 vocabulary"), not filler; "the one"/"this one" still resolve to 1.
+    private val FILLER = setOf("the", "a", "an", "that", "this", "on", "at", "in", "of", "corner", "screen")
 
     /** [full]: the whole name run together ("in box" = "Inbox", "add item" = "Add item"), checked before the parts. */
     private data class Query(val words: List<String>, val role: String?, val position: String?, val full: String)
@@ -760,15 +761,45 @@ object TargetMatcher {
     private fun wordMatch(q: String, l: String): Boolean {
         if (q == l) return true
         if (SYN[q]?.contains(l) == true) return true
+        // Number equivalence: "1" = "one" = "01" = "first" (up to 20; "6" = "06" = "six"); leading zeros ignored.
+        val qn = number(q); val ln = number(l)
+        if (qn != null && qn == ln) return true
+        // Letter-prefix abbreviation: a short letter label token that begins the query word ("l" ~ "lesson", "ch" ~ "chapter").
+        if (l.length in 1..3 && l.all { it.isLetter() } && q.length >= 4 && q.lowercase(Locale.ROOT).startsWith(l.lowercase(Locale.ROOT))) return true
         if (q.length >= 4 && l.length >= 4 && Fuzzy.ratio(Fuzzy.phonetic(q), Fuzzy.phonetic(l)) >= 0.8) return true
         return q.length >= 4 && l.startsWith(q)
+    }
+
+    /** A token as an integer when it is a number in any spoken form: digits (leading zeros ignored), a number word
+     *  ("six", "twenty"), or an ordinal ("first", "1st", "20th"). Null otherwise. */
+    internal fun number(tok: String): Int? {
+        val t = tok.lowercase(Locale.ROOT)
+        t.toIntOrNull()?.let { return it }
+        NumberWords.UNITS[t]?.let { return it }
+        NumberWords.TENS[t]?.let { return it }
+        return ORDINALS[t]
+    }
+
+    /** "first".."twentieth" as their value (number equivalence up to at least 20). */
+    private val ORDINALS: Map<String, Int> = run {
+        val m = HashMap<String, Int>()
+        val words = listOf("first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+            "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth",
+            "nineteenth", "twentieth")
+        for ((i, w) in words.withIndex()) m[w] = i + 1
+        m
     }
 
     fun score(t: Target, raw: String): Double = score(t, query(raw))
 
     private fun score(t: Target, q: Query): Double {
         if (t.label == "unlabeled") return 0.0
-        val lw = PhraseGrammar.basic(t.label.removeSuffix("...")).split(' ').filter { it.isNotEmpty() }.map(Fuzzy::digit)
+        // Label + context + tree parent words together ("01 Vocabulary · L06"), so a query naming both scores highest
+        // ("lesson 6 vocabulary 1" covers the label and the parent's name). The tree parent is always available (it
+        // lives on Target.parent, not the model-facing context), so the local match works with any model format.
+        val extra = listOfNotNull(t.context, t.parent).distinct().joinToString(" ")
+        val lw = PhraseGrammar.basic(t.label.removeSuffix("...") + (if (extra.isEmpty()) "" else " $extra"))
+            .split(' ').filter { it.isNotEmpty() }.map(Fuzzy::digit)
         var s: Double
         val labelFull = Fuzzy.compact(lw.joinToString(" "))
         if (q.full.length >= 2 && q.full == labelFull) s = 1.0
