@@ -1,0 +1,26 @@
+{
+  "sweep-v5-e5-small-e3-on-v6.test_unseen_apps.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.9405,
+    "nll": 1.1717173754470205,
+    "ece": 0.05935432500000004,
+    "false_trigger_rate": 0.010570824524312896,
+    "missed_command_rate": 0.0733464309102816,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 0.92,
+      "default": 0.605,
+      "disabled": 1.0,
+      "global_rule": 0.98,
+      "not_deliberate": 1.0,
+      "phrase": 0.988,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.981,
+      "sequence": 1.0,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 8.77,
+    "latency_ms_p95": 9.79
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "sweep-v6-e5-small-e3-on-v5.test_unseen_phrasing.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.9795,
+    "nll": 0.2628688956373433,
+    "ece": 0.01992769600000003,
+    "false_trigger_rate": 0.03773584905660377,
+    "missed_command_rate": 0.0026263952724885093,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 0.915,
+      "disabled": 1.0,
+      "global_rule": 1.0,
+      "not_deliberate": 1.0,
+      "phrase": 0.994,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.973,
+      "sequence": 1.0,
+      "unbound": 0.753
+    },
+    "latency_ms_p50": 9.13,
+    "latency_ms_p95": 11.49
+  }
+}

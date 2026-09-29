@@ -41,7 +41,6 @@ GESTURE_WORDS_TRAIN = {
     "arch": ["an arch hum (up then down)", "a hum that goes up then down", "an up-down hum", "a hum that peaks in the middle", "humming up and back down"],
     "dip": ["a dip hum (down then up)", "a hum that goes down then up", "a down-up hum", "a hum that sags in the middle", "humming down and back up"],
     "flat": ["a long flat hum", "a steady hum", "a flat hum", "a held hum", "one long even hum", "a sustained hum"],
-    "pop": ["a pop", "a lip pop", "a mouth pop", "a p-pop sound", "popping my lips"],
     "click": ["a tongue click", "a click", "a clicking tongue", "clicking my tongue", "a cluck"],
     "hiss": ["a hiss", "an sss sound", "hissing", "a ssss noise", "a snake sound"],
 }

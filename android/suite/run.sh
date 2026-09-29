@@ -31,7 +31,7 @@ case "$cmd" in
         mkdir -p "$here/suite/out"
         # Redirect the whole group, so no process keeps the caller's stdout open.
         ( cd "$here/../finetune" && exec env PYTHONDONTWRITEBYTECODE=1 setsid nix shell nixpkgs#python313 nixpkgs#uv nixpkgs#gcc -c bash -c \
-            'source ./env.sh; source .venv/bin/activate; VOX_DEVICE=cpu VOX_THREADS=8 VOX_JEVLIKE_CKPT=runs/sweep-v5-e5-small-e3.pt VOX_JEVLIKE_TARGET_CKPT=runs/jl11-K1-s9.pt VOX_JEVLIKE_TARGET_FORMAT=v2i exec uvicorn servers.systemone:app --port 8765' \
+            'source ./env.sh; source .venv/bin/activate; VOX_DEVICE=cpu VOX_THREADS=8 VOX_JEVLIKE_CKPT=runs/sweep-v6-e5-small-e3.pt VOX_JEVLIKE_TARGET_CKPT=runs/jl11-K1-s9.pt VOX_JEVLIKE_TARGET_FORMAT=v2i exec uvicorn servers.systemone:app --port 8765' \
         ) >"$here/suite/out/systemone.log" 2>&1 </dev/null &
         for _ in $(seq 1 180); do
           if curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then echo "systemone up: $(curl -fsS http://127.0.0.1:8765/health)"; exit 0; fi

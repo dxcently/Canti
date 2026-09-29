@@ -37,13 +37,13 @@ POLICY = (
     "The user's rule for the current app overrides their global rules, which override the defaults. "
     "Rules for other apps do not apply. A gesture sequence with no binding means do nothing. "
     "Cursor mode is switched on and off by the device button. In cursor mode: rise/fall/arch/dip move the cursor "
-    "up/down/right/left, fast if loud else slow; a pop clicks, a flat hum stops, a hiss goes back, unless a rule says otherwise. "
+    "up/down/right/left, fast if loud else slow; a click clicks, a flat hum stops, a hiss goes back, unless a rule says otherwise. "
     "In listening mode, map the spoken phrase to the action it asks for, using the user's phrase rules first. "
     "The screen line only breaks ties for phrases: 'next'/'previous' mean swiping in a feed, photo viewer or document; "
     "'pause' when already paused or 'play' when already playing means do nothing. "
     "Never change an explicit gesture or rule because of the screen."
 )
-DEFAULTS_TEXT = "defaults: rise=swipe up, fall=swipe down, arch=swipe right, dip=swipe left, pop=tap, hiss=go back, long flat hum=long-press, click pop=listen for a phrase, click click=go home, hiss click=go back"
+DEFAULTS_TEXT = "defaults: rise=swipe up, fall=swipe down, arch=swipe right, dip=swipe left, click=tap, hiss=go back, long flat hum=long-press, click click click=listen for a phrase, click click=go home, hiss click=go back"
 
 
 HELDOUT_APPS = {"com.netflix.mediaclient", "com.pinterest", "com.duolingo", "com.google.android.apps.docs"}
@@ -56,7 +56,6 @@ GESTURE_WORDS = {
     "arch": (["an arch hum (up then down)", "a hum that goes up then down"], ["a rise-and-fall hum", "a hill-shaped hum"]),
     "dip": (["a dip hum (down then up)", "a hum that goes down then up"], ["a fall-and-rise hum", "a valley-shaped hum"]),
     "flat": (["a long flat hum", "a steady hum"], ["a level held note", "an unchanging hum"]),
-    "pop": (["a pop", "a lip pop"], ["a popping sound", "a lip smack"]),
     "click": (["a tongue click", "a click"], ["a tongue tut", "a clicking noise"]),
     "hiss": (["a hiss", "an sss sound"], ["a hissing noise", "a long s sound"]),
 }
@@ -275,7 +274,7 @@ class Generator:
 
     def random_seq(self, avoid: tuple[str, ...] = ()) -> tuple[str, ...]:
         r = self.rng
-        pool = list(CONTOURS) + list(DISCRETE)
+        pool = list(CONTOURS) + [g for g in DISCRETE if g != "pop"]
         while True:
             seq = tuple(r.choice(pool) for _ in range(r.choice([1, 1, 2, 2, 3])))
             if seq != avoid:
@@ -312,7 +311,11 @@ class Generator:
                 while len(seq) < 2 or seq in DEFAULT_BINDINGS:
                     seq = self.random_seq()
             elif kind == "unbound":
-                seq = r.choice(FREED_SEQUENCES) if r.random() < 0.3 else self.random_seq()
+                # Only draw from FREED_SEQUENCES entries that contain no "pop"; with the current table
+                # (only ("click","pop")) that is none, so the 30% FREED branch is skipped and we just
+                # reject sequences the defaults or the app resolve themselves.
+                freed = [s for s in FREED_SEQUENCES if "pop" not in s]
+                seq = r.choice(freed) if (freed and r.random() < 0.3) else self.random_seq()
                 while seq in DEFAULT_BINDINGS or seq in APP_ONLY_BINDINGS:  # app-only: resolved by the app, never "none"
                     seq = self.random_seq()
             else:
@@ -396,7 +399,7 @@ class Generator:
         r = self.rng
         sc.mode = "cursor"
         sc.cursor = r.choice(["moving right slow", "moving up fast", "stopped", "stopped", "dragging, stopped"])
-        g = r.choice(list(CONTOURS) + ["pop", "click_click", "hiss"])
+        g = r.choice(list(CONTOURS) + ["click", "click_click", "hiss"])
         loud = r.choice(LOUDNESS)
         direction = {"rise": "up", "fall": "down", "arch": "right", "dip": "left"}
         rules = self.distractor_rules(sc.app, (), r.randint(0, 2))
@@ -412,9 +415,9 @@ class Generator:
             sc.sequence = ("flat",)
             sc.heard = [self.deliberate_sound("flat", loud)]
             answer = "stop"
-        elif g == "pop":
-            sc.sequence = ("pop",)
-            sc.heard = [self.deliberate_sound("pop", loud)]
+        elif g == "click":
+            sc.sequence = ("click",)
+            sc.heard = [self.deliberate_sound("click", loud)]
             answer = "click"
         elif g == "hiss":
             sc.sequence = ("hiss",)
@@ -479,6 +482,8 @@ def main() -> None:
         for key, ws in extra["actions"].items():
             W.ACTION_WORDS_TRAIN[key] = list(dict.fromkeys(W.ACTION_WORDS_TRAIN[key] + ws))
         for key, ws in extra["gestures"].items():
+            if key not in W.GESTURE_WORDS_TRAIN:
+                continue  # e.g. "pop": removed from the gesture words (a pop folds to a click at intake)
             W.GESTURE_WORDS_TRAIN[key] = list(dict.fromkeys(W.GESTURE_WORDS_TRAIN[key] + ws))
         for sec, lst in (("app_rule_templates", W.RULE_TEMPLATES_TRAIN), ("global_rule_templates", W.GLOBAL_TEMPLATES_TRAIN),
                          ("disable_templates", W.DISABLE_TEMPLATES_TRAIN), ("phrase_templates", W.PHRASE_TEMPLATES_TRAIN)):

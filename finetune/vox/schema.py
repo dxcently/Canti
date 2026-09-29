@@ -16,6 +16,7 @@ CONTOURS = {
     "flat": "stays level",
 }
 DISCRETE = {
+    # "pop" is kept for parity with Kotlin's SoundFold, which rewrites pop lines to click at intake; the generator never emits it.
     "pop": "a short lip pop",
     "click": "a tongue click",
     "hiss": "a hiss",
@@ -71,21 +72,22 @@ CURSOR_ACTIONS = {
 }
 
 # Default gesture bindings (global profile) from the wiki's gesture vocabulary.
+# 2026-09-28: a pop counts as a click (folded at intake); "pop"/"pop pop" removed.
 DEFAULT_BINDINGS = {
     ("rise",): "swipe_up",
     ("fall",): "swipe_down",
     ("arch",): "swipe_right",
     ("dip",): "swipe_left",
-    ("pop",): "tap",
+    ("click",): "tap",
     ("hiss",): "back",
     ("flat",): "long_press",
-    ("click", "pop"): "listen_for_phrase",
+    ("click", "click", "click"): "listen_for_phrase",
     ("click", "click"): "home",
     ("hiss", "click"): "back",   # same action as a single hiss, so hiss never waits for the click (Android Sequencer)
 }
-# Cursor mode is toggled ONLY by the device button / switch jack, never by a sound (so it is not an action). "pop pop" is
-# deliberately unbound so a single pop never has to wait for a second one.
-FREED_SEQUENCES = [("pop", "pop")]
+# Cursor mode is toggled ONLY by the device button / switch jack, never by a sound (so it is not an action).
+# Mirrors Kotlin: after the fold "click pop" cannot occur (pop folds to click), so this freed sequence never happens.
+FREED_SEQUENCES = [("click", "pop")]
 
 # App-only bindings: resolved by the Android app's rule table in every decider mode, never shown to a model. Their
 # actions are not in ACTIONS, so the students' option lists (and every dataset built from them) are unchanged.
