@@ -84,13 +84,16 @@ object Vocab {
         listOf("fall") to "swipe_down",
         listOf("arch") to "swipe_right",
         listOf("dip") to "swipe_left",
-        listOf("pop") to "tap",
+        listOf("click") to "tap",
         listOf("hiss") to "back",
         listOf("flat") to "long_press",
-        listOf("pop", "pop") to "listen_for_phrase",   // 2026-09-27 (user): pop pop replaced click pop
+        listOf("click", "click", "click") to "listen_for_phrase",   // 2026-09-28 (user): a pop counts as a click
         listOf("click", "click") to "home",
         listOf("hiss", "click") to "back"
+        // 2026-09-28 (user): "pop" and "pop pop" removed (a pop is a click at intake). NOTE: tools/gen_vocab.py would
+        // revert this table; it has already differed from finetune/vox/schema.py since 2026-09-27 (pop pop). Do not run it.
     )
+    // After the fold "click pop" cannot occur (pop folds to click), so this freed sequence is harmless; kept as is.
     val FREED_SEQUENCES = listOf(listOf("click", "pop"))
 
     /** App-only bindings: resolved by the rule table in every decider mode, never shown to a model (not in ACTIONS). */

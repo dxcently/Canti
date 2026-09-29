@@ -845,7 +845,7 @@ String _bindingLabel(VoxBinding b) {
 }
 
 class _BindingsWindowState extends State<_BindingsWindow> {
-  static const _pages = ['gesture mode', 'cursor mode', 'two-sound combos'];
+  static const _pages = ['gesture mode', 'cursor mode', 'combos'];
 
   int _page = 0;
   final _sel = [0, 0];
@@ -881,8 +881,8 @@ class _BindingsWindowState extends State<_BindingsWindow> {
         ],
       );
     } else {
-      // The two-sound combos: gesture mode's defaults and rules, then cursor mode's (pop pop names a target there, and
-      // any cursor rules; each tagged, since the same sounds can mean something else in gesture mode).
+      // The combos: gesture mode's defaults and rules, then cursor mode's (any cursor rules; each tagged, since the
+      // same sounds can mean something else in gesture mode).
       final combos = [
         for (final c in widget.bindings.gesture.combos) c,
         for (final c in widget.bindings.cursor.combos)
@@ -893,7 +893,7 @@ class _BindingsWindowState extends State<_BindingsWindow> {
           children: [
             for (final (i, c) in combos.indexed) ...[
               if (i > 0) SizedBox(height: p(1)),
-              StatRow(icon: Icons7.sound, label: c.sequence.join(' '), value: _bindingLabel(c)),
+              StatRow(icon: Icons7.sound, label: _comboName(c.sequence), value: _bindingLabel(c)),
             ],
           ],
         ),
@@ -981,4 +981,18 @@ class _EventTile extends StatelessWidget {
         subtitle: Text(event.summary, maxLines: 2, overflow: TextOverflow.ellipsis),
         trailing: Text('${(event.t / 1000).toStringAsFixed(1)} s'),
       );
+}
+
+/// A combo's sounds as its row label; a run of three or more of the same sound is written `click ×3` so the row fits.
+String _comboName(List<String> seq) {
+  final out = <String>[];
+  for (var i = 0; i < seq.length;) {
+    var j = i;
+    while (j < seq.length && seq[j] == seq[i]) {
+      j++;
+    }
+    out.add(j - i >= 3 ? '${seq[i]} ×${j - i}' : List.filled(j - i, seq[i]).join(' '));
+    i = j;
+  }
+  return out.join(' ');
 }

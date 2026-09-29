@@ -61,7 +61,7 @@ class ShapeGradeTest {
     @Test fun pitchNoScaleIsPending() {
         assertEquals("pending", state("PITCH", want("rise", "low"), heard(startHz = 180.0), null))
         // a discrete gesture has no pitch check at all
-        assertNull(state("PITCH", want("pop", "none", tone = "any"), heard("pop", f0 = null, pitch = DoubleArray(0))))
+        assertNull(state("PITCH", want("click", "none", tone = "any"), heard("click", f0 = null, pitch = DoubleArray(0))))
     }
 
     // --- shape --------------------------------------------------------------------------------------------------------
@@ -91,8 +91,10 @@ class ShapeGradeTest {
     }
 
     @Test fun shapeDiscreteIsTheLabelFamily() {
-        assertEquals("ok", state("SHAPE", want("pop", "none", tone = "any"), heard("pop", f0 = null, pitch = DoubleArray(0))))
-        assertEquals("miss", state("SHAPE", want("pop", "none", tone = "any"), heard("click", f0 = null, pitch = DoubleArray(0))))
+        assertEquals("ok", state("SHAPE", want("click", "none", tone = "any"), heard("click", f0 = null, pitch = DoubleArray(0))))
+        assertEquals("miss", state("SHAPE", want("click", "none", tone = "any"), heard("hiss", f0 = null, pitch = DoubleArray(0))))
+        // a heard "pop" folds to "click" (2026-09-28)
+        assertEquals("ok", state("SHAPE", want("click", "none", tone = "any"), heard("pop", f0 = null, pitch = DoubleArray(0))))
     }
 
     // --- length -------------------------------------------------------------------------------------------------------
@@ -123,8 +125,8 @@ class ShapeGradeTest {
         // no clear pitch on a pitched gesture: miss
         assertEquals("miss", state("SOUND", want("rise", tone = "hum"), heard(f0 = null)))
         // an unpitched gesture must be unpitched
-        assertEquals("ok", state("SOUND", want("pop", "none", tone = "any"), heard("pop", f0 = null, pitch = DoubleArray(0))))
-        assertEquals("miss", state("SOUND", want("pop", "none", tone = "any"), heard("click", f0 = 200.0, pitch = DoubleArray(0))))
+        assertEquals("ok", state("SOUND", want("click", "none", tone = "any"), heard("click", f0 = null, pitch = DoubleArray(0))))
+        assertEquals("miss", state("SOUND", want("click", "none", tone = "any"), heard("hiss", f0 = 200.0, pitch = DoubleArray(0))))
         // ... unless the extractor itself called it that gesture (a hiss can carry a stray f0)
         assertEquals("ok", state("SOUND", want("hiss", "none", tone = "any"), heard("hiss", f0 = 200.0, pitch = DoubleArray(0))))
     }
@@ -139,13 +141,13 @@ class ShapeGradeTest {
     // --- count / gap (combos) -----------------------------------------------------------------------------------------
 
     @Test fun comboCountAndGap() {
-        val w = want("pop", "none", tone = "any").copy(sequence = listOf("pop", "pop"), gapS = 0.5)
-        val h = heard("pop", f0 = null, pitch = DoubleArray(0)).copy(labels = listOf("pop", "pop"), gapsMs = listOf(500L))
+        val w = want("click", "none", tone = "any").copy(sequence = listOf("click", "click"), gapS = 0.5)
+        val h = heard("click", f0 = null, pitch = DoubleArray(0)).copy(labels = listOf("click", "click"), gapsMs = listOf(500L))
         val c = checks(w, h)
         assertEquals("ok", c["COUNT"]?.state)
         assertEquals("ok", c["GAP"]?.state)
         // wrong count and a too-wide gap
-        val h2 = h.copy(labels = listOf("pop"), gapsMs = listOf(2000L))
+        val h2 = h.copy(labels = listOf("click"), gapsMs = listOf(2000L))
         val c2 = checks(w, h2)
         assertEquals("miss", c2["COUNT"]?.state)
         assertEquals("miss", c2["GAP"]?.state)
@@ -198,8 +200,8 @@ class ShapeGradeTest {
         assertEquals("ok", state("SHAPE", want("rise"), heard(pitch = rise2)))
     }
 
-    @Test fun aPopHasNoLength() {
-        assertNull(state("LENGTH", want("pop", "none", tone = "any"), heard("pop", f0 = null, dur = 40, pitch = DoubleArray(0))))
+    @Test fun aDiscreteGestureHasNoLength() {
+        assertNull(state("LENGTH", want("click", "none", tone = "any"), heard("click", f0 = null, dur = 40, pitch = DoubleArray(0))))
         assertNull(ShapeGrade.live(want("click", "none", tone = "any"), listOf(null, null), 20).firstOrNull { it.id == "LENGTH" })
     }
 

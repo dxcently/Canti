@@ -9,22 +9,22 @@ package ai.vox.companion
  * - gesture mode: the app's rule, else the global rule, else [Vocab.DEFAULT_BINDINGS], else
  *   [Vocab.APP_ONLY_BINDINGS] (the last rule for a sequence wins, as in [RuleDecider.gesture]);
  * - cursor mode: a cursor rule, else the built-in single-sound cursor (hums move the cursor, a flat hum stops,
- *   a pop clicks, a hiss goes back). The only multi-sound default is `pop pop`, which the app owns (it names a target,
- *   [Profile.CURSOR_LISTEN], VoxService.resolveInput) unless a cursor rule claims it.
+ *   a click taps, a short hiss goes back, a long hiss listens — [CursorListen], which the app owns). Multi-sound cursor
+ *   rules still parse but never fire (cursor mode has no waits), so the window shows no cursor combos.
  * With a phone or USB mic in cursor mode the voice joystick drives ([VoiceJoystick.PASS]): hum gestures never reach
  * the decider (a hum steers the cursor continuously), so rise/fall/arch/dip/flat show "steers the joystick" and a
  * cursor rule on them is not shown (it never fires).
- * A lone pop has no default in gesture mode on a phone or USB mic ([MicPopGate.unbound]): it taps only where the
+ * A lone click has no default in gesture mode on a phone or USB mic ([MicPopGate.unbound]): it taps only where the
  * user binds it, so the window says so rather than echoing the Pico's default.
  *
  * The result is plain maps/lists (the Flutter channel codec's types), one entry per sound `{label, source}` (null =
  * unbound) and one per combo `{seq, label, source}`. `source` marks a user rule (`global`, `app`, `cursor`) apart from
  * `default` and `app-only`; `label` is the action's option text ([Vocab.ACTIONS] / [Vocab.CURSOR_ACTIONS], or the
- * concise built-in cursor wording).
+ * concise built-in cursor wording). The cursor-mode hiss entry also carries `long` ("listen for a name").
  */
 object Bindings {
-    /** The single sounds shown as glyphs, in order (contours then discrete). */
-    val SOUNDS = listOf("rise", "fall", "arch", "dip", "flat", "pop", "click", "hiss")
+    /** The single sounds shown as glyphs, in order (contours then discrete). No "pop" glyph: a pop is a click. */
+    val SOUNDS = listOf("rise", "fall", "arch", "dip", "flat", "click", "hiss")
 
     /** `{gesture: {sounds, combos, note}, cursor: {sounds, combos, note}}` for the current app and profile. */
     fun view(profile: Profile, pkg: String, micSource: Boolean): Map<String, Any?> = mapOf(
@@ -49,8 +49,8 @@ object Bindings {
         val seq = listOf(sound)
         profile.appBindings(pkg).lastOrNull { it.phrase == seq }?.let { return binding(it, "app") }
         profile.globalBindings().lastOrNull { it.phrase == seq }?.let { return binding(it, "global") }
-        // A phone/USB mic's lone pop has no default action (MicPopGate.unbound): say so, don't echo "tap".
-        if (sound == "pop" && micSource) return entry("tap if bound", "default")
+        // A phone/USB mic's lone click has no default action (MicPopGate.unbound): say so, don't echo "tap".
+        if (sound == "click" && micSource) return entry("tap if bound", "default")
         Vocab.DEFAULT_BINDINGS[seq]?.let { return entry(actionText(it, cursor = false), "default") }
         Vocab.APP_ONLY_BINDINGS[seq]?.let { return entry(actionText(it, cursor = false), "app-only") }
         return null
@@ -59,16 +59,21 @@ object Bindings {
     private fun cursorSound(profile: Profile, sound: String, micSource: Boolean): Map<String, Any?>? {
         // Phone/USB mic: the joystick drops hum gestures before any rule is looked at (VoiceJoystick.filter).
         if (micSource && sound !in VoiceJoystick.PASS) return entry(JOYSTICK, "default")
+        // A hiss is back and a long hiss listens (CursorListen): the `long` key says so on the window's hiss entry,
+        // whatever its label (a cursor rule on ["hiss"] applies only to short hisses, but its `long` still applies).
+        if (sound == "hiss") {
+            val rule = profile.cursorBindings().lastOrNull { it.phrase == listOf("hiss") }
+            return (rule?.let { binding(it, "cursor") } ?: entry("back", "default"))?.plus("long" to CURSOR_LISTEN_LABEL)
+        }
         profile.cursorBindings().lastOrNull { it.phrase == listOf(sound) }?.let { return binding(it, "cursor") }
-        // The built-in single-sound cursor (RuleDecider.cursor). "click" alone is unbound.
+        // The built-in single-sound cursor (RuleDecider.cursor). "click" is bound.
         return when (sound) {
             "rise" -> entry("cursor up", "default")
             "fall" -> entry("cursor down", "default")
             "arch" -> entry("cursor right", "default")
             "dip" -> entry("cursor left", "default")
             "flat" -> entry("stop", "default")
-            "pop" -> entry("click", "default")
-            "hiss" -> entry("back", "default")
+            "click" -> entry("click", "default")
             else -> null
         }
     }
@@ -87,26 +92,17 @@ object Bindings {
     }
 
     /**
-     * Cursor-mode combos: `pop pop` names a target (the app owns it, VoxService.resolveInput) unless a cursor rule
-     * claims it, then the user's cursor rules on multi-sound sequences (the last rule for a sequence wins, as in
-     * [RuleDecider]; labels from [Vocab.CURSOR_ACTIONS]).
+     * Cursor-mode combos: none. Multi-sound cursor rules never fire in cursor mode (the sequencer never waits there:
+     * a click taps at once, a short hiss is back, a long hiss listens — user decision 2026-09-28), so the window shows
+     * no combos.
      */
-    private fun cursorCombos(profile: Profile): List<Map<String, Any?>> {
-        val last = LinkedHashMap<List<String>, Binding>()
-        for (b in profile.cursorBindings()) if (b.phrase.size > 1) last[b.phrase] = b
-        val listen = if (Profile.CURSOR_LISTEN in last) emptyList()
-            else listOf(mapOf("seq" to Profile.CURSOR_LISTEN, "label" to CURSOR_LISTEN_LABEL, "source" to "default"))
-        return listen + last.values.filter { it.action != "none" }.map { b ->
-            mapOf("seq" to b.phrase, "label" to (b.action?.let { actionText(it, cursor = true) } ?: "custom rule"),
-                "source" to "cursor")
-        }
-    }
+    private fun cursorCombos(profile: Profile): List<Map<String, Any?>> = emptyList()
 
     /** A phone/USB mic's hum in cursor mode: it steers the voice joystick, it is not a gesture. */
     const val JOYSTICK = "steers cursor"
     const val JOYSTICK_NOTE = "voice joystick: a hum's pitch moves the cursor up / down, its vowel sideways"
 
-    /** `pop pop` in cursor mode: the listening window for a spoken target name (the intent cursor). */
+    /** A long hiss in cursor mode: the listening window for a spoken target name (the intent cursor). */
     const val CURSOR_LISTEN_LABEL = "listen for a name"
 
     /** A profile binding as `{label, source}`: its fixed action's text, or "ignored" / the rule's own sentence. */

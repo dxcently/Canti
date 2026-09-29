@@ -28,8 +28,8 @@ import java.util.concurrent.Executors
  * The voice joystick in the service (wiki/voice-cursor.md "Joystick cursor"; user decisions 2026-09-27): in cursor
  * mode with the phone or a USB mic as the sound source, the mic's per-20 ms ticks (native, vx_tick.cpp) drive the
  * cursor continuously ([Mover]: pitch against the home note up / down, the vowel sideways; it moves only while a hum
- * lasts and stays where it ends), the magnet snaps it to a clickable element within 48 dp, and a pop clicks (the
- * ticks' own pop detector beside the extractor's; one pop heard by both counts once). The Pico keeps the discrete
+ * lasts and stays where it ends), the magnet snaps it to a clickable element within 48 dp, and a click clicks (the
+ * ticks' own pop detector beside the extractor's; one click heard by both counts once). The Pico keeps the discrete
  * cursor. The position persists (prefs, dp); only [recentre] and a rotation's clamp move it otherwise.
  *
  * It also runs the calibration ([JoyCalibration], one profile per mic source, SharedPreferences "canti_joystick"
@@ -113,7 +113,8 @@ class VoiceJoystick(
         val m = mic ?: return
         val live = calib == null && source != MicSettings.PICO && source.isNotEmpty()
         m.levelGate = if (live) profile?.gate(spec) ?: CalibV2.defaultGate(spec) else null
-        m.clickPopRule = if (live) profile?.rule(spec) else null
+        // pop <-> click relabel retired 2026-09-28: both are click (SoundFold), so no per-person click/pop rule is set.
+        m.clickPopRule = null
     }
 
     private fun start() {
@@ -241,7 +242,9 @@ class VoiceJoystick(
         calib?.let { c -> c.extractorEvent(tStartMs.toDouble(), label, SoundExample.raw(gate)); return "calibrating" }
         if (!on) return null
         if (label !in PASS) return "joystick (a hum moves the cursor)"
-        if (label == "pop" && !merge.accept(tStartMs.toDouble())) { merged++; return "joystick (the tick detector heard this pop)" }
+        if (label == "pop" || label == "click") {
+            if (!merge.accept(tStartMs.toDouble())) { merged++; return "joystick (the tick detector heard this click)" }
+        }
         return null
     }
 
@@ -389,7 +392,8 @@ class VoiceJoystick(
                     startCalib(src, steps, args["resume"] as? Boolean)
                 }
                 "calib_step", "calib_redo" -> {
-                    val step = args["step"] as? String ?: throw IllegalArgumentException("$method needs {step: ${JoyCalibration.STEPS.joinToString(" | ")}}")
+                    // canonical: an old UI (until E10UI) still sends "pops" — it opens the clicks step
+                    val step = JoyCalibration.canonical(args["step"] as? String ?: throw IllegalArgumentException("$method needs {step: ${JoyCalibration.STEPS.joinToString(" | ")}}"))
                     require(step in JoyCalibration.STEPS) { "step must be one of ${JoyCalibration.STEPS}" }
                     // no run open (the hub's rows, or after a cancel): open one on the current source first (resumed)
                     val c = calib ?: startCalib(args["source"] as? String ?: source, null, null)
@@ -503,7 +507,8 @@ class VoiceJoystick(
         const val CALIB_IDLE_MS = 5 * 60_000L
         /** The UI's `calib_status` pushes (UiBridge sets it while the Flutter UI is attached; main thread). */
         @Volatile var uiSink: ((Map<String, Any?>) -> Unit)? = null
-        /** The sounds that stay gestures while the joystick drives: the pops (click, pop pop), a tongue click, hiss. */
+        /** The sounds that stay gestures while the joystick drives: pop, click (both are clicks after intake; these are
+         *  the RAW extractor labels at this point, before SoundFold) and hiss. No waiting path here. */
         val PASS = setOf("pop", "click", "hiss")
     }
 }

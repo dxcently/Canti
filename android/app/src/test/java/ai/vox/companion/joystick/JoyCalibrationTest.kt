@@ -4,19 +4,21 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** The calibration engine against the prototype's setup (golden "setup": all eight steps pass; "setup_fail": the glide
- *  fails and is retried, the vowels, pops, clicks and whistle fail and are skipped, the hiss fails and is retried, the
- *  room fails and is skipped), plus the command rules and the profile round trip (a version 1 profile still loads). */
+/** The calibration engine against the prototype's setup (golden "setup": all eight steps pass, the pops segment skipped;
+ *  "setup_fail": the glide fails and is retried, the vowels, clicks and whistle fail and are skipped, the hiss fails and
+ *  is retried, the room fails and is skipped), plus the command rules and the profile round trip (a version 1 profile
+ *  still loads). */
 class JoyCalibrationTest {
     private val golden = JSONObject(javaClass.classLoader!!.getResource("joystick_golden.json")!!.readText())
     private val spec = JoySpec.parse(File("src/main/assets/joystick_v1.json").readText())
-    private val py2kt = mapOf("home" to "hum", "range" to "glide", "vowels" to "vowels", "pops" to "pops", "clicks" to "clicks",
-        "whistle" to "whistle", "hiss" to "hiss", "room" to "room")
+    private val py2kt = mapOf("home" to "hum", "range" to "glide", "vowels" to "vowels", "clicks" to "clicks",
+        "whistle" to "whistle", "hiss" to "hiss", "room" to "room")   // "pops" is gone (2026-09-28); a legacy "pops" maps to null
 
     private fun num(o: Any?): Double? = if (o == null || o == JSONObject.NULL) null else (o as Number).toDouble()
 
@@ -34,15 +36,36 @@ class JoyCalibrationTest {
         return (0 until a.length()).map { a.getJSONObject(it) }.first { it.getString("name") == name }
     }
 
+    /** The prototype's pops step, which the engine no longer has (2026-09-28). Its segment is skipped: ticks and
+     *  extractor events from when the step before pops finishes until pops ends are not fed, and the step after it
+     *  (clicks) starts once the segment has passed. */
+    private class PopsSegment(val predecessor: String, val startMs: Double, val endMs: Double, val actionMs: Double?)
+
+    private fun popsSegment(c: JSONObject): PopsSegment? {
+        val done = c.getJSONArray("steps_done").let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
+        val popsIdx = done.indexOfFirst { it.getString("step") == "pops" }
+        if (popsIdx < 0) return null
+        val prev = done.take(popsIdx).lastOrNull { it.getString("step") != "cmd" } ?: return null
+        val predecessor = py2kt[prev.getString("step")] ?: return null
+        val cmds = done.drop(popsIdx + 1).takeWhile { it.getString("step") == "cmd" }
+        val actionMs = cmds.lastOrNull()?.getDouble("t_ms")          // the pops skip / retry (a fail), else null (a pass)
+        val endMs = actionMs ?: done[popsIdx].getDouble("t_ms")
+        return PopsSegment(predecessor, prev.getDouble("t_ms"), endMs, actionMs)
+    }
+
     /** Runs a golden setup the way the UI drives it: calib_step for the next step after each step_done, the golden's
      *  retry / skip at their times. Returns the engine and the failures seen (step, t, reason). */
     private fun run(c: JSONObject): Pair<JoyCalibration, List<Triple<String, Double, String>>> {
         val cal = JoyCalibration(spec, "phone")
         val acts = c.getJSONArray("actions").let { a -> (0 until a.length()).map { a.getJSONArray(it).let { x -> x.getDouble(0) to x.getString(1) } } }.toMutableList()
+        val seg = popsSegment(c)
+        if (seg != null && seg.actionMs != null) acts.removeAll { it.first == seg.actionMs }   // the pops skip has no step
         val fails = ArrayList<Triple<String, Double, String>>()
         // the extractor's events: [delivered at, t_start, label, raw], handed over before the tick at or after delivery
         val exq = c.getJSONArray("ex_events").let { a -> (0 until a.length()).map { a.getJSONArray(it) } }.toMutableList()
+        var waitingForPops = false
         for (tk in ticks(c)) {
+            if (seg != null && tk.tMs > seg.startMs && tk.tMs < seg.endMs) continue   // the pops segment is not fed
             while (acts.isNotEmpty() && acts[0].first <= tk.tMs) {
                 when (acts.removeAt(0).second) { "retry" -> cal.retry(tk.tMs); "skip" -> cal.skip(tk.tMs) }
             }
@@ -54,8 +77,11 @@ class JoyCalibrationTest {
             cal.push(tk)
             if (cal.state == "failed" && was != "failed") fails += Triple(cal.step, tk.tMs, cal.reason!!)
             if (cal.state == "step_done") {
-                val next = JoyCalibration.STEPS.first { it !in cal.finished }
-                cal.startStep(next, tk.tMs)
+                when {
+                    waitingForPops -> { waitingForPops = false; cal.startStep(JoyCalibration.STEPS.first { it !in cal.finished }, tk.tMs) }
+                    seg != null && cal.step == seg.predecessor -> waitingForPops = true   // wait out the pops segment
+                    else -> cal.startStep(JoyCalibration.STEPS.first { it !in cal.finished }, tk.tMs)
+                }
             }
         }
         return cal to fails
@@ -82,30 +108,23 @@ class JoyCalibrationTest {
             for (v in JoyCalibration.VOWELS) for (k in listOf("n", "right", "none", "left"))
                 assertEquals("$n report $v $k", num(r.getJSONObject(v).opt(k)), p.vowelReport!![v]!![k])
         }
-        if (c.isNull("pop")) assertNull(p.pop)
-        else {
-            val g = c.getJSONObject("pop")
-            assertEquals(g.getDouble("peak_db"), p.pop!!["peak_db"]!!.toDouble(), 1e-6)
-            assertEquals(g.getDouble("rise_db"), p.pop!!["rise_db"]!!.toDouble(), 1e-6)
-            assertEquals(g.getInt("core_ticks"), p.pop!!["core_ticks"]!!.toInt())
-            val labels = c.getJSONArray("pop_labels")
-            assertEquals((0 until labels.length()).map { labels.getString(it) }, p.popLabels)
-        }
+        // a pop counts as a click (2026-09-28): a fresh run never measures the pops step, so these stay null / default
+        assertNull("$n pop", p.pop)
+        assertNull("$n pops examples", p.popsExamples)
+        assertNull("$n click / pop rule", p.clickPop)
         val sk = c.getJSONArray("skipped")
-        assertEquals("$n skipped", (0 until sk.length()).map { py2kt[sk.getString(it)] }.sortedBy { JoyCalibration.STEPS.indexOf(it) }, p.skipped)
+        assertEquals("$n skipped", (0 until sk.length()).map { py2kt[sk.getString(it)] }.filterNotNull().sortedBy { JoyCalibration.STEPS.indexOf(it) }, p.skipped)
         // calibration v2
         fun exs(k: String) = if (c.isNull(k)) null else SoundExample.listFrom(c.getJSONArray(k))
-        assertEquals("$n pops examples", exs("pops_examples"), p.popsExamples)
         assertEquals("$n clicks examples", exs("clicks_examples"), p.clicksExamples)
         assertEquals("$n hiss examples", exs("hiss_examples"), p.hissExamples)
         assertEquals("$n whistle", if (c.isNull("whistle")) null else WhistleRange.fromJson(c.getJSONObject("whistle")), p.whistle)
         assertEquals("$n room", if (c.isNull("room")) null else RoomNoise.fromJson(c.getJSONObject("room")), p.room)
-        val g = c.getJSONObject("level_gate")
-        assertEquals("$n gate snr", g.getDouble("min_snr_db"), cal.gate.minSnrDb, 0.0)
-        assertEquals("$n gate level", g.getDouble("min_level_dbfs"), cal.gate.minLevelDbfs, 0.0)
-        assertEquals("$n gate from", g.getString("from"), cal.gate.from)
-        assertEquals("$n gate n", g.getInt("n"), cal.gate.n)
-        assertEquals("$n click / pop rule", if (c.isNull("click_pop")) null else ClickPopRule.fromJson(c.getJSONObject("click_pop")), p.clickPop)
+        // the level gate is derived from the clicks + hiss examples and the room (a fresh run has no pops examples):
+        // compute it here, not from the golden number (the golden gate included the pops' examples).
+        val expGate = CalibV2.deriveGate(null, exs("clicks_examples"), exs("hiss_examples"),
+            if (c.isNull("room")) null else RoomNoise.fromJson(c.getJSONObject("room")), spec)
+        assertEquals("$n gate", expGate, cal.gate)
         assertEquals("$n tick ceiling", num(c.opt("f0_max_at_end")) ?: spec.voiceTickF0MaxHz, cal.tickF0MaxHz, 0.0)
     }
 
@@ -116,12 +135,12 @@ class JoyCalibrationTest {
         assertEquals("done", cal.state)
         check(c, cal)
         val done = c.getJSONArray("steps_done")
-        val py = (0 until done.length()).map { done.getJSONObject(it) }.filter { it.getString("step") != "cmd" }
-        assertEquals(8, py.size)
+        val py = (0 until done.length()).map { done.getJSONObject(it) }.filter { it.getString("step") != "cmd" && it.getString("step") != "pops" }
+        assertEquals(7, py.size)
         val s = cal.status(false)
         assertEquals(true, s["step_done"]); assertEquals(1.0, s["progress"])
         val r = s["result"] as JSONObject
-        assertEquals(3, r.getInt("pops_heard"))
+        assertTrue(r.isNull("pops_heard"))
         assertEquals(1.0, r.getJSONObject("vowels").getJSONObject("ee").getDouble("acc"), 0.0)
         assertTrue(r.getJSONObject("extractor").length() == 0)
         assertEquals(2, r.getInt("version"))
@@ -137,7 +156,7 @@ class JoyCalibrationTest {
     @Test fun failRetrySkip() {
         val c = case("setup_fail")
         val (cal, fails) = run(c)
-        val g = c.getJSONArray("fails").let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
+        val g = c.getJSONArray("fails").let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.filter { it.getString("step") != "pops" }
         assertEquals(g.size, fails.size)
         for ((gf, kf) in g.zip(fails)) {
             assertEquals(py2kt[gf.getString("step")], kf.first)
@@ -146,7 +165,7 @@ class JoyCalibrationTest {
         }
         assertEquals("done", cal.state)
         check(c, cal)
-        assertEquals(listOf("vowels", "pops", "clicks", "whistle", "room"), cal.draft.skipped)
+        assertEquals(listOf("vowels", "clicks", "whistle", "room"), cal.draft.skipped)
         assertEquals("default", cal.gate.from)
         assertEquals(emptyList<String>(), cal.draft.missingSteps)
         val r = cal.draft.toJson()
@@ -172,8 +191,6 @@ class JoyCalibrationTest {
         assertEquals("glide", cal.step); assertEquals("waiting", cal.state)
         assertEquals(listOf("hum"), cal.draft.skipped)
         cal.skip(t); cal.skip(t)
-        assertEquals("pops", cal.step)
-        cal.skip(t)
         assertEquals("clicks", cal.step); assertEquals("recording", cal.state)
         cal.skip(t)
         assertEquals("whistle", cal.step); assertEquals("waiting", cal.state)
@@ -204,7 +221,8 @@ class JoyCalibrationTest {
         q.applyTo(spec, mv, pd)
         assertEquals(q.homeSt!!, mv.mid, 0.0)
         assertEquals(q.loSt!! to q.hiSt!!, mv.range)
-        assertEquals(q.pop!!["peak_db"]!!.toDouble(), pd.c.peakDb, 0.0)
+        assertNull(q.pop)
+        assertEquals(spec.pop.peakDb, pd.c.peakDb, 0.0)   // no pop block: the spec default stays
         assertEquals(q.whistle, mv.whistle)
         assertEquals(p.popsExamples, q.popsExamples); assertEquals(p.clicksExamples, q.clicksExamples)
         assertEquals(p.hissExamples, q.hissExamples); assertEquals(p.whistle, q.whistle); assertEquals(p.room, q.room)
@@ -409,7 +427,7 @@ class JoyCalibrationTest {
         // calib_start (resume by default: the progress is < 24 h old) picks up at vowels with hum + glide kept
         val again = saves2.start(spec, "phone", null, null, 4_000)
         assertTrue(saves2.resumed)
-        assertEquals("vowels", again.step); assertEquals(listOf("vowels", "pops", "clicks", "whistle", "hiss", "room"), again.steps)
+        assertEquals("vowels", again.step); assertEquals(listOf("vowels", "clicks", "whistle", "hiss", "room"), again.steps)
         assertEquals(home, again.draft.homeSt); assertEquals(lo, again.draft.loSt)
         // an old progress (> 24 h) does not resume by itself, but {resume: true} still does
         assertFalse(CalibSaves(prefs).let { it.start(spec, "phone", null, null, 3_000 + CalibProgress.FRESH_MS + 1); it.resumed })
@@ -491,6 +509,90 @@ class JoyCalibrationTest {
         val s = cal.status(false)
         assertEquals("whistle", s["step"]); assertEquals(listOf("arch"), (s["expect"] as Map<*, *>)["sequence"])
         assertEquals(emptyList<Any?>(), (s["live"] as Map<*, *>)["trace_hz"])
-        assertEquals(mapOf("i" to 6, "n" to 8), s["pos"])
+        assertEquals(mapOf("i" to 5, "n" to 7), s["pos"])
+    }
+
+    // --- the pops step is gone (2026-09-28) ---------------------------------------------------------------------------
+
+    @Test fun sevenStepsAndCanonicalNames() {
+        assertEquals(listOf("hum", "glide", "vowels", "clicks", "whistle", "hiss", "room"), JoyCalibration.STEPS)
+        assertEquals("clicks", JoyCalibration.canonical("pops"))
+        assertEquals("hiss", JoyCalibration.canonical("hiss"))
+        val cal = JoyCalibration(spec, "phone")
+        val s = cal.status(false)
+        assertEquals(mapOf("i" to 1, "n" to 7), s["pos"])
+        assertEquals(7, (s["hub"] as List<*>).size)
+    }
+
+    @Test fun legacyPopsStepNameFoldsToClicks() {
+        val cal = JoyCalibration(spec, "phone")
+        cal.startStep("pops")
+        assertEquals("clicks", cal.step); assertEquals("recording", cal.state)
+        assertEquals(listOf("clicks", "hiss"), JoyCalibration(spec, "phone", null, listOf("pops", "hiss")).steps)
+        assertEquals(listOf("clicks"), JoyCalibration(spec, "phone", null, listOf("pops", "clicks")).steps)
+    }
+
+    @Test fun deriveRetiresTheClickPopRule() {
+        val c = case("setup")
+        fun exs(k: String) = SoundExample.listFrom(c.getJSONArray(k))!!
+        assertNotNull(CalibV2.deriveClickPop(exs("pops_examples"), exs("clicks_examples"), spec))   // they separate
+        val base = JoyProfile("phone", popsExamples = exs("pops_examples"), clicksExamples = exs("clicks_examples"))
+        val cal = JoyCalibration(spec, "phone", base, listOf("clicks"))
+        cal.skip(0.0)   // derive() runs on a skip of clicks
+        assertNull(cal.draft.clickPop)   // the relabel is retired even when the examples separate
+    }
+
+    @Test fun oldPopsProgressResumesAtClicks() {
+        val prefs = MapPrefs()
+        prefs.m["calib_progress_phone"] = """{"done_steps":["hum","glide","vowels","pops"],"current":"pops","updated_ms":999}"""
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        assertTrue(saves.resumed)
+        assertEquals("clicks", cal.step); assertEquals(listOf("clicks", "whistle", "hiss", "room"), cal.steps)
+        assertEquals(mapOf("step" to "clicks", "done_steps" to listOf("hum", "glide", "vowels")), saves.resume("phone"))
+    }
+
+    @Test fun oldPopsProgressWithClicksDoneResumesAtWhistle() {
+        val prefs = MapPrefs()
+        prefs.m["calib_progress_phone"] = """{"done_steps":["hum","glide","vowels","pops","clicks"],"current":"clicks","updated_ms":999}"""
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        assertTrue(saves.resumed)
+        assertEquals("whistle", cal.step); assertEquals(listOf("whistle", "hiss", "room"), cal.steps)
+    }
+
+    @Test fun oldV2ProfileWithLegacyPopsFieldsStillLoads() {
+        val j = JSONObject("""
+            {"source":"phone","version":2,"saved_at_ms":5,"complete":true,
+             "home_hz":99.0,"range_lo_hz":98.0,"range_hi_hz":184.0,"voicing_threshold":0.8,
+             "vowels":{"ee":{"acc":1.0},"ah":{"acc":1.0},"oo":{"acc":1.0}},
+             "pops_heard":3,"skipped":["pops"],"extractor":{},
+             "home_st":11.06,"clarity_on":0.8,"lo_st":10.06,"hi_st":20.95,
+             "vowel_centroids_bark":{"ee":[9.0,2.0],"ah":[8.0,1.5],"oo":[7.0,1.0]},
+             "vowel_dead_zone":null,"vowel_full":null,"vowel_report":null,
+             "pop":{"peak_db":15.2,"rise_db":12.0,"core_ticks":3},"pop_labels":["pop"],
+             "pops_examples":[{"label":"pop","dur_ms":110.0,"snr_db":8.0,"level_db":-40.0,"lf_ratio":0.26,"peak_centroid_hz":850.0},
+                              {"label":"pop","dur_ms":120.0,"snr_db":9.0,"level_db":-39.0,"lf_ratio":0.3,"peak_centroid_hz":900.0}],
+             "clicks_examples":[{"label":"click","dur_ms":40.0,"snr_db":20.3,"level_db":-31.2,"lf_ratio":0.02,"peak_centroid_hz":3600.0},
+                                {"label":"click","dur_ms":40.0,"snr_db":18.1,"level_db":-33.0,"lf_ratio":0.02,"peak_centroid_hz":3600.0}],
+             "hiss_examples":[{"label":"hiss","dur_ms":150.0,"snr_db":25.0,"level_db":-25.1,"lf_ratio":0.04,"peak_centroid_hz":4300.0}],
+             "whistle":{"lo_st":50.79,"hi_st":61.61,"home_st":56.2,"split_st":35.87},
+             "room":{"floor_dbfs":-60.05,"transient_snr_db":9.2,"transient_level_dbfs":-50.3,"transients":1},
+             "click_pop":{"features":{"snr_db":{"thr":29.25,"pop_above":true}},"min_votes":2}}
+        """.trimIndent())
+        val p = JoyProfile.fromJson(j)
+        assertFalse("pops" in p.missingSteps)
+        assertFalse(p.needsRecalibration)
+        assertEquals(15.2, p.pop!!["peak_db"]!!.toDouble(), 0.0)
+        assertEquals(3, p.popsHeard)
+        assertEquals(2, p.popsExamples!!.size)
+        assertNotNull(p.clickPop)
+        // the legacy fields round-trip
+        val q = JoyProfile.fromJson(JSONObject(p.toJson().toString()))
+        assertEquals(p.pop, q.pop); assertEquals(p.popsExamples, q.popsExamples); assertEquals(p.popsHeard, q.popsHeard)
+        assertEquals(p.clickPop, q.clickPop)
+        // the pops examples still feed the level gate
+        assertEquals(CalibV2.deriveGate(p.popsExamples, p.clicksExamples, p.hissExamples, p.room, spec), p.gate(spec))
+        assertNotEquals(CalibV2.deriveGate(null, p.clicksExamples, p.hissExamples, p.room, spec), p.gate(spec))
     }
 }

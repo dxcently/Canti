@@ -103,14 +103,15 @@ class NavigationTest {
         q.sound("hiss")
         assertEquals(listOf("hiss" to 0L), out)                     // a single hiss is back at once
         assertFalse(q.isWaiting); assertTrue(c.tasks.isEmpty())     // and nothing is scheduled for it
-        assertEquals("none", RuleDecider().decide(input(listOf("click"))).action)
-        // click click and click hiss wait for the second sound.
+        assertEquals("tap", RuleDecider().decide(input(listOf("click"))).action)   // 2026-09-28: a lone click taps (pop folded)
+        // click click waits (for click click click) and then goes home; a hiss after a click is forward.
         val (c2, q2, out2) = harness()
-        q2.sound("click"); c2.advance(250)
-        q2.sound("click")
-        q2.sound("click"); c2.advance(250)
-        q2.sound("hiss")
-        assertEquals(listOf("click click" to 250L, "click hiss" to 500L), out2)
+        q2.sound("click"); c2.advance(250); q2.sound("click")   // click click, now waits for click click click
+        c2.advance(600)                                         // the gap elapses with no third click -> home
+        assertEquals(listOf("click click" to 850L), out2)
+        val (c3, q3, out3) = harness()
+        q3.sound("click"); c3.advance(250); q3.sound("hiss")    // click hiss -> forward
+        assertEquals(listOf("click hiss" to 250L), out3)
     }
 
     @Test fun hissClickIsOneBackAndTheClickIsAbsorbed() {
@@ -135,7 +136,7 @@ class NavigationTest {
         c.advance(2000)
         assertEquals(listOf("hiss", "click"), out.map { it.first })
         assertEquals(1, absorbed.size)
-        assertEquals("none", RuleDecider().decide(input(listOf("click"))).action)
+        assertEquals("tap", RuleDecider().decide(input(listOf("click"))).action)   // 2026-09-28: a lone click taps
     }
 
     @Test fun aClickAfterTheGapIsNotAbsorbed() {
@@ -184,7 +185,7 @@ class NavigationTest {
     @Test fun hissWaitsWhenAUserBindsADifferentContinuation() {
         val p = Profile.parse(org.json.JSONObject("""{"global":[{"phrase":["hiss","pop"],"kind":"fixed","action":"recents"}]}"""))
         val bound = p.boundSequences("x", "gesture")
-        assertTrue(listOf("hiss", "pop") in bound)
+        assertTrue("pop folds to click: hiss pop -> hiss click", listOf("hiss", "click") in bound)
         val (c, q, out) = harness()
         q.add("gesture", "x", listOf("l"), listOf("hiss"), bound, null, p.absorbedSequences("x", "gesture"))
         assertTrue(out.isEmpty())
@@ -208,7 +209,7 @@ class NavigationTest {
         }
         // hybrid: explicit bindings are local; an unbound sequence goes to the model.
         assertEquals("swipe_up", ChainDecider("hybrid", NoModel()).local(input(listOf("rise")))?.action)
-        assertNull(ChainDecider("hybrid", NoModel()).local(input(listOf("click", "pop"))))
+        assertNull(ChainDecider("hybrid", NoModel()).local(input(listOf("rise", "rise"))))   // 2026-09-28: "click pop" folds to home, so use a truly unbound sequence
         // model mode: only app-only bindings stay local.
         assertNull(ChainDecider("model", NoModel()).local(input(listOf("rise"))))
         assertEquals("forward", ChainDecider("model", NoModel()).local(input(listOf("click", "hiss")))?.action)

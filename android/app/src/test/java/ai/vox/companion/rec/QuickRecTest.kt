@@ -103,4 +103,21 @@ class QuickRecTest {
         assertTrue(!File(dir, "quickrec/$id").exists())                   // nothing written by a refused save
         assertEquals(true, q.save(id, "misfire", null, null)["ok"])
     }
+
+    @Test fun labelsAcceptClickClickAndKeepPop() {
+        // "click click" / "click click click" are real ground truth now; "pop" / "pop pop" stay for old saves
+        assertTrue("click click" in QuickRec.LABELS)
+        assertTrue("click click click" in QuickRec.LABELS)
+        assertTrue("pop" in QuickRec.LABELS)
+        assertTrue("pop pop" in QuickRec.LABELS)
+        val heard = HeardLog()
+        val dir = Files.createTempDirectory("qr").toFile()
+        val ring = RingBuffer(); ringWrite(ring, 16000)
+        val q = QuickRec(FakeScheduler(), { 2L }, ring, heard, FakeEnv(), dir)
+        val id = q.snap()["id"] as String
+        assertEquals(true, q.save(id, "click click click", null, null)["ok"])
+        // a fresh snapshot: "pop pop" is still a valid label for an old save
+        val id2 = q.snap()["id"] as String
+        assertEquals(true, q.save(id2, "pop pop", null, null)["ok"])
+    }
 }

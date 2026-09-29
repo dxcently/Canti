@@ -52,10 +52,9 @@ class Profile(val bindings: List<Binding>, val name: String = DEFAULT_NAME) {
 
     private fun sequences(pkg: String, mode: String): Pair<Set<List<String>>, Set<List<String>>> {
         if (mode == "cursor") {
-            val bound = cursorBindings().filter { it.action != "none" }.map { it.phrase }.toMutableSet()
-            // "pop pop" names a target (intent cursor mode) unless a cursor rule claims the sequence.
-            if (cursorBindings().none { it.phrase == CURSOR_LISTEN }) bound += CURSOR_LISTEN
-            return bound to emptySet<List<String>>()
+            // Cursor mode never waits (user decision 2026-09-28): a click taps at once, a short hiss is back, a long
+            // hiss listens (CursorListen). Multi-sound cursor rules still parse (old profiles must load) but are inert.
+            return emptySet<List<String>>() to emptySet<List<String>>()
         }
         val table = LinkedHashMap<List<String>, String?>()
         for ((seq, a) in Vocab.DEFAULT_BINDINGS) table[seq] = a
@@ -88,8 +87,6 @@ class Profile(val bindings: List<Binding>, val name: String = DEFAULT_NAME) {
     }
 
     companion object {
-        /** In cursor mode, "pop pop" opens the listening window for a spoken target (handled by the app, not the model). */
-        val CURSOR_LISTEN = listOf("pop", "pop")
         private const val RULE = "\u0000rule"   // a plain-language rule: the model decides, so never "the same action"
 
         const val DEFAULT_NAME = "default"
@@ -109,8 +106,8 @@ class Profile(val bindings: List<Binding>, val name: String = DEFAULT_NAME) {
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
                     require(!(o.has("sound") && o.has("phrase"))) { "use either 'sound' or 'phrase'" }
-                    val phrase = if (o.has("sound")) listOf(o.getString("sound"))
-                        else o.optJSONArray("phrase")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+                    val phrase = if (o.has("sound")) listOf(SoundFold.label(o.getString("sound")))
+                        else o.optJSONArray("phrase")?.let { a -> SoundFold.seq(List(a.length()) { a.getString(it) }) } ?: emptyList()
                     val kind = o.optString("kind", "fixed")
                     require(kind == "fixed" || kind == "rule") { "kind must be fixed or rule" }
                     val action = if (o.has("action") && !o.isNull("action")) o.getString("action") else null
@@ -149,5 +146,25 @@ class Profile(val bindings: List<Binding>, val name: String = DEFAULT_NAME) {
 
         fun phraseRuleText(b: Binding): String =
             Vocab.PHRASE_RULE_TEMPLATE.replace("{p}", b.say!!).replace("{a}", Vocab.ACTIONS.getValue(b.action!!))
+    }
+}
+
+/**
+ * In cursor mode a LONG hiss (>= [LONG_HISS_MS], the same constant as the media-lock hiss) opens the listen-for-a-name
+ * window that `pop pop` used to open (user decision 2026-09-28). A SHORT hiss is back; a click taps at once (cursor mode
+ * has no combos, so the sequencer never waits there). A hiss whose sounds-like is "background noise" (which is also what
+ * the extractor calls a steady hiss of 1.5 s or more) or a personal ignore sound is never long.
+ */
+object CursorListen {
+    const val LONG_HISS_MS = 700L
+
+    fun isLong(label: String, stamp: Stamp?, line: String?): Boolean {
+        if (label != "hiss") return false
+        if (line != null) {
+            val l = SoundLine(line)
+            if (l.soundsLike in RuleDecider.NOT_GESTURE_SOURCES || l.soundsLike == Personal.IGNORE_SOUNDS_LIKE) return false
+        }
+        return if (stamp != null) stamp.endMs - stamp.startMs >= LONG_HISS_MS
+        else line != null && SoundLine(line).duration == Vocab.DURATION[3]   // only "long (over 1 s)"
     }
 }

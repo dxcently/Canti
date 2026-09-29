@@ -611,7 +611,9 @@ class Mover(val spec: JoySpec, w: Double, h: Double, vowels: Map<String, DoubleA
 
 // ------------------------------------------------------------------------------------------------ clicks and pops
 
-/** Pops -> a click after the pop-pop gap; a second pop inside the gap is pop pop (joystick_core.Clicker). */
+/** Pops -> a click after the pop-pop gap; a second pop inside the gap is pop pop (joystick_core.Clicker).
+ *  Not used by the app (kept for JoystickParityTest's check against the prototype): the app folds pop to click at
+ *  intake and the sequencer has no cursor-mode waits. */
 class Clicker(private val gapMs: Double) {
     private var pending: Double? = null
     fun pop(t: Double): String? {

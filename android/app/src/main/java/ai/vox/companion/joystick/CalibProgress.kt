@@ -27,7 +27,9 @@ object CalibProgress {
     fun toJson(doneSteps: List<String>, current: String, nowMs: Long): JSONObject =
         JSONObject().put("done_steps", JSONArray(doneSteps)).put("current", current).put("updated_ms", nowMs)
 
-    /** The saved done steps (known step names only, in step order; a damaged entry reads as none). */
+    /** The saved done steps (known step names only, in step order; a damaged entry reads as none). A legacy "pops" is
+     *  dropped (a pop counts as a click, 2026-09-28): a finished pops step is NOT a finished clicks step, so the
+     *  resume starts at "clicks". */
     fun doneStepsOf(p: JSONObject?): List<String> {
         val a = p?.optJSONArray("done_steps") ?: return emptyList()
         val names = (0 until a.length()).mapNotNull { a.opt(it) as? String }.toSet()

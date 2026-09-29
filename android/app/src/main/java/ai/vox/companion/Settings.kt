@@ -45,7 +45,7 @@ class Settings(ctx: Context) {
     /** Device-stamp grouping: allowance for a follow-up sound arriving later than the fastest link (PROTOCOL.md). */
     var jitterMs: Long get() = p.getLong("jitter_ms", 150); set(v) = p.edit().putLong("jitter_ms", v).apply()
     var confirmTimeoutMs: Long get() = p.getLong("confirm_timeout_ms", 1500); set(v) = p.edit().putLong("confirm_timeout_ms", v).apply()
-    /** How long an outward action (like, follow, share...) waits for its confirm pop ([Outward.windowMs]). */
+    /** How long an outward action (like, follow, share...) waits for its confirm click ([Outward.windowMs]). */
     var outwardConfirmMs: Long get() = p.getLong("outward_confirm_ms", Outward.DEFAULT_CONFIRM_MS); set(v) = p.edit().putLong("outward_confirm_ms", v).apply()
     var listenWindowMs: Long get() = p.getLong("listen_window_ms", 6000); set(v) = p.edit().putLong("listen_window_ms", v).apply()
     /** Speech in the phrase window: `android` (the phone's SpeechRecognizer) or `off` (a phrase comes only in a message). */
@@ -58,7 +58,7 @@ class Settings(ctx: Context) {
     var targetMinConfidence: Double get() = p.getFloat("target_min_confidence", 0.6f).toDouble(); set(v) = p.edit().putFloat("target_min_confidence", v.toFloat()).apply()
     /** Model for the "target" question; empty = the same as `model`. */
     var targetModel: String get() = p.getString("target_model", "")!!; set(v) = put("target_model", v)
-    /** How long the highlighted candidates wait for rise/fall/pop before cancelling (reset by each rise/fall). */
+    /** How long the highlighted candidates wait for rise/fall/click before cancelling (reset by each rise/fall). */
     var targetChooseMs: Long get() = p.getLong("target_choose_ms", 6000); set(v) = p.edit().putLong("target_choose_ms", v).apply()
     /** Personalization: a sound matches a class only within (largest within-class distance) x this. */
     var enrollRejectMult: Double get() = p.getFloat("enroll_reject_mult", 1.4f).toDouble(); set(v) = p.edit().putFloat("enroll_reject_mult", v.toFloat()).apply()
@@ -83,9 +83,9 @@ class Settings(ctx: Context) {
     var logTypedText: Boolean get() = p.getBoolean("log_typed_text", false); set(v) = p.edit().putBoolean("log_typed_text", v).apply()
     /** Dictation: a device sound this soon after the last recognized words is speech (ignored); later it stops dictation. */
     var dictateSpeechHoldMs: Long get() = p.getLong("dictate_speech_hold_ms", Dictation.SPEECH_HOLD_MS); set(v) = p.edit().putLong("dictate_speech_hold_ms", v).apply()
-    /** While media plays, phone / USB mic sounds are dropped except a `pop pop` unlock ([MediaGate]; user decision 2026-09-27). */
+    /** While media plays, phone / USB mic sounds are dropped except a `click click click` unlock ([MediaGate]; user decision 2026-09-28). */
     var mediaLock: Boolean get() = p.getBoolean("media_lock", true); set(v) = p.edit().putBoolean("media_lock", v).apply()
-    /** How an unlock ends ([MediaGate.MODES]): `one` (the next gesture only), `fixed` (a window), `popext` (a window only pop pop extends). */
+    /** How an unlock ends ([MediaGate.MODES]): `one` (the next gesture only), `fixed` (a window), `popext` (a window only click click click extends). */
     var mediaUnlockMode: String get() = p.getString("media_unlock_mode", MediaGate.ONE)!!.takeIf { it in MediaGate.MODES } ?: MediaGate.ONE; set(v) = put("media_unlock_mode", v)
     /** The unlock's time limit: to make the one gesture (`one`), or the window (`fixed`, `popext`). */
     var mediaUnlockMs: Long get() = p.getLong("media_unlock_ms", MediaGate.DEFAULT_UNLOCK_MS); set(v) = p.edit().putLong("media_unlock_ms", v).apply()

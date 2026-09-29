@@ -11,13 +11,14 @@ import kotlin.math.abs
  * The voice cursor's calibration (a port of extractor/joystick.py Session's setup: _home_setup, _range_setup,
  * _vowel_setup, _pop_setup, _fail / _retry / _skip), one profile per mic source (phone / usb / pico).
  *
- * Steps (the contract's names; the prototype's in brackets): hum [home], glide [range], vowels, pops, and calibration
- * v2's clicks, whistle, hiss, room. A voiced step waits for a steady note (8 ticks, <= 0.35 st per tick), records,
- * and either finishes (state step_done, or done after the last) or FAILS with a reason and waits: retry() records it
- * again, skip() keeps its defaults, records it in `skipped` and moves on to the next step by itself. Nothing is
- * skipped or restarted without the user. The discrete steps (pops, clicks, hiss) and the room read the gesture
- * extractor's events ([extractorEvent], with the gate numbers); they set the level gate and the click / pop rule
- * ([CalibV2]). The whistle step needs the ticks' pitch ceiling raised ([tickF0MaxHz]).
+ * Steps (the contract's names; the prototype's in brackets): hum [home], glide [range], vowels, clicks, whistle, hiss,
+ * room (7). A pop counts as a click (2026-09-28), so the prototype's pops step is gone — only its tick-detector parity
+ * is dropped (the `pd` detector still runs every tick; see JoyCalibration.kt and the report). A voiced step waits for a
+ * steady note (8 ticks, <= 0.35 st per tick), records, and either finishes (state step_done, or done after the last) or
+ * FAILS with a reason and waits: retry() records it again, skip() keeps its defaults, records it in `skipped` and moves
+ * on to the next step by itself. Nothing is skipped or restarted without the user. The discrete steps (clicks, hiss)
+ * and the room read the gesture extractor's events ([extractorEvent], with the gate numbers); the clicks step sets the
+ * level gate ([CalibV2]). The whistle step needs the ticks' pitch ceiling raised ([tickF0MaxHz]).
  * Checked tick for tick against the prototype (JoyCalibrationTest, golden "setup" / "setup_fail").
  * Pure JVM: no Android types (the service keeps the store and the pushes).
  */
@@ -67,7 +68,7 @@ data class JoyProfile(
     /** The steps neither measured nor skipped (a version 1 profile: clicks, whistle, hiss, room). */
     val missingSteps: List<String> get() = JoyCalibration.STEPS.filter { s ->
         s !in skipped && when (s) {
-            "hum" -> homeSt == null; "glide" -> loSt == null; "vowels" -> centroids == null; "pops" -> pop == null
+            "hum" -> homeSt == null; "glide" -> loSt == null; "vowels" -> centroids == null
             "clicks" -> clicksExamples == null; "whistle" -> whistle == null; "hiss" -> hissExamples == null
             else -> room == null
         }
@@ -163,7 +164,8 @@ data class JoyProfile(
             return JoyProfile(j.getString("source"), j.optLong("saved_at_ms", 0), d("home_st"), d("clarity_on"),
                 d("lo_st"), d("hi_st"), cent, d("vowel_dead_zone"), d("vowel_full"), rep, pop,
                 if (j.isNull("pops_heard")) null else j.getInt("pops_heard"), strs("pop_labels") ?: listOf("pop"),
-                strs("skipped") ?: emptyList(), ex ?: emptyMap(),
+                strs("skipped") ?: emptyList(),  // a legacy "pops" here loads (dropped by the draft's next mark())
+                ex ?: emptyMap(),
                 SoundExample.listFrom(arr("pops_examples")), SoundExample.listFrom(arr("clicks_examples")),
                 SoundExample.listFrom(arr("hiss_examples")), obj("whistle")?.let(WhistleRange::fromJson),
                 obj("room")?.let(RoomNoise::fromJson),
@@ -177,17 +179,21 @@ data class JoyProfile(
 
 /**
  * One calibration run for one source. [push] every tick (stream ms), [extractorEvent] each gesture-extractor event
- * (the pop step learns which labels the person's pops get), commands from the UI. [status] is the calib_status map.
+ * (the clicks and hiss steps take them as examples), commands from the UI. [status] is the calib_status map.
  * [clarityOn] is the voicing threshold the tick analyser should use now (it changes after the hum step).
  *
- * [steps] is the run: an ordered subset of [STEPS] (default all 8). The run starts on its first step and is `done`
+ * [steps] is the run: an ordered subset of [STEPS] (default all 7). The run starts on its first step and is `done`
  * once every one of them is finished (measured or skipped); a skip or a redo never starts a step outside it, nor
  * wraps round to an earlier one. The draft is [base] with the run's steps unskipped: a step outside the run keeps its
  * saved values and skip state (the save merges), a step in it is recorded again.
  */
 class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = null, steps: List<String>? = null) {
     companion object {
-        val STEPS = listOf("hum", "glide", "vowels", "pops", "clicks", "whistle", "hiss", "room")
+        val STEPS = listOf("hum", "glide", "vowels", "clicks", "whistle", "hiss", "room")
+        /** A pop counts as a click (2026-09-28): the legacy step name the UI may still send, folded into [STEPS]. */
+        val LEGACY_STEPS = mapOf("pops" to "clicks")
+        /** The canonical step name: `pops` -> `clicks`, anything else unchanged. */
+        fun canonical(s: String) = LEGACY_STEPS[s] ?: s
         /** The steps calibration v2 added (a version 1 profile lacks them). */
         val V2_STEPS = listOf("clicks", "whistle", "hiss", "room")
         val VOWELS = listOf("ee", "ah", "oo")
@@ -198,8 +204,6 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         const val HOME_MIN_MS = 3000.0
         const val HOME_MAX_MS = 5000.0
         const val RANGE_MS = 5000.0
-        const val POPS_WINDOW_MS = 8000.0
-        const val POPS_NEED = 3
         const val VOWEL_FRAMES = 80
         const val VOWEL_FRAMES_MIN = 30
         /** The live pitch trace keeps this many ticks (5 s of 20 ms ticks). */
@@ -227,9 +231,11 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     /** The steps this run covers, in order (a calib_step / calib_redo of another step adds it). */
     val steps: MutableList<String> = (steps ?: STEPS).also { l ->
         require(l.isNotEmpty()) { "steps must name at least one step" }
-        l.forEach { require(it in STEPS) { "unknown step '$it': steps are ${STEPS.joinToString(" | ")}" } }
+        l.forEach { require(canonical(it) in STEPS) { "unknown step '$it': steps are ${STEPS.joinToString(" | ")}" } }
         require(l.toSet().size == l.size) { "steps must not repeat" }
-    }.toMutableList()
+    }.map(::canonical).let { m ->
+        val seen = LinkedHashSet<String>(); m.forEach { seen += it }; seen.toMutableList()
+    }
 
     var draft: JoyProfile = (base ?: JoyProfile(source)).let { b -> b.copy(source = source, skipped = b.skipped.filter { it !in this.steps }) }
         private set
@@ -245,7 +251,9 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     var lastTick: Tick? = null; private set
     /** The live pitch trace (the last ~5 s of 20 ms ticks: Hz when voiced, null when not). */
     private val trace = ArrayDeque<Double?>()
-    /** The pop step's detector (the spec's thresholds; pushed every tick, as the prototype's). */
+    /** The tick detector (the spec's thresholds; pushed every tick, as the prototype's). It is NOT recalibrated — a
+     *  profile's `pop` block is kept from an old profile or stays null (the spec defaults). Its thresholds were tuned
+     *  on lip pops; whether tongue clicks trip it is open (cursor clicks then come from the extractor alone). */
     val pd = PopDetector(spec.pop)
     private val log = ArrayList<String>()
     /** What the steps said (the prototype's say()), newest last; for the debug socket. */
@@ -270,11 +278,6 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         val frames = VOWELS.associateWith { ArrayList<DoubleArray>() }
     }
     private var vs: Vs? = null
-    private class Ps(val t0: Double, val n0: Int) {
-        val ex = ArrayList<Triple<Double, String, SoundExample>>()
-        var cand = 0
-    }
-    private var ps: Ps? = null
     /** clicks / hiss: the extractor's events in the window. */
     private class Ds(val kind: String, val t0: Double) {
         val ex = ArrayList<Triple<Double, String, SoundExample>>()
@@ -293,7 +296,7 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     /** The ticks' pitch ceiling now: the whistle's during the whistle step and once there is a whistle range. */
     val tickF0MaxHz: Double get() = if (ws != null || draft.whistle != null) spec.whistleTickF0MaxHz else spec.voiceTickF0MaxHz
 
-    private fun clearSteps() { su = null; vs = null; ps = null; ds = null; ws = null; rm = null }
+    private fun clearSteps() { su = null; vs = null; ds = null; ws = null; rm = null }
 
     init { startStep(this.steps.first()) }
 
@@ -305,13 +308,14 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     // ---------------------------------------------------------------------------------------------- commands
     /** calib_step / calib_redo: record [s] (again). A step already waiting or recording is left alone, unless [force] (a redo). */
     fun startStep(s: String, tMs: Double? = null, force: Boolean = false) {
-        require(s in STEPS) { "step must be one of $STEPS" }
+        val cs = canonical(s)
+        require(cs in STEPS) { "step must be one of $STEPS" }
         tMs?.let { tNow = it }
-        if (s !in steps) steps += s
-        if (!force && s == step && (state == "waiting" || state == "recording") && reason == null &&
-            (su != null || vs != null || ps != null || ds != null || ws != null || rm != null)) return
-        step = s; reason = null
-        begin(s, true)
+        if (cs !in steps) steps += cs
+        if (!force && cs == step && (state == "waiting" || state == "recording") && reason == null &&
+            (su != null || vs != null || ds != null || ws != null || rm != null)) return
+        step = cs; reason = null
+        begin(cs, true)
     }
 
     /** The step's state, timed from [tNow]; [announce] = say its prompt. */
@@ -325,7 +329,6 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
             "hum" -> { su = Su(tNow); say("HOME: hum 'mm' relaxed for 3 s, the note that comes out without thinking") }
             "glide" -> { su = Su(tNow); say("RANGE SETUP: glide from your LOWEST comfortable note to your HIGHEST and back (5 s)") }
             "vowels" -> { vs = Vs(tNow); say("VOWEL SETUP: hold 'ee' (as in see) for 2 s, at a middle pitch") }
-            "pops" -> { ps = Ps(tNow, pd.burstCount); state = "recording"; say("POPS: pop your lips 3 times, about a second apart (8 s)") }
             "clicks" -> { ds = Ds("clicks", tNow); state = "recording"; say("CLICKS: click your tongue 3 times, about a second apart (8 s)") }
             "hiss" -> { ds = Ds("hiss", tNow); state = "recording"; say("HISS: 2 short 'tss' hisses, about a second apart (8 s)") }
             "whistle" -> { ws = Su(tNow); say("WHISTLE: whistle from your LOWEST note to your HIGHEST and back (5 s)") }
@@ -342,7 +345,7 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
     /** calib_skip: from failed, or before the step heard anything. The step's defaults stay, it goes in `skipped`, and
      *  the next step starts (or the run is done). */
     fun skip(tMs: Double? = null) {
-        check(state == "failed" || state == "waiting" || (state == "recording" && step == "pops" && (ps?.cand ?: 0) == 0) ||
+        check(state == "failed" || state == "waiting" ||
             (state == "recording" && (step == "clicks" || step == "hiss") && (ds?.cand ?: 0) == 0) || (state == "recording" && step == "room")) {
             "a step can be skipped when it failed or before it has heard anything"
         }
@@ -352,13 +355,12 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
             "hum" -> draft.copy(homeSt = null, clarityOn = null)
             "glide" -> draft.copy(loSt = null, hiSt = null)
             "vowels" -> draft.copy(centroids = null, vowelDeadZone = null, vowelFull = null, vowelReport = null)
-            "pops" -> draft.copy(pop = null, popsHeard = null, popLabels = listOf("pop"), popsExamples = null)
             "clicks" -> draft.copy(clicksExamples = null)
             "hiss" -> draft.copy(hissExamples = null)
             "whistle" -> draft.copy(whistle = null)
             else -> draft.copy(room = null)
         }
-        if (s in setOf("pops", "clicks", "hiss", "room")) derive()
+        if (s in setOf("clicks", "hiss", "room")) derive()
         mark(s, true)
         clearSteps(); reason = null
         finished += s; finishCount++
@@ -372,14 +374,15 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         }
     }
 
-    private fun name(s: String) = mapOf("hum" to "HOME", "glide" to "RANGE SETUP", "vowels" to "VOWEL SETUP", "pops" to "POPS",
+    private fun name(s: String) = mapOf("hum" to "HOME", "glide" to "RANGE SETUP", "vowels" to "VOWEL SETUP",
         "clicks" to "CLICKS", "whistle" to "WHISTLE", "hiss" to "HISS", "room" to "ROOM")[s]!!
 
-    /** The level gate and the click / pop rule from the examples so far and the room (joystick.Session._derive). */
+    /** The level gate from the examples so far and the room (joystick.Session._derive). The click / pop relabel is
+     *  retired (2026-09-28): [clickPop] stays null; an old profile's pops examples still feed the gate. */
     private fun derive() {
         val d = draft
         draft = d.copy(levelGate = CalibV2.deriveGate(d.popsExamples, d.clicksExamples, d.hissExamples, d.room, spec),
-            clickPop = CalibV2.deriveClickPop(d.popsExamples, d.clicksExamples, spec))
+            clickPop = null)
     }
 
     /** The level gate the draft has now (the spec's default before any). */
@@ -406,11 +409,11 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
 
     // ---------------------------------------------------------------------------------------------- ticks
 
-    /** A gesture-extractor event (stream ms, label, its gate numbers): the pop step matches them to the person's
-     *  pops; the clicks and hiss steps take them as examples; the room step looks for transients. */
+    /** A gesture-extractor event (stream ms, label, its gate numbers): the clicks and hiss steps take them as
+     *  examples; the room step looks for transients. */
     fun extractorEvent(tStartMs: Double, label: String, raw: Map<String, Double?> = emptyMap()) {
         val e = Triple(tStartMs, label, SoundExample.of(label, raw))
-        ps?.ex?.add(e); ds?.ex?.add(e); rm?.ex?.add(e)
+        ds?.ex?.add(e); rm?.ex?.add(e)
     }
 
     fun push(tk: Tick) {
@@ -427,7 +430,6 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
             su != null && step == "hum" -> home(tk)
             su != null && step == "glide" -> range(tk)
             vs != null -> vowels(tk)
-            ps != null -> pops(tk)
             ds != null -> discrete(tk)
             ws != null -> whistle(tk)
             rm != null -> room(tk)
@@ -573,33 +575,6 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         return Triple(rep, dz, full)
     }
 
-    private fun pops(tk: Tick) {
-        val s = ps!!
-        val nNew = pd.burstCount - s.n0
-        val new = pd.bursts.takeLast(minOf(nNew, pd.bursts.size))
-        val cand = new.filter { pd.setupCandidate(it) }
-        s.cand = cand.size
-        val done = cand.size >= 3 && tk.tMs - cand[2].t > 700
-        if (!done && tk.tMs - s.t0 < POPS_WINDOW_MS) return
-        val top = cand.sortedByDescending { it.peakDb }.take(3)
-        val heard = top.count { pd.judge(it) }
-        val matched = top.flatMap { f -> s.ex.filter { abs(it.first - f.t) < 250 } }
-        val labels = matched.map { it.second }
-        if (top.size < 2) {
-            fail("heard ${top.size}/3 pops, need 2 (pop your lips a bit louder, a second apart)")
-            return
-        }
-        val newc = pd.calibrate(top)
-        val learnt = labels.toSet().filter { l -> labels.count { it == l } >= 2 && l in setOf("pop", "click") }
-        val popLabels = (setOf("pop") + draft.popLabels + learnt).sorted()
-        draft = draft.copy(pop = newc, popsHeard = top.size, popLabels = popLabels,
-            popsExamples = matched.filter { it.second in CalibV2.GATE_LABELS }.map { it.third })
-        derive()
-        say("POPS: heard ${top.size}/3 (the old thresholds: $heard/3); peak >= ${PyFmt.fixed(newc["peak_db"]!!.toDouble(), 0)} dB, " +
-            "rise >= ${PyFmt.fixed(newc["rise_db"]!!.toDouble(), 0)} dB, extractor said ${labels.groupingBy { it }.eachCount()}")
-        succeed()
-    }
-
     /** clicks (3 tongue clicks: any discrete label up to max_dur_ms, the guided single clicks come out as any of
      *  the three) or hiss (2 'tss': label hiss): the strongest `ask` of the extractor's events are the examples. */
     private fun discrete(tk: Tick) {
@@ -704,7 +679,6 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         "hum" to "Hum 'mm' relaxed for 3 s: the note that comes out without thinking",
         "glide" to "Glide from your lowest comfortable note to your highest and back (5 s)",
         "vowels" to "Hold 'ee', then 'ah', then 'oo', 2 s each at a middle pitch",
-        "pops" to "Pop your lips 3 times, about a second apart",
         "clicks" to "Click your tongue 3 times, about a second apart",
         "whistle" to "Whistle from your lowest note to your highest and back (5 s)",
         "hiss" to "Two short 'tss' hisses, about a second apart",
@@ -716,7 +690,6 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         val t = tNow
         su?.let { s -> val t0 = s.t0 ?: return 0.0; return minOf(1.0, (t - t0) / (if (step == "hum") HOME_MIN_MS else RANGE_MS)) }
         vs?.let { s -> return minOf(1.0, (s.i + minOf(1.0, s.frames[VOWELS[minOf(s.i, 2)]]!!.size.toDouble() / VOWEL_FRAMES)) / 3) }
-        ps?.let { s -> return minOf(1.0, maxOf(s.cand.toDouble() / POPS_NEED, (t - s.t0) / POPS_WINDOW_MS)) }
         ds?.let { s -> val c = if (s.kind == "clicks") spec.clicksStep else spec.hissStep
             return minOf(1.0, maxOf(s.cand.toDouble() / c.ask, (t - s.t0) / c.windowMs)) }
         ws?.let { s -> val t0 = s.t0 ?: return 0.0; return minOf(1.0, (t - t0) / spec.whistleGlideMs) }
@@ -780,8 +753,7 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
             "active" to true, "source" to source, "step" to step, "state" to state,
             "prompt" to prompts[step], "sub" to sub(), "progress" to progress(),
             "waiting_for_steady" to (state == "waiting"), "live" to live,
-            "heard" to mapOf("pops_n" to (ps?.cand ?: if (step == "pops" && "pops" in finished) draft.popsHeard ?: 0 else 0),
-                "pops_need" to POPS_NEED,
+            "heard" to mapOf(
                 "clicks_n" to (ds?.takeIf { it.kind == "clicks" }?.cand ?: if (step == "clicks" && "clicks" in finished) draft.clicksExamples?.size ?: 0 else 0),
                 "clicks_need" to spec.clicksStep.ask,
                 "hiss_n" to (ds?.takeIf { it.kind == "hiss" }?.cand ?: if (step == "hiss" && "hiss" in finished) draft.hissExamples?.size ?: 0 else 0),

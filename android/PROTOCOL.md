@@ -33,7 +33,7 @@ message to the app. The app does the rest: sequencing, the decision, the gesture
 | `sounds` | list of str (0–3) | One categorical description per sound, exactly the text after `sound i: ` in the model state (format below). |
 | `sequence` | list of str, same length | The sound labels: `rise fall arch dip flat pop click hiss unknown`. |
 | `timing` | list, optional, same length | Per sound, `{"t_start_ms", "t_end_ms"}` on the **device's** monotonic clock (ms since the Pico booted). An entry may be `null`. Only differences matter: the phone never compares these values with its own clock. The ends must not be before the starts, and the starts must not decrease within a message. Strongly recommended: see *Sound grouping* below. An entry may also carry `sound` (int) and `held` (bool): see *Hold messages*. |
-| `phrase` | str or null | A transcribed phrase. It is accepted only while a listening window is open (opened by `listen_for_phrase`, default `pop pop`, and lasting `listen_window_ms`, default 6000). Otherwise it is logged as `ignored`. A phrase in a message answers the window like the phone's recognizer would (*Spoken phrases*, below). |
+| `phrase` | str or null | A transcribed phrase. It is accepted only while a listening window is open (opened by `listen_for_phrase`, default `click click click`, and lasting `listen_window_ms`, default 6000). Otherwise it is logged as `ignored`. A phrase in a message answers the window like the phone's recognizer would (*Spoken phrases*, below). |
 | `features` | list, optional, same length | Per sound, `null` or `{"fp": [float, ...], "fp_version": "fp1", "pitch16": [16 floats] or []}`: the sound fingerprint (an opaque vector of the declared version, 1–256 values) and the pitch track (16 points in semitones relative to the start; empty for unpitched sounds). Used for personalization (below). A malformed entry rejects the message; a version or length that differs from the enrolled examples is only skipped for matching (logged). |
 | `gated` | list, optional, same length | Per sound, `null` or why a guard turned the sound into `unknown` on purpose: `"media"` (`mic_media_gate`) or `"media_hiss"` (the media-hiss rule); only the phone/USB mic sets it (*Phone microphone*, Guards). A gated sound is never rewritten by personalization (below). |
 | `cursor` | str or null | Reserved. The app describes the cursor itself ("moving up fast", "stopped", ...). |
@@ -52,21 +52,50 @@ These are the strings generate.py produces (`deliberate_sound` / `air_hiss` / th
 The device firmware must emit exactly these phrasings. They come from `finetune/vox/schema.py`, and the app
 checks them against the same vocabulary, generated into `Vocab.kt` by `tools/gen_vocab.py` with a source digest.
 
+### Pop is a click (2026-09-28)
+
+A pop counts as a click on every source (the Pico, the phone mic, the USB mic, the tick detector, the debug socket).
+The Pico keeps sending `pop`; the app maps it once, at intake. The single mapping point is `VoxService.features`, whose
+first act is `SoundFold.fold`: the `sequence` label `pop` becomes `click`, and a sound line starting with `a short lip
+pop` gets `a tongue click` in its place (both strings are ones the models already know). Everything downstream — the
+sequencer, the decider, the media gate, personalization, the event log — sees `click`. `FeatureMessage.parse` and
+`Message.LABELS` are unchanged: `pop` is still a valid input label. The `msg` event logs the raw sequence as `raw`
+(when the fold changed anything). Upstream of the fold, raw labels are seen on purpose: the phone-mic level gate (it
+treats pop and click the same), `VoiceJoystick.filter` and the calibration's `extractorEvent`.
+
+One mouth click is never heard twice: click detections whose spans overlap, or lie within 30 ms of each other, merge into
+one click (`ClickMerge`, per source string; the extractor's click and the tick detector's 40 ms `pop` are the logged
+case). A dropped copy is logged `merged{source, label: "click", t_start_ms, t_end_ms, why: "the same click heard twice"}`.
+The deliberate double (140-220 ms apart) is never merged. The merge runs before training, the media gate and the
+sequencer. In cursor mode a further guard applies (see *When does the app act?*).
+
+Old profile rules on `pop` are folded: `Personal.rewrite` folds an enrolled `gesture:pop` class (it matches a click as
+`click`, trusted, never relabelled to `pop`), `Profile.parse` folds each `phrase` label (a rule on `["pop"]` becomes
+`["click"]`, `["pop","pop"]` becomes `["click","click"]`), and `RuleDecider.decide` folds `s.sequence` first. Rule TEXT
+the user typed is left as written.
+
+The new `Vocab.DEFAULT_BINDINGS` (2026-09-28, hand-edited; `tools/gen_vocab.py` would revert it): `rise` swipe_up,
+`fall` swipe_down, `arch` swipe_right, `dip` swipe_left, `click` tap, `hiss` back, `flat` long_press,
+`click click click` listen_for_phrase, `click click` home, `hiss click` back. `pop` and `pop pop` are gone.
+
 ### When does the app act?
 
 The app acts at once, **unless the active profile binds a longer sequence that starts with the sounds heard so far**.
 Only then does it wait for the next sound.
-- With the defaults, `click` waits (for `click click` = home, `click hiss` = forward) and `pop` waits (for `pop pop` =
-  listen, since 2026-09-27; `click pop` is unbound). So a lone `pop` taps only after `gap_ms + jitter_ms` (~0.75 s).
+- With the defaults (2026-09-28), `click` waits (for `click click` = home, `click hiss` = forward, `click click click` =
+  listen), so a lone `click` taps only after `gap_ms + jitter_ms` (~0.75 s); `click click` waits one more gap (for
+  `click click click`) and then goes home; `click click click` reaches the 3-sound maximum and resolves at once (listen).
 - A longer sequence bound to the **same fixed action** as a shorter bound prefix is not waited for, because waiting
   would change nothing but the delay. So `hiss` (back) acts at once although `hiss click` is also bound to back. The
   rest of such a sequence is then **absorbed**: a click that follows the hiss within the gap (device gap when both
   sounds are stamped, else arrival time) is logged as `absorbed{sound, tail_of, gap_ms, clock}` and does nothing, so
-  `hiss click` is one back and `hiss click click` is back followed by a lone `click` (which waits, then does nothing),
-  not back + home. A click after the gap starts a new group as usual.
-- If a profile binds `pop pop` for an app, a single `pop` in that app waits.
-- In cursor mode, only cursor-scope rules count. By default nothing waits there: `click click` is unbound unless a user
-  rule binds it, for example to `drag_toggle`.
+  `hiss click` is one back and `hiss click click` is back followed by a lone `click` (which waits, then taps), not
+  back + home. A click after the gap starts a new group as usual.
+- In cursor mode nothing waits: a click taps at once, a short hiss is back, a long hiss (>= 700 ms, `CursorListen`) opens
+  the listen window; multi-sound cursor rules still parse but never fire. A cursor-mode click that starts within
+  `CursorClickGuard.CURSOR_CLICK_REFRACTORY_MS` (400 ms) of the previous tap's end is dropped — the user's quick doubles
+  were retries after missed pops, not a second tap — logged `ignored{reason: "click refractory"}`. A hiss in between
+  does not reset it.
 
 The device may send one sound per message, or a whole sequence (up to 3) in one message. Both go through the same
 sequencer.
@@ -340,36 +369,38 @@ source runs: `pico` = BLE only; `phone`/`usb` = no BLE.
   loudspeaker / hifi / portable / car / set-top-box / display-and-loudspeaker class is a speaker (lock); a headphones /
   wearable-headset / handsfree class is in or on the ear (no lock). An unknown, uncategorised or missing class (no
   permission, no adapter, an error), and an unknown route (pre-Android-13 or an error), are assumed audible — fail
-  safe, the mic may hear it. The exception is the unlock, `pop pop` (two `pop`s, the second within
-  `gap_ms` of the first, nothing between; the media alone made none in round 4): both pops are dropped too
-  (`unlock: "1/2"`, `"2/2"`) and do nothing else (no phrase window: its recognizer would hear the video). Then sounds pass
-  to the usual rules (the pop allow-list below included) until the unlock ends, by `media_unlock_mode` (pending the
+  safe, the mic may hear it. The exception is the unlock, `click click click` (three `click`s, each starting within
+  `gap_ms` of the previous one's end, nothing between; the media alone made 0 triples in round 4 after the level gate
+  and `PhoneGate`): all three clicks are dropped too (`unlock: "1/3"`, `"2/3"`, `"3/3"`) and do nothing else (no phrase
+  window: its recognizer would hear the video). Then sounds pass
+  to the usual rules (the click allow-list below included) until the unlock ends, by `media_unlock_mode` (pending the
   user's choice; no mode extends on other gestures, since media sounds would keep the window open):
   - `one` (default): exactly the next gesture (the next resolved sequence, whatever it decides) passes, then it
-    re-locks: `media_unlock{event: used, sequence}`. `media_unlock_ms` is the time allowed to make it. A `pop pop` as
-    that gesture is listen-for-phrase.
+    re-locks: `media_unlock{event: used, sequence}`. `media_unlock_ms` is the time allowed to make it. A
+    `click click click` as that gesture is listen-for-phrase.
   - `fixed`: a `media_unlock_ms` window that never extends.
-  - `popext`: a `media_unlock_ms` window that only another `pop pop` extends (`media_unlock{event: extend}`); that
-    `pop pop` is taken by the lock and does not listen, so listen-for-phrase is not reachable by gesture while media plays.
+  - `popext`: a `media_unlock_ms` window that only another `click click click` extends (`media_unlock{event: extend}`);
+    that triple is taken by the lock and does not listen, so listen-for-phrase is not reachable by gesture while media
+    plays.
   The badge shows the pending face while an unlock is open. Media stopping, or leaving the speaker (earbuds plugged
   in), lifts the lock at once; a route back to the speaker (earbuds removed) re-locks. Events
   `media_unlock{event: open|used|extend|expired|lifted, window_ms?, unlock_mode?, sequence?, mode?, app?}`. Pico sounds
   are never gated. (The event name `media_gate` and `mic_status.media_gate` belong to different gates: the event is this
   lock, the `mic_status` block is `mic_media_gate`.)
-- **No taps from room pops** (`MicPopGate.kt`, user decisions 2026-09-27, after a mouth-sound pop became a real tap
-  in YouTube). With a `phone`/`usb` source:
-  - a lone `pop` has **no default action** in gesture mode, in any app: `unbound{n, sequence, app, source: phone}` and
-    `decision{action: none, source: "app:unbound (phone mic pop)"}`. It taps only where the user binds it (a global or
-    per-app profile rule for `pop`: the rule is the allow-list). It still waits the gap for a second pop (`pop pop`).
-  - a sequence with a pop or click that the user did not bind is never a `tap` or `double_tap` in gesture mode,
-    whatever decided it (a model included): `gated{n, action, sequence, app, why: phone_mic}`, nothing happens.
+- **No taps from room clicks** (`MicPopGate.kt`, user decisions 2026-09-27/28, after a mouth-sound click became a real
+  tap in YouTube). With a `phone`/`usb` source:
+  - a lone `click` has **no default action** in gesture mode, in any app: `unbound{n, sequence, app, source: phone}` and
+    `decision{action: none, source: "app:unbound (phone mic click)"}`. It taps only where the user binds it (a global or
+    per-app profile rule for `click`: the rule is the allow-list).
+  - a sequence with a click that the user did not bind is never a `tap` or `double_tap` in gesture mode, whatever
+    decided it (a model included): `gated{n, action, sequence, app, why: phone_mic}`, nothing happens.
   - in a social, video or messaging app (`MicPopGate.APPS`: YouTube and its mods, TikTok, Instagram, Threads, Facebook,
     Messenger, X, Reddit, Snapchat, Pinterest, LinkedIn, Tumblr, Bluesky, Twitch, Discord, WhatsApp, Telegram), a
-    sequence with a pop or click never does an outward action, even a user-bound one, and a pop never confirms an
-    outward action: `gated{n, action, sequence, app, why: phone_mic, confirm?}`.
-  - cursor mode keeps pop = click from every source (the user turns it on with the button).
-  Home, back, scrolling, `pop pop` = listen and everything from the Pico (pop = tap) are unchanged; a listen window
-  opened from the mic is logged `mic_listen{n, app, sequence, source}`.
+    sequence with a click never does an outward action, even a user-bound one, and a click never confirms an outward
+    action: `gated{n, action, sequence, app, why: phone_mic, confirm?}`.
+  - cursor mode keeps click = click from every source (the user turns it on with the button).
+  Home, back, scrolling, `click click click` = listen and everything from the Pico (click = tap) are unchanged; a listen
+  window opened from the mic is logged `mic_listen{n, app, sequence, source}`.
 - **Privacy.** Samples go from `AudioRecord` into the extractor and nowhere else: nothing is stored, logged or sent.
   Only the extractor's output (the sound lines and fp1 numbers the Pico would send) leaves the audio thread.
 
@@ -407,14 +438,15 @@ with `sound_source` `phone` or `usb`, the cursor is a relative 360° joystick. W
     small elements; corner brackets mark the snapped element.
   - The sliders `cursor_speed` and `cursor_pitch_sens` scale the speed and the pitch sensitivity.
 - **Sounds while it drives.**
-  - Only `pop`, `click` and `hiss` go on to the sequencer. Other extractor sounds (the hums the joystick is using)
-    are dropped: `mic_sound{dropped: "joystick (a hum moves the cursor)"}`.
+  - Only `pop`, `click` and `hiss` go on to the sequencer (the RAW extractor labels at this point; `SoundFold` folds pop
+    to click downstream). Other extractor sounds (the hums the joystick is using) are dropped:
+    `mic_sound{dropped: "joystick (a hum moves the cursor)"}`.
   - The ticks have a second pop detector. Its pops arrive as sound `pop` with `text: "pop (tick detector)"` and
     `tick: true`.
-  - When both detectors hear one pop (within `merge_ms` + 100 ms), it counts once. The later copy is dropped as
-    `joystick (the tick detector heard this pop)`, or not delivered at all if it is the tick detector's.
-  - A pop clicks at the cursor. `pop pop`, the numbered targets, the Outward / social / MediaGate / PhoneGate rules
-    are unchanged.
+  - When both detectors hear one click (within `merge_ms` + 100 ms), it counts once: `VoiceJoystick.filter` merges on
+    both `pop` and `click` labels (2026-09-28). The later copy is dropped as `joystick (the tick detector heard this
+    click)`, or not delivered at all if it is the tick detector's.
+  - A click taps at the cursor. The Outward / social / MediaGate / PhoneGate rules are unchanged.
   - A click on an outward button under the cursor ("Like", "Follow", "Send") waits for a confirm pop, like a named
     target: `confirm_ask{source: joystick, why: "outward button"}`.
 - **Log.**
@@ -428,16 +460,16 @@ with `sound_source` `phone` or `usb`, the cursor is a relative 360° joystick. W
 
 ### Calibration
 
-The setup screen (`ui/lib/src/calibration.dart`, route `calibrate`) records eight steps, in this order (calibration
-v2, 2026-09-27; design in `wiki/voice-cursor.md` "Calibration v2"):
+The setup screen (`ui/lib/src/calibration.dart`, route `calibrate`) records seven steps, in this order (calibration
+v2, 2026-09-27; design in `wiki/voice-cursor.md` "Calibration v2"; a pop counts as a click, 2026-09-28, so the pops
+step is gone):
 
 | Step | The user | Measures | Fails with (`reason`) |
 | --- | --- | --- | --- |
 | `hum` | hums 'mm' relaxed, 3 s | the home note, the voicing threshold | `no steady hum heard in <n> s`; `too short or too rough (<n> steady ticks, need 40): a relaxed 'mm', 3 s` |
 | `glide` | glides lowest -> highest -> back, 5 s | the voice range | `no steady voice heard in <n> s`; `too small or too short (<x> st, <n> steady ticks; need 4 st, 50 ticks): ...` |
 | `vowels` | holds ee, ah, oo, 2 s each | the vowel centroids | `no clear '<v>' heard in <n> s`; `only <n> clear frames of '<v>' in <n> s (need 30): hold it steady for 2 s` |
-| `pops` | 3 lip pops | the tick pop detector; the pops' gate numbers | `heard <n>/3 pops, need 2 (pop your lips a bit louder, a second apart)` |
-| `clicks` | 3 tongue clicks, a second apart (8 s) | the clicks' gate numbers (any extractor pop / click / hiss up to 250 ms; the 3 strongest) | `heard <n>/3 clicks, need 2 (click your tongue a bit louder, about a second apart)` |
+| `clicks` | 3 tongue clicks, a second apart (8 s) | the clicks' gate numbers (any extractor pop / click / hiss up to 250 ms; the 3 strongest) — this step sets the level gate | `heard <n>/3 clicks, need 2 (click your tongue a bit louder, about a second apart)` |
 | `whistle` | a whistle glide lowest -> highest -> back, 5 s | the whistle range, its home, the split from the voice range | `no steady whistle heard in <n> s`; `too small or too short (<x> st, <n> steady ticks; need 3 st, 50 ticks): whistle from your lowest to your highest and back`; `the whistle overlaps your voice range (whistle from <f> Hz, voice up to <f> Hz): whistle higher, or skip` |
 | `hiss` | 2 short 'tss' (8 s) | the hisses' gate numbers | `heard <n>/2 hisses, need 2 (a short, sharp 'tss', a bit louder)` |
 | `room` | stays quiet, 3 s | the floor (dBFS) and the loudest extractor transient | `not quiet: a steady tone was heard for <n> ms (a voice, music or a hum): make the room quiet and retry`; `a sound in the room was as loud as your quietest calibrated sound (<n> dB over the floor, yours <n> dB): make the room quieter and retry, or skip` |
@@ -449,15 +481,21 @@ split: its own home and range, `band: "whistle"` in the joystick's state. It kee
 source, stored only on the phone (prefs `canti_joystick`, key `calib_<source>`). The Pico can't be calibrated yet.
 While a calibration runs, every mic sound is dropped (`mic_sound{dropped: "calibrating"}`): nothing acts.
 
+The **tick detector is not calibrated** by any step: a profile's `pop` block (`peak_db`, `rise_db`, `core_ticks`) is
+kept from an old profile, or stays null (the spec defaults). Its thresholds were tuned on lip pops; whether tongue
+clicks trip it is an open question — if they don't, cursor clicks come from the extractor alone (~110–160 ms after the
+sound ends). Old profiles' `pops_examples` still count toward the level gate (they are the user's mouth sounds); a new
+run has none.
+
 **Commands.** Each is a UI-channel method or a debug op of the same name. Each answers the calib_status map.
 
 | Command | What it does |
 | --- | --- |
-| `calib_start {source, steps?, resume?}` | Starts a run. `steps` (optional) is an ordered subset of the 8 steps, no repeats (e.g. `["clicks", "whistle", "hiss", "room"]` to bring a version 1 profile up to date); without it, all 8 in order. `resume` (default true when `calib_progress_<source>` exists and is < 24 h old; never with `steps`) runs the steps not in the saved `done_steps`, starting at the first; with none left it is a full run. The run starts directly on its first step and covers only those steps. `source` must be the current sound source, and the mic must be capturing (Canti resumed). The draft is the saved profile with the run's steps taken out of `skipped`: a step outside the run keeps its saved values and skip state (the save merges), and a step in the run that was skipped before is recorded again. The first tick after the start times the first step (the stream may have run for minutes). |
+| `calib_start {source, steps?, resume?}` | Starts a run. `steps` (optional) is an ordered subset of the 7 steps, no repeats (e.g. `["clicks", "whistle", "hiss", "room"]` to bring a version 1 profile up to date); without it, all 7 in order. `resume` (default true when `calib_progress_<source>` exists and is < 24 h old; never with `steps`) runs the steps not in the saved `done_steps`, starting at the first; with none left it is a full run. The run starts directly on its first step and covers only those steps. `source` must be the current sound source, and the mic must be capturing (Canti resumed). The draft is the saved profile with the run's steps taken out of `skipped`: a step outside the run keeps its saved values and skip state (the save merges), and a step in the run that was skipped before is recorded again. The first tick after the start times the first step (the stream may have run for minutes). |
 | `calib_step {step}` | Records `step`. It works in any state (a step already waiting or recording is left alone unless it is a different step, in which case the in-flight step is dropped; saved steps stay). With no run open (the hub's rows, after a cancel) it first opens one on the current source as `calib_start` without args would (resumed). After `step_done`, the UI sends it for the next step of the run (`remaining[0]`). A step outside the run joins it. |
 | `calib_redo {step}` | Records a finished step again, for example from the result (it is saved again when it finishes). With no run open it opens one, as `calib_step`. When it finishes (or is skipped) the state goes back to `done` if every step of the run is finished; no other step starts. A step outside the run joins it. |
 | `calib_retry` | Only from `failed`: records the failed step again. |
-| `calib_skip` | Allowed from `failed`, from `waiting`, on `pops` / `clicks` / `hiss` before anything countable was heard, or during `room`. The step keeps its defaults and goes into `skipped`. **The run's next unfinished step after it then starts by itself** (the UI sends no `calib_step` after a skip). It never wraps round and never starts a step outside the run: with none after it, the state is `done` when every step of the run is finished, else `step_done` (an earlier step is still open: the UI picks it). |
+| `calib_skip` | Allowed from `failed`, from `waiting`, on `clicks` / `hiss` before anything countable was heard, or during `room`. The step keeps its defaults and goes into `skipped`. **The run's next unfinished step after it then starts by itself** (the UI sends no `calib_step` after a skip). It never wraps round and never starts a step outside the run: with none after it, the state is `done` when every step of the run is finished, else `step_done` (an earlier step is still open: the UI picks it). |
 | `calib_save` | Stores the draft (`saved_at_ms`, `complete: true`), removes `calib_progress_<source>` (the run is complete: the next `calib_start` begins at the top), applies it to the joystick, and ends the run. It answers the inactive map. |
 | `calib_cancel` | Ends the run. **Finished steps are already saved** (per-step save): only the in-flight step is lost. It answers the inactive map (with `resume`). The service also ends an open run by itself (log `calib{event: cancel, by}`): `idle` (no command for 5 min), `app background` (every Canti screen stopped for 10 s: Home, another app, the screen off), `ui closed` (the Flutter screen that owned it went away); for the first two a `calib_status` push carries the inactive map with an `error` saying so. A refused `calib_start` logs `calib{event: refused, reason, source}`. |
 | `calib_status` | Changes nothing. |
@@ -469,7 +507,7 @@ with `error`. The debug op also sets `ok: false`.
 
 **The calib_status map:**
 
-- Identity and state: `active` (true during a run), `source`, `step` (`hum`|`glide`|`vowels`|`pops`|`clicks`|`whistle`|`hiss`|`room`), `state`
+- Identity and state: `active` (true during a run), `source`, `step` (`hum`|`glide`|`vowels`|`clicks`|`whistle`|`hiss`|`room`), `state`
   (`waiting`|`recording`|`failed`|`step_done`|`done`; `done` = every step of the run is finished, measured or skipped).
 - The run: `steps` (the run's steps, in order) and `remaining` (those not finished yet, in order).
 - Prompts: `prompt`, `sub`, and `waiting_for_steady` (the step waits for a steady note).
@@ -479,15 +517,16 @@ with `error`. The debug op also sets `ok: false`.
   - `reason` (the failure, or null);
   - `skipped` (the steps skipped in this run; `result.skipped` is the merged profile's).
 - Live readout: `live{voiced, pitch_hz, level_db, vowel, vowel_conf, trace_hz (the joystick ticks, 20 ms, the last 5 s,
-  null = unvoiced), checks (the provisional grade)}` and `heard{pops_n, pops_need: 3, clicks_n, clicks_need: 3, hiss_n, hiss_need: 2}`
-  (`*_n`: the countable sounds heard so far in that step; `*_need` is what is asked, the step passes on 2).
+  null = unvoiced), checks (the provisional grade)}` and `heard{clicks_n, clicks_need: 3, hiss_n, hiss_need: 2}`
+  (`*_n`: the countable sounds heard so far in that step; `*_need` is what is asked, the step passes on 2). No `pops_n`
+  / `pops_need` (the pops step is gone).
 - `expect`: the wanted shape for a pitched step, as the training `expect` plus `tone`: `hum` = flat at home over 3 s;
   `glide` = an ARCH from low over 5 s (the prompt says lowest to highest AND BACK, which a rise check would fail);
   `whistle` = an arch from low, whistled, over the spec's glide time. Null for the others.
 - `scale`: `{low_hz, home_hz, high_hz}` from the draft so far (during `whistle`: the whistle range, else null), or null.
 - `live.trace_hz` and `live.checks` are the current step's: the trace starts empty at each step.
-- `pos`: `{i, n}` (1..8 over `JoyCalibration.STEPS`).
-- `hub`: `[{id, done, result_word}]` over all 8 steps (`result_word`: `ok` | `skipped` | `·`), for the hub rows. (The E9
+- `pos`: `{i, n}` (1..7 over `JoyCalibration.STEPS`).
+- `hub`: `[{id, done, result_word}]` over all 7 steps (`result_word`: `ok` | `skipped` | `·`), for the hub rows. (The E9
   contract calls this `steps`; that name was already the run's step list, so it is `hub`. `done` = the draft has the
   step's values, from this run or the saved profile.)
 - `result`: the draft profile, once any step has finished.
@@ -517,12 +556,15 @@ steps not in `done_steps`. Existing profiles load as before (no `complete` = fal
   - `extractor: {}`;
   - calibration v2: `clicks_heard`, `hiss_heard`, `whistle_lo_hz`, `whistle_hi_hz`, `whistle_home_hz`,
     `room_floor_dbfs`, `level_gate{min_snr_db, min_level_dbfs, from, n, weakest_snr_db?, weakest_level_dbfs?}`,
-    `relabel_rule` (bool), `missing_steps` (the steps neither measured nor skipped), `needs_recalibration`
-    (`missing_steps` is not empty).
+    `relabel_rule` (bool, always false for a new run: the pop <-> click relabel is retired), `missing_steps` (the steps
+    neither measured nor skipped), `needs_recalibration` (`missing_steps` is not empty).
 - Extras:
   - `home_st`, `clarity_on`, `lo_st`, `hi_st`;
   - `vowel_centroids_bark`, `vowel_dead_zone`, `vowel_full`, `vowel_report`;
-  - `pop{peak_db, rise_db, core_ticks}`, `pop_labels`;
+  - **Legacy (a pop counts as a click, 2026-09-28):** `pop{peak_db, rise_db, core_ticks}`, `pop_labels`,
+    `pops_examples`, `click_pop`, `pops_heard`. These are read, kept and round-tripped so old profiles load and nothing
+    crashes; a new run leaves them null. The `pop` block (the tick detector's thresholds) is not recalibrated, and the
+    old `pops_examples` still feed the level gate. `relabel_rule` is always false for a new run.
   - `whistle{lo_st, hi_st, home_st, split_st}`, `room{floor_dbfs, transient_snr_db, transient_level_dbfs, transients}`,
     `pops_examples` / `clicks_examples` / `hiss_examples` (each `[{label, dur_ms, snr_db, level_db, lf_ratio,
     peak_centroid_hz}]`: the extractor's gate numbers, never audio), `click_pop{features{<f>: {thr, pop_above}}, min_votes}`.
@@ -534,6 +576,12 @@ steps not in `done_steps`. Existing profiles load as before (no `complete` = fal
 - A skipped or unknown value is null, and the spec default applies.
 - `extractor` is reserved for the gesture extractor's overrides (`VxNative.open`). It is **empty**: the desktop
   go/no-go found no `vx_config` field worth moving. If overrides are used, `f0_min_hz` is clamped to at least 32 Hz.
+
+**Migration (2026-09-28).** `calib_step` / `calib_redo` / `calib_start {steps}` accept `"pops"` as `"clicks"` (an old
+UI sends it until E10UI), so `["pops","clicks"]` collapses to `["clicks"]`. Old saved progress (`calib_progress_<source>`
+with `"pops"` in `done_steps`) loads, but the finished `"pops"` is **not** a finished `"clicks"`: it is dropped and the
+resume starts at `clicks`. Old profiles' legacy fields (above) round-trip and a legacy `skipped: ["pops"]` is ignored
+(dropped on the next save).
 
 ## Transports
 
@@ -874,7 +922,7 @@ clears it, a late event of an older one is ignored.
 Quick record: `qr_snap` (or the badge row) holds the ring's current contents atomically (`rate`, capture generation) and
 the heard window; an empty ring (the mic not listening) replies `{id:null, error:"nothing heard yet: the mic is not
 listening"}`. `qr_save {id, label, note?, sound?}` refuses an unknown label or a `sound` index outside the snapshot's
-sounds and writes `clip.wav` (PCM16 mono) + `meta.json {version, id, saved_at_ms, label (rise|fall|dip|arch|pop|pop pop|click|hiss|hum|
+sounds and writes `clip.wav` (PCM16 mono) + `meta.json {version, id, saved_at_ms, label (rise|fall|dip|arch|pop|pop pop|click|click click|click click click|hiss|hum|
 misfire), note, sound, rate, seconds, source (phone|usb), mic, app, mode, sounds: [HeardSound with did/did_text]}`
 (tmp + rename). The snapshot map (`qr_snapshot` / `qr_pending`) also carries `last_action`. `rec_clear {sessions?: [names], quickrec?: [ids] | "all"}` deletes exactly those
 (names and ids are checked, never a path; refused while a session is open) and replies `{ok, deleted: {sessions,
@@ -986,17 +1034,17 @@ Routing:
   is queued skips the network. The event then gets the rule table's answer (`escalate-skipped` /
   `escalate-fallback`).
 - **Confirmation:** cloud answers have no calibrated confidence (`unscored`).
-  - A risky action waits for a confirm pop (`confirm_ask`). Risky means an injected touch on content: `tap`,
+  - A risky action waits for a confirm click (`confirm_ask`). Risky means an injected touch on content: `tap`,
     `double_tap`, `like`, `long_press`, `click`, `drag_toggle`.
-  - A `pop` performs the action; `hiss` cancels it; any other sound cancels it and is then handled as usual.
+  - A `click` performs the action; `hiss` cancels it; any other sound cancels it and is then handled as usual.
     `target_choose_ms` also cancels it.
-  - A cloud target pick is highlighted alone (the `choose` flow), so a `pop` taps it.
+  - A cloud target pick is highlighted alone (the `choose` flow), so a `click` taps it.
 
 **Outward actions always ask** (user decision; `Outward.kt`, one table). Publicly visible actions — `like`,
 `double_tap` (the same double-tap at the centre, which likes a post in feeds), and any future action or button whose
 name has an outward word (like, follow, share, repost, comment, reply, send, post, subscribe, ...) — wait for a confirm
-pop **whatever decided them** (rules, grammar, cloud, local model) and at any confidence. The badge asks ("Like? pop to
-confirm", "Tap Follow? pop to confirm"); `pop` performs it, `hiss` or any other sound cancels, and no pop within
+pop **whatever decided them** (rules, grammar, cloud, local model) and at any confidence. The badge asks ("Like? click to
+confirm", "Tap Follow? click to confirm"); `click` performs it, `hiss` or any other sound cancels, and no click within
 `outward_confirm_ms` (default 3000; not `confirm_timeout_ms`, which stays the Confirmer's screen-change timeout) means nothing happens (`confirm_ask{n, action, source, why: "outward action" | "outward
 button" | "unscored risky action", window_ms}`, then `event: confirmed | cancelled`). A tap on a screen target whose label
 is outward ("Like", "Follow", "Send message") asks the same way, also after a highlighted pick. The Executor refuses an
@@ -1149,11 +1197,11 @@ on; otherwise `n_best` reads `(typing: not logged)`.
 
 In cursor mode the user can name an on-screen element ("the subscriptions tab") instead of steering the cursor there.
 
-1. **Trigger.** `pop pop` in cursor mode opens the listening window (`Decision("listen_for_phrase",
-   "app:cursor-listen")`). `schema.CURSOR_ACTIONS` has no listen option and the generator never produces it, so the
-   **app** handles this sequence and it is never sent to the action model. A cursor-scope profile rule for `pop pop`
-   overrides it (binding it to `none` disables it). Because `pop pop` is bound in cursor mode, a `pop` (click) there
-   waits `gap_ms + jitter_ms` for a possible second `pop`.
+1. **Trigger.** A long hiss (>= 700 ms, `CursorListen.LONG_HISS_MS`) in cursor mode opens the listening window
+   (`Decision("listen_for_phrase", "app:cursor-listen")`). `schema.CURSOR_ACTIONS` has no listen option and the
+   generator never produces it, so the **app** handles this and it is never sent to the action model. The long hiss runs
+   before the not-deliberate gate (which rejects a long hiss). A short hiss is back; a cursor rule on `["hiss"]` applies
+   only to short hisses. Cursor mode never waits: a click taps at once.
 2. **Phrase.** From the phone's recognizer or a message's `phrase` (*Spoken phrases*). In cursor mode a phrase that is
    not a command names an element: it is matched by name first (`TargetMatcher`, no model); only when nothing on
    screen matches, and the decider is not `rules`, it becomes a `target` question as below.
@@ -1189,7 +1237,7 @@ In cursor mode the user can name an on-screen element ("the subscriptions tab") 
    - choice = NONE: toast **"not on screen"**.
    - confidence >= `target_min_confidence` (0.6): tap the element's centre (`tap_target`), confirmed as usual.
    - otherwise: numbered highlights on the (up to) 3 most probable elements, #1 selected (orange). `rise` = next,
-     `fall` = previous (both wrap), `pop` = tap the selected one, `hiss` = cancel. No input for `target_choose_ms`
+     `fall` = previous (both wrap), `click` = tap the selected one, `hiss` = cancel. No input for `target_choose_ms`
      (6000) cancels; each rise/fall restarts that timer. A mode change, disarm, reset or new phrase also cancels.
      Other sounds are ignored while choosing; sounds failing the not-deliberate gate (talking etc.) are ignored.
    - With `decider = rules` there is no model to ask: toast, and `target{result: "no model (decider=rules)"}`.
@@ -1270,15 +1318,16 @@ the enrollment store of the **current sound source** (class kind `gesture`, name
 It is separate from the voice cursor's setup and resumable: one card per gesture, each done, stopped and redone on
 its own; every accepted take is stored at once.
 
-**Plan** (`TrainPlan`, 52 takes per source). Each take is a *cell*:
+**Plan** (`TrainPlan`, 48 takes per source; a pop counts as a click, 2026-09-28, so the discrete gestures are click and
+hiss). Each take is a *cell*:
 
 | gesture | cells | takes |
 |---|---|---|
 | rise, fall, arch, dip | `hum`\|`whistle` × start `low`\|`high` × `slow` (~1.5 s)\|`quick` (~0.5 s): ids `hum-low-slow`, ... | 8 |
 | flat | `hum`\|`whistle` × note `low`\|`high` × `short`\|`long`: ids `whistle-high-long`, ... | 8 |
-| pop, click, hiss | `soft`\|`loud` × 2: ids `soft-1`, `soft-2`, `loud-1`, `loud-2` | 4 |
+| click, hiss | `soft`\|`loud` × 2: ids `soft-1`, `soft-2`, `loud-1`, `loud-2` | 4 |
 
-Each cell has a prompt ("Whistle a QUICK rise, starting LOW", "Pop your lips LOUDLY (2 of 2)") and a hint.
+Each cell has a prompt ("Whistle a QUICK rise, starting LOW", "Click your tongue LOUDLY (2 of 2)") and a hint.
 
 **A take** (`GestureTrainer`). While a round is open, every sound of the current source goes to it and none acts
 (outside a recording they are dropped: `ignored{reason: "gesture training (not recording)"}`; hold messages too). A
@@ -1308,8 +1357,8 @@ value, want}`, in this order, only the ids that apply:
 | id | ok | near | miss |
 | --- | --- | --- | --- |
 | `PITCH` | start note within 3 st of the mark (low: HOME−2 st, so ok at/below HOME+1 st; high: HOME+2 st, so ok at/above HOME−1 st; home: ±3 st), on the voice range for a hum and the WHISTLE range for a whistle | within 5 st | further (no scale → `pending`, which passes) |
-| `SHAPE` | the extractor labelled it the wanted gesture; or rise/fall net move ≥ ±0.7 st; arch/dip peak/trough ≥ 0.7 st above/below both ends; flat range ≤ 2.0 st (a single point ≥ 5 st off both neighbours, an octave error, is ignored) | ≥ 0.4 st (flat ≤ 3.0 st) | less; discrete = the right label (pop/click/hiss), else miss |
-| `LENGTH` | quick/short ≤ 1.0 s; slow/long ≥ 0.8 s; untagged 0.2–2.5 s (none for pop/click/hiss) | ≤ 1.4 s / ≥ 0.6 s / ≤ 4 s | further |
+| `SHAPE` | the extractor labelled it the wanted gesture; or rise/fall net move ≥ ±0.7 st; arch/dip peak/trough ≥ 0.7 st above/below both ends; flat range ≤ 2.0 st (a single point ≥ 5 st off both neighbours, an octave error, is ignored) | ≥ 0.4 st (flat ≤ 3.0 st) | less; discrete = the right label (click/hiss), else miss |
+| `LENGTH` | quick/short ≤ 1.0 s; slow/long ≥ 0.8 s; untagged 0.2–2.5 s (none for click/hiss) | ≤ 1.4 s / ≥ 0.6 s / ≤ 4 s | further |
 | `SOUND` | hum/whistle as tagged (whistle ≥ 600 Hz: ok ≥ 660, hum ok < 540); unpitched stays unpitched (or the extractor gave it the wanted discrete label) | within 10 % of 600 Hz | the other band / pitched when unpitched |
 | `LOUD` | level gate passed and not clipped (training takes carry no level yet: always ok) | within 3 dB of the gate | gated / clipped / too quiet |
 | `COUNT` | (combos) the right number of sounds | — | wrong number |
@@ -1334,23 +1383,23 @@ a refused one adds `error`.
 | method | args | effect |
 |---|---|---|
 | `train_status` | `source?` | the status (of `source`'s store; default the current one) |
-| `train_start` | `gesture`, `cell?`, `source?` | opens a round: the gesture's missing cells, or only `cell` (a redo, replacing its example). `source` must be the current sound source. Refused when every cell is recorded, or the class would exceed 10 examples |
+| `train_start` | `gesture`, `cell?`, `source?` | opens a round: the gesture's missing cells, or only `cell` (a redo, replacing its example). `gesture` is folded (`SoundFold.label`): an old UI's `"pop"` opens the click card. `source` must be the current sound source. Refused when every cell is recorded, or the class would exceed 10 examples |
 | `train_record` | | records the current cell (state `ready`, `failed` or `passed`) |
 | `train_retry` | | records the failed cell again (state `failed` only) |
 | `train_skip` | | leaves the cell unrecorded; the next one waits in `ready` (it does not record by itself) |
 | `train_keep` | | stores a take that failed only on its shape |
-| `train_goto` | `gesture`, `cell`, `source?` | switches the current take to that cell at any time (an in-flight take is dropped, a stored take stays; a recorded cell is recorded again, replacing its example); the header arrows ◀ ▶ use it to move over the whole plan, crossing gestures. With no round open (the hub's rows) it opens one. Refused while blocked (`error` = the blocker) |
+| `train_goto` | `gesture`, `cell`, `source?` | switches the current take to that cell at any time (an in-flight take is dropped, a stored take stays; a recorded cell is recorded again, replacing its example); `gesture` is folded (`SoundFold.label`). The header arrows ◀ ▶ use it to move over the whole plan, crossing gestures. With no round open (the hub's rows) it opens one. Refused while blocked (`error` = the blocker) |
 | `train_confirm` | `id`, `keep`, `source?` | confirms a `label_mismatch` take (`keep: true` → `confirmed: true`) or deletes it (`keep: false`). Only a take stored with `label_mismatch` has an addressable `id` (`meta.id`, unique in the store) |
 | `train_next` | `record?` (default true) | after a stored take: the next cell (recording at once), or `done` after the last |
 | `train_cancel` | | ends the round (stored takes stay). Also on a sound-source change, UI close, or 5 min without a command |
-| `train_delete` | `gesture`, `cell?`, `source?` | deletes the gesture's class (Delete / redo) or one cell's example, in any source's store |
+| `train_delete` | `gesture`, `cell?`, `source?` | deletes the gesture's class (Delete / redo) or one cell's example, in any source's store. `gesture` is NOT folded: `{gesture: "pop"}` with no cell deletes a legacy `gesture:pop` class if one exists (never the click class), otherwise it is the usual error |
 
 **States:** `ready` (the prompt; RECORD) → `recording` → `passed` (stored; NEXT) or `failed` (the reason; RETRY /
 SKIP / KEEP ANYWAY) → ... → `done`.
 
 **Status map** (`train_status`): `active`, `source` (whose cards), `current_source`, `profile`, `live_trace` (the
 source gives live pitch ticks: phone / USB mic, not the Pico), `blocked` (why a take cannot start now, or null), `blocked_action` (the one fix for it: `resume` | `gesture_mode`, or null),
-`done`, `total` (52), `sources{pico|phone|usb: {done, total}}`, `gestures[{name, kind (contour|discrete), done, total,
+`done`, `total` (48), `sources{pico|phone|usb: {done, total}}`, `gestures[{name, kind (contour|discrete), done, total,
 examples, extra (examples not from training), active (3+), kept, cells[{id, prompt, done, tags}]}]`, and `session`
 (null when no round is open): `source`, `gesture`, `state`, `cell`, `prompt`, `hint`, `tags`, `index`, `count`,
 `next_prompt`, `reason`, `reasons` (codes), `can_keep`, `heard{label, line, sounds, labels, dur_ms, f0_hz, start_hz,
@@ -1360,7 +1409,8 @@ start, span_st: 4, tol_st: 1.5, dur_s (quick 0.6 / slow 1.5 / untagged 0.8), gap
 gesture_n}` (1-based: i of n = 52 over the whole plan in TrainPlan order, gesture_i of gesture_n within the gesture),
 `can_prev`, `can_next`, `passed`, `skipped`, `kept`. Top level also carries `scale{low_hz, home_hz, high_hz}|null` (the
 current source's saved calibration: the voice range, or the whistle range while the current cell is a whistle; null
-when not calibrated) and `unconfirmed[{id, gesture, heard, pos}]` (`pos`: the example's index in its class).
+when not calibrated) and `unconfirmed[{id, gesture, heard, pos}]` (`pos`: the example's index in its class), plus
+`legacy: [{gesture: "pop", n}]` when a legacy `gesture:pop` class is in the store (so a UI can offer deleting it).
 
 **Stored example.** `enroll_add` semantics into class `gesture:<name>` of the round's source, with
 `meta{train: 1, cell, id, <tags: tone, pitch, speed|length | loudness, take>, heard{label, dur_ms, f0_hz, start_hz, tone,

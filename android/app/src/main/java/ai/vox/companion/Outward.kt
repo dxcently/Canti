@@ -63,6 +63,6 @@ object Outward {
     /** The confirm-pop window for [why] ([Risk.why]): outward -> [outwardMs]; an unscored risky action -> [riskyMs] (target_choose_ms). */
     fun windowMs(why: String, outwardMs: Long, riskyMs: Long): Long = if (why.startsWith("outward")) outwardMs else riskyMs
 
-    /** The badge question: "Like? pop to confirm", "Tap Follow? pop to confirm". */
-    fun question(what: String): String = "${what.replace('_', ' ').replaceFirstChar { it.uppercase() }}? pop to confirm"
+    /** The badge question: "Like? click to confirm", "Tap Follow? click to confirm". */
+    fun question(what: String): String = "${what.replace('_', ' ').replaceFirstChar { it.uppercase() }}? click to confirm"
 }

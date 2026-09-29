@@ -35,8 +35,9 @@ class QuickRec(
 
     companion object {
         const val EXPIRY_MS = 10L * 60_000L
-        /** qr_save's labels (the picker's "misfire / other" is `misfire`). */
-        val LABELS = setOf("rise", "fall", "dip", "arch", "pop", "pop pop", "click", "hiss", "hum", "misfire")
+        /** qr_save's labels (the picker's "misfire / other" is `misfire`). "pop" / "pop pop" stay: they are honest
+         *  ground truth for a clip, and old saves used them. */
+        val LABELS = setOf("rise", "fall", "dip", "arch", "pop", "pop pop", "click", "click click", "click click click", "hiss", "hum", "misfire")
     }
 
     private class Snap(

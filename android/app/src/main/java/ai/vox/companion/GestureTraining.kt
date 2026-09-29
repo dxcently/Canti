@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
  * one card per gesture.
  *
  * - [TrainPlan]: the cells. A contour (rise, fall, arch, dip) = hum|whistle x low|high start x slow|quick, 8 takes;
- *   flat = hum|whistle x low|high note x short|long, 8 takes; pop, click, hiss = soft|loud x 2 takes, 4. 52 in all.
+ *   flat = hum|whistle x low|high note x short|long, 8 takes; click, hiss = soft|loud x 2 takes, 4. 48 in all.
  * - [TrainJudge]: one take against its cell. It must be ONE sound and carry a fingerprint; the rest is the tolerant
  *   grade ([ShapeGrade]: start note, shape, length, hum/whistle, ...; near counts as a pass). A passing take the
  *   extractor labelled otherwise is stored with `label_mismatch` and held out of Personal until train_confirm.
@@ -29,13 +29,14 @@ object TrainPlan {
     data class Cell(val gesture: String, val id: String, val tags: Map<String, String>, val prompt: String, val hint: String)
 
     val CONTOURS = listOf("rise", "fall", "arch", "dip", "flat")
-    val DISCRETE = listOf("pop", "click", "hiss")
+    /** A pop counts as a click (2026-09-28): the discrete gestures are click and hiss (no pop). */
+    val DISCRETE = listOf("click", "hiss")
     val GESTURES = CONTOURS + DISCRETE
 
     /** What each shape is, for prompts and reasons. */
     val SHAPE = mapOf(
         "rise" to "goes up", "fall" to "goes down", "arch" to "goes up then down", "dip" to "goes down then up",
-        "flat" to "stays level", "pop" to "a short lip pop", "click" to "a tongue click", "hiss" to "a hiss",
+        "flat" to "stays level", "click" to "a tongue click", "hiss" to "a hiss",
     )
     /** The heard shape in brackets (a reason's "heard a dip (down then up)"). */
     val SHORT_SHAPE = mapOf(
@@ -67,12 +68,10 @@ object TrainPlan {
         for (loud in listOf("soft", "loud")) for (take in 1..2) {
             val adv = if (loud == "soft") "SOFTLY" else "LOUDLY"
             val prompt = when (g) {
-                "pop" -> "Pop your lips $adv ($take of 2)"
                 "click" -> "Click your tongue $adv ($take of 2)"
                 else -> "Hiss $adv, about half a second ($take of 2)"
             }
             val hint = when (g) {
-                "pop" -> "A short lip pop, like \"p\" with no voice."
                 "click" -> "A tongue click, like \"tsk\" or a cluck."
                 else -> "A short \"sss\" or \"shh\", under a second."
             } + if (loud == "soft") " Soft: as quiet as you would use it." else " Loud: as loud as you would use it."
@@ -329,19 +328,20 @@ class GestureTrainer(private val host: TrainHost) {
         val err = try {
             when (method) {
                 "train_status" -> {}
-                "train_start" -> start(args["gesture"] as? String ?: throw IllegalArgumentException("train_start needs {gesture}"),
+                "train_start" -> start(SoundFold.label(args["gesture"] as? String ?: throw IllegalArgumentException("train_start needs {gesture}")),
                     args["cell"] as? String, src)
                 "train_record" -> record()
                 "train_retry" -> { need("failed"); record() }
                 "train_skip" -> skip()
                 "train_keep" -> keep()
                 "train_next" -> next(args["record"] as? Boolean ?: true)
-                "train_goto" -> goto(args["gesture"] as? String ?: throw IllegalArgumentException("train_goto needs {gesture}"),
+                "train_goto" -> goto(SoundFold.label(args["gesture"] as? String ?: throw IllegalArgumentException("train_goto needs {gesture}")),
                     args["cell"] as? String ?: throw IllegalArgumentException("train_goto needs {cell}"), src)
                 "train_confirm" -> confirm(src ?: host.source(),
                     (args["id"] as? Number)?.toLong() ?: throw IllegalArgumentException("train_confirm needs {id}"),
                     args["keep"] as? Boolean ?: throw IllegalArgumentException("train_confirm needs {keep}"))
                 "train_cancel" -> cancel("ui")
+                // train_delete does NOT fold: {gesture: "pop"} removes a legacy pop class (never the click class)
                 "train_delete" -> delete(src ?: host.source(), args["gesture"] as? String ?: throw IllegalArgumentException("train_delete needs {gesture}"),
                     args["cell"] as? String)
                 else -> throw IllegalArgumentException("unknown training command $method")
@@ -532,7 +532,8 @@ class GestureTrainer(private val host: TrainHost) {
     }
 
     private fun delete(source: String, gesture: String, cellId: String?) {
-        require(gesture in TrainPlan.GESTURES) { "gesture must be one of ${TrainPlan.GESTURES}" }
+        // a legacy gesture:pop class (a pop counts as a click, 2026-09-28) can still be deleted whole — never the click class
+        require(gesture in TrainPlan.GESTURES || (gesture == "pop" && cellId == null)) { "gesture must be one of ${TrainPlan.GESTURES}" }
         require(s?.let { it.gesture == gesture && it.source == source } != true) { "the $gesture card is being recorded: stop it first" }
         if (cellId != null) TrainPlan.cell(gesture, cellId)
         host.change(source, "train delete $gesture${cellId?.let { " $it" } ?: ""}") { st ->
@@ -615,7 +616,7 @@ class GestureTrainer(private val host: TrainHost) {
         val h = c.heard!!
         val f = h.features!!
         val v = c.verdict!!
-        val mismatch = h.label != cell.gesture
+        val mismatch = SoundFold.label(h.label ?: "") != cell.gesture
         // unique in the store (train_confirm addresses a take by it), and still the store time in ms
         val id = maxOf(host.wallMs(), maxId(host.store(c.source)) + 1)
         val meta = JSONObject().put("train", TrainPlan.VERSION).put("cell", cell.id).put("id", id)
@@ -775,13 +776,17 @@ class GestureTrainer(private val host: TrainHost) {
                 "passed" to it.passed.toList(), "skipped" to it.skipped.toList(), "kept" to it.kept.toList(),
             )
         }
+        // a legacy gesture:pop class (a pop counts as a click, 2026-09-28) stays in the store for Personal matching but
+        // is not part of the plan: surface it so a UI can offer deleting it
+        val legacy = st.find("pop")?.takeIf { it.kind == EnrollmentStore.GESTURE }
+            ?.let { listOf(mapOf("gesture" to "pop", "n" to it.examples.size)) } ?: emptyList()
         return linkedMapOf(
             "active" to (c != null), "source" to src, "current_source" to cur, "profile" to host.profile(),
             "live_trace" to host.liveTrace(), "blocked" to host.blocker(), "blocked_action" to host.blockerAction(),
             "done" to doneCount(st), "total" to TrainPlan.TOTAL,
             // the current cell's scale (the whistle range for a whistle cell), else the voice's
             "scale" to scaleMap(if (c != null) c.scaleOf(c.cell) else host.scale()), "unconfirmed" to unconfirmed,
-            "gestures" to gestures, "session" to session, "sources" to progress(),
+            "gestures" to gestures, "legacy" to legacy, "session" to session, "sources" to progress(),
         )
     }
 }

@@ -23,9 +23,9 @@ import java.util.concurrent.Executors
  *   (fast path: what the decider settles locally, Decider.local, is decided at once on the main thread, no screen)
  *     -> Executor (dispatchGesture / performGlobalAction) -> Confirmer ("confirmed (events|pixels)" / "no visible change")
  *
- * Intent cursor mode: in cursor mode "pop pop" opens the listening window; the phrase that follows names an element.
- * Targets (accessibility nodes -> "label (role, position)" options) -> SystemOneClient question "target" -> tap it,
- * or highlight the top 3 for rise/fall/pop/hiss, or "not on screen".
+ * Intent cursor mode: in cursor mode a long hiss (>= 700 ms) opens the listening window; the phrase that follows names an
+ * element. Targets (accessibility nodes -> "label (role, position)" options) -> SystemOneClient question "target" -> tap it,
+ * or highlight the top 3 for rise/fall/click/hiss, or "not on screen".
  *
  * Personalization: a sound that carries a fingerprint is matched against the active profile's enrolled examples
  * (EnrollmentStore, Matcher) before sequencing, and its line and label are rewritten (Personal.rewrite).
@@ -79,6 +79,10 @@ class VoxService : AccessibilityService() {
     private var bufferedHoldEnded = false
     // Gesture decisions handed to the decider and not yet acted on.
     private val deciding = mutableSetOf<Long>()
+    /** The intake click merge (SoundFold.ClickMerge): one mouth click heard twice counts once (2026-09-28). */
+    private val clickMerge = ClickMerge()
+    /** Cursor-mode double-tap guard (SoundFold.CursorClickGuard): a quick retry after a missed pop does not re-tap. */
+    private val cursorClickGuard = CursorClickGuard()
     private lateinit var audio: AudioManager
     /** Phone / USB mic sounds while media plays: dropped except a `pop pop` unlock (MediaGate.kt). */
     private lateinit var mediaGate: MediaGate
@@ -426,7 +430,12 @@ class VoxService : AccessibilityService() {
         }
     }
 
-    private fun features(m: FeatureMessage, source: String): JSONObject {
+    private fun features(parsed: FeatureMessage, source: String): JSONObject {
+        // The single mapping point: every source (Pico BLE, the phone/USB mic and its tick pops, the debug socket, the
+        // suite) enters through deliver -> FeatureMessage.parse -> features, so folding "pop" to "click" here reaches
+        // everything downstream. Upstream of this point raw labels are seen on purpose (see SoundFold's doc).
+        val folded = SoundFold.fold(parsed)
+        var m = folded.msg
         lastMsgAt = SystemClock.elapsedRealtime()
         // The device's ids restart at 1 on every boot: its first message on a new link is a reset point.
         if (source == BleFeatureSource.CONNECT_SOURCE) lastMsgId = null
@@ -437,7 +446,7 @@ class VoxService : AccessibilityService() {
         lastMsgId = m.id
         EventLog.ev("msg", "id" to m.id, "source" to source, "mode" to m.mode, "armed" to m.armed,
             "sequence" to m.sequence.joinToString(" "), "phrase" to m.phrase, "sleeping" to (if (m.sleeping) true else null),
-            "by" to m.by)
+            "raw" to folded.raw?.joinToString(" "), "by" to m.by)
         // The user switched the mode on the Pico's button: that is their own choice, so a wake keeps it (UserMode).
         if (m.by == "button" && m.sequence.isEmpty()) userMode.chose(m.mode, "button")
         if (!m.armed) {
@@ -456,6 +465,13 @@ class VoxService : AccessibilityService() {
             if (m.sequence.isNotEmpty() || m.phrase != null) EventLog.ev("ignored", "reason" to "paused (app)", "id" to m.id)
             return ok()
         }
+        // One mouth click is never heard twice: drop click copies (the extractor and the tick detector both report the
+        // same click) before training, the media gate and the sequencer see them (user decision 2026-09-28).
+        m = dropClickDuplicates(m, source)
+        // Cursor mode has no sequencer waits, so a click taps at once; a click starting within the refractory window of
+        // the previous tap is a retry after a missed pop, not a second tap (user decision 2026-09-28).
+        m = dropRefractoryClicks(m, source)
+        if (m.sequence.isEmpty() && m.phrase == null) return ok()
         // [train] Gesture training: while a session is open every sound goes to it (a take, or dropped) and none acts.
         train?.let { t ->
             if (!t.active) return@let
@@ -521,6 +537,43 @@ class VoxService : AccessibilityService() {
             "note" to "its hold scrolled (a held flat after a swipe, or glide-and-hold), so its final event is not acted on")
         fun <T> keep(l: List<T>?) = l?.filterIndexed { i, _ -> i !in drop }
         return m.copy(sounds = keep(m.sounds)!!, sequence = keep(m.sequence)!!, timing = keep(m.timing), features = keep(m.features))
+    }
+
+    /** Drop the click copies [ClickMerge] rejects (the same mouth click heard twice), keeping every list aligned. */
+    private fun dropClickDuplicates(m: FeatureMessage, source: String): FeatureMessage {
+        val t = m.timing ?: return m
+        val drop = t.indices.filter { i ->
+            val st = t[i] ?: return@filter false
+            m.sequence[i] == SoundFold.TO && !clickMerge.accept(source, st.startMs, st.endMs)
+        }
+        if (drop.isEmpty()) return m
+        for (i in drop) {
+            val st = t[i]!!
+            EventLog.ev("merged", "source" to source, "label" to "click", "t_start_ms" to st.startMs, "t_end_ms" to st.endMs,
+                "why" to "the same click heard twice")
+        }
+        fun <T> keep(l: List<T>?) = l?.filterIndexed { i, _ -> i !in drop }
+        return m.copy(sounds = keep(m.sounds)!!, sequence = keep(m.sequence)!!, timing = keep(m.timing),
+            features = keep(m.features), gated = keep(m.gated))
+    }
+
+    /** Drop cursor-mode clicks inside the double-tap refractory window (SoundFold.CursorClickGuard), keeping lists aligned. */
+    private fun dropRefractoryClicks(m: FeatureMessage, source: String): FeatureMessage {
+        if (deviceMode != "cursor") return m
+        val t = m.timing ?: return m
+        val drop = t.indices.filter { i ->
+            val st = t[i] ?: return@filter false
+            m.sequence[i] == SoundFold.TO && !cursorClickGuard.click(st.startMs, st.endMs)
+        }
+        if (drop.isEmpty()) return m
+        for (i in drop) {
+            val st = t[i]!!
+            EventLog.ev("ignored", "reason" to "click refractory", "source" to source, "t_start_ms" to st.startMs,
+                "t_end_ms" to st.endMs)
+        }
+        fun <T> keep(l: List<T>?) = l?.filterIndexed { i, _ -> i !in drop }
+        return m.copy(sounds = keep(m.sounds)!!, sequence = keep(m.sequence)!!, timing = keep(m.timing),
+            features = keep(m.features), gated = keep(m.gated))
     }
 
     /**
@@ -657,6 +710,7 @@ class VoxService : AccessibilityService() {
         sequencer.flush()
         holdScroll.stop("mode change"); dropBufferedHold()
         deviceMode = mode
+        if (mode == "cursor") cursorClickGuard.reset()   // a fresh cursor session: no stale refractory window
         if (mode == "cursor") overlay.showCursor() else { overlay.hideCursor(); executor.cancelDrag(); cancelChoice("mode change") }
         joyUpdate()
         EventLog.ev("mode", "mode" to mode)
@@ -1065,7 +1119,7 @@ class VoxService : AccessibilityService() {
         return null
     }
 
-    /** "tap the plus button": the screen's targets by name; weak or several -> highlight them (pop taps, hiss cancels). */
+    /** "tap the plus button": the screen's targets by name; weak or several -> highlight them (click taps, hiss cancels). */
     private fun tapNamed(c: SpeechCommand.Tap, targets: List<Target>) {
         cancelChoice("new target phrase")
         val n = ++decisionCount
@@ -1082,7 +1136,7 @@ class VoxService : AccessibilityService() {
             is Targets.Outcome.Tap -> tapTarget(n, out.target, "named")
             is Targets.Outcome.Choose -> {
                 startChoice(n, out.targets)
-                toast(if (out.targets.size == 1) "pop to tap \"${out.targets[0].label}\", hiss to cancel" else "rise/fall to pick, pop to tap, hiss to cancel")
+                toast(if (out.targets.size == 1) "click to tap \"${out.targets[0].label}\", hiss to cancel" else "rise/fall to pick, click to tap, hiss to cancel")
             }
             is Targets.Outcome.NotOnScreen -> when {
                 c.fallback != null -> runCommand(c.fallback) { targets }
@@ -1121,7 +1175,7 @@ class VoxService : AccessibilityService() {
 
     /**
      * A gesture from an open media-gate unlock (MediaGate, `media_unlock_mode`): `one` re-locks after it (it still acts),
-     * `popext` takes a `pop pop` as the extension (true: consumed, no listen), `fixed` does nothing.
+     * `popext` takes a `click click click` as the extension (true: consumed, no listen), `fixed` does nothing.
      */
     private fun mediaUnlockResolved(p: Sequencer.Pending): Boolean {
         if (!settings.mic.usesMic) return false
@@ -1150,8 +1204,11 @@ class VoxService : AccessibilityService() {
             "clock" to p?.clock, "ended_by" to p?.endedBy, "gaps_ms" to p?.gapsMs?.let { org.json.JSONArray(it) }, "note" to p?.note)
         val gen = generation
         val d = decider
-        if (mode == "cursor" && seq == Profile.CURSOR_LISTEN && profile.cursorBindings().none { it.phrase == seq }) {
-            // Not a model decision: CURSOR_ACTIONS has no listen option (schema.py), so the app owns this sequence.
+        if (mode == "cursor" && phrase == null && seq == listOf("hiss") &&
+                CursorListen.isLong("hiss", p?.stamps?.firstOrNull(), sounds.firstOrNull())) {
+            // A long hiss (>= CursorListen.LONG_HISS_MS) always listens. This runs BEFORE the notDeliberate check:
+            // RuleDecider.notDeliberate rejects hisses in the "long (over 1 s)" bucket as "long-hiss". A cursor rule on
+            // ["hiss"] applies only to SHORT hisses. Not a model decision: CURSOR_ACTIONS has no listen option (schema.py).
             micListen(n, pkg, seq)
             act(n, gen, mode, Decision("listen_for_phrase", "app:cursor-listen", explicit = true), local = true)
             return
@@ -1159,8 +1216,8 @@ class VoxService : AccessibilityService() {
         if (mode == "gesture" && phrase == null && Vocab.DEFAULT_BINDINGS[seq] == "listen_for_phrase" &&
                 profile.appBindings(pkg).none { it.phrase == seq } && profile.globalBindings().none { it.phrase == seq } &&
                 RuleDecider.notDeliberate(Scene(mode = mode, app = pkg, appName = pkg, heard = sounds, sequence = seq)) == null) {
-            // The app owns the default listen gesture ("pop pop" since 2026-09-27) in every decider mode: the models were
-            // trained when it was "click pop" (Vocab.DEFAULTS_TEXT), so a model must not be asked about it.
+            // The app owns the default listen gesture ("click click click" since 2026-09-28) in every decider mode: the
+            // models were trained when it was "click pop" (Vocab.DEFAULTS_TEXT), so a model must not be asked about it.
             micListen(n, pkg, seq)
             act(n, gen, mode, Decision("listen_for_phrase", "app:listen", explicit = true), local = true)
             return
@@ -1172,10 +1229,10 @@ class VoxService : AccessibilityService() {
             return
         }
         if (phrase == null && MicPopGate.unbound(settings.mic.usesMic, mode, seq, userBound(pkg, seq))) {
-            // A phone or USB mic's lone pop does nothing unless the user bound it (user decision 2026-09-27; MicPopGate).
+            // A phone or USB mic's lone click does nothing unless the user bound it (user decision 2026-09-28; MicPopGate).
             EventLog.ev("unbound", "n" to n, "sequence" to seq.joinToString(" "), "app" to pkg, "source" to MicPopGate.SOURCE)
-            trace("result", "unbound: a pop from the phone mic has no default action")
-            act(n, gen, mode, Decision("none", "app:unbound (phone mic pop)"), local = true)
+            trace("result", "unbound: a click from the phone mic has no default action")
+            act(n, gen, mode, Decision("none", "app:unbound (phone mic click)"), local = true)
             return
         }
         // Fast path: what the decider settles locally never reads the screen (Decider.local), so it is decided here at
@@ -1210,7 +1267,7 @@ class VoxService : AccessibilityService() {
     private fun userBound(pkg: String, seq: List<String>): Boolean =
         profile.appBindings(pkg).any { it.phrase == seq } || profile.globalBindings().any { it.phrase == seq }
 
-    /** A listen window opened by pops the phone mic heard (maybe the room, not the user): logged, since it cannot act by itself. */
+    /** A listen window opened by a click triple the phone mic heard (maybe the room, not the user): logged, since it cannot act by itself. */
     private fun micListen(n: Long, pkg: String, seq: List<String>) {
         if (settings.mic.usesMic) EventLog.ev("mic_listen", "n" to n, "app" to pkg, "sequence" to seq.joinToString(" "), "source" to settings.mic.source)
     }
@@ -1238,9 +1295,9 @@ class VoxService : AccessibilityService() {
         } finally { applyBufferedHold() }
     }
 
-    // A confirm pop gates two things ([Risk.why]): an unscored (cloud) decision for a risky action, and ALWAYS an
+    // A confirm click gates two things ([Risk.why]): an unscored (cloud) decision for a risky action, and ALWAYS an
     // outward action ([Outward]: like, follow, share...) or a tap on an outward button, whatever decided it. The badge
-    // asks ("Like? pop to confirm"); pop runs it, hiss cancels, any other sound cancels it and is handled as usual
+    // asks ("Like? click to confirm"); click runs it, hiss cancels, any other sound cancels it and is handled as usual
     // (never blocks a gesture); the timeout cancels (outward: confirm_timeout_ms, else target_choose_ms).
     private class PendingConfirm(val n: Long, val gen: Long, val mode: String, val what: String, val run: () -> Unit, val timeout: Runnable)
     private var confirm: PendingConfirm? = null
@@ -1279,9 +1336,9 @@ class VoxService : AccessibilityService() {
                 sequence = listOf(m.sequence[i]))) == null
         }?.let { m.sequence[it] } ?: return false
         return when (first) {
-            "pop" -> {
+            "click" -> {
                 if (MicPopGate.gatesConfirm(settings.mic.usesMic, pkg, c.what)) {
-                    EventLog.ev("gated", "n" to c.n, "action" to c.what, "sequence" to "pop", "app" to pkg, "why" to MicPopGate.WHY, "confirm" to true)
+                    EventLog.ev("gated", "n" to c.n, "action" to c.what, "sequence" to "click", "app" to pkg, "why" to MicPopGate.WHY, "confirm" to true)
                     cancelConfirm("gated: ${MicPopGate.WHY}")
                     return true
                 }
@@ -1436,7 +1493,7 @@ class VoxService : AccessibilityService() {
                     armChoiceTimeout()
                     EventLog.ev("choice", "n" to choiceN, "event" to "select", "sound" to label, "selected" to c.index + 1, "option" to c.selected.option)
                 }
-                "pop" -> {
+                "click" -> {
                     val t = c.selected; val idx = c.index + 1; val n = choiceN; val gen = generation
                     EventLog.ev("choice", "n" to n, "event" to "picked", "selected" to idx, "option" to t.option)
                     cancelChoice(null)
@@ -1445,7 +1502,7 @@ class VoxService : AccessibilityService() {
                     return
                 }
                 "hiss" -> { cancelChoice("hiss"); return }
-                else -> EventLog.ev("choice", "n" to choiceN, "event" to "ignored", "sound" to label, "why" to "rise/fall cycle, pop taps, hiss cancels")
+                else -> EventLog.ev("choice", "n" to choiceN, "event" to "ignored", "sound" to label, "why" to "rise/fall cycle, click taps, hiss cancels")
             }
         }
     }
@@ -1530,7 +1587,11 @@ class VoxService : AccessibilityService() {
             if (v == MediaGate.Verdict.PASS) continue
             took = true
             EventLog.ev("media_gate", "kind" to kind, "source" to settings.mic.source, "dropped" to true,
-                "unlock" to when (v) { MediaGate.Verdict.FIRST_POP -> "1/2"; MediaGate.Verdict.UNLOCK -> "2/2"; else -> null })
+                "unlock" to when (v) {
+                    is MediaGate.Verdict.PART -> "${v.chain}/$MediaGate.UNLOCK_COUNT"
+                    MediaGate.Verdict.UNLOCK -> "$MediaGate.UNLOCK_COUNT/$MediaGate.UNLOCK_COUNT"
+                    else -> null
+                })
             if (v == MediaGate.Verdict.UNLOCK) {
                 EventLog.ev("media_unlock", "event" to "open", "window_ms" to settings.mediaUnlockMs, "unlock_mode" to settings.mediaUnlockMode, "mode" to deviceMode, "app" to lastPkg)
                 scheduleMediaWindowEnd()
@@ -2057,7 +2118,7 @@ class VoxService : AccessibilityService() {
                 reply.put("result", tr)
             }
             "reset" -> {
-                generation++; sequencer.cancel(); sequencer.resetClock(); holdScroll.stop("reset"); dropBufferedHold(); lastSwipe = null; overlay.stop(); executor.cancelDrag(); listenWindow.cancel("reset"); dictation.stop("reset"); recent.clear()
+                generation++; sequencer.cancel(); sequencer.resetClock(); clickMerge.reset(); cursorClickGuard.reset(); holdScroll.stop("reset"); dropBufferedHold(); lastSwipe = null; overlay.stop(); executor.cancelDrag(); listenWindow.cancel("reset"); dictation.stop("reset"); recent.clear()
                 cancelChoice("reset")
                 lastMsgId = null; armed = true; paused = false
                 if (m.optBoolean("clear_log")) EventLog.clear()

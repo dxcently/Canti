@@ -73,7 +73,7 @@ class OutwardTest {
         val s = Scene(mode = "listening", app = "x", appName = "x", phrase = PhraseGrammar.LIKE)
         val d = RuleDecider().decide(DecisionInput(s, Profile.empty()))
         assertEquals("like", d.action); assertTrue(Risk.needsConfirm(d))
-        assertEquals("Like? pop to confirm", Outward.question("like"))
-        assertEquals("Tap Follow? pop to confirm", Outward.question("tap Follow"))
+        assertEquals("Like? click to confirm", Outward.question("like"))
+        assertEquals("Tap Follow? click to confirm", Outward.question("tap Follow"))
     }
 }

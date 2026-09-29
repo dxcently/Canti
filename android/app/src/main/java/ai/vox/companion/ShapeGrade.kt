@@ -198,13 +198,13 @@ object ShapeGrade {
         val g = want.sequence.singleOrNull() ?: return null          // a combo has no single shape
         if (g !in TrainPlan.CONTOURS && g !in TrainPlan.DISCRETE) return null
         if (g in TrainPlan.DISCRETE) {
-            // discrete: shape = the right label family (pop / click / hiss)
+            // discrete: shape = the right label family (click / hiss); a heard "pop" folds to "click" (2026-09-28)
             val label = heard.label
-            return Check("SHAPE", "SHAPE", if (label == g) "ok" else "miss", label, g)
+            return Check("SHAPE", "SHAPE", if (SoundFold.label(label ?: "") == g) "ok" else "miss", label, g)
         }
         val track = stTrack(heard.pitch16)
         // the extractor's own label agrees (its thresholds are stricter): ok, whatever the smoothed track says
-        if (heard.label == g) return Check("SHAPE", "SHAPE", "ok", if (track.size < 2) null else shapeMetric(g, track), g)
+        if (SoundFold.label(heard.label ?: "") == g) return Check("SHAPE", "SHAPE", "ok", if (track.size < 2) null else shapeMetric(g, track), g)
         if (track.size < 2) return Check("SHAPE", "SHAPE", "miss", null, g)   // no pitch track to judge
         val m = shapeMetric(g, track)
         val state = when (g) {
@@ -231,7 +231,7 @@ object ShapeGrade {
     private fun soundCheck(want: Want, heard: Heard): Check? {
         if (want.start == "none") {
             // unpitched gestures must be unpitched (the extractor's own label for it counts: a hiss can carry a stray f0)
-            val u = unpitched(heard) || (heard.label != null && heard.label in want.sequence)
+            val u = unpitched(heard) || (heard.label != null && SoundFold.label(heard.label!!) in want.sequence)
             return Check("SOUND", "SOUND", if (u) "ok" else "miss", if (u) null else heard.f0Hz, "unpitched")
         }
         if (want.tone == "any") return null

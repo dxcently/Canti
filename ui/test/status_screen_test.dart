@@ -302,10 +302,10 @@ void main() {
     expect(b.gesture.combos.single.label, 'forward');
     expect(b.cursor.note, 'voice joystick: hums move the cursor, a pop clicks, hiss goes back');
     expect(VoxBindings.defaults.gesture.combos.map((c) => c.sequence.join(' ')),
-        ['pop pop', 'click click', 'hiss click', 'click hiss']);
+        ['click click click', 'click click', 'hiss click', 'click hiss']);
     expect(VoxBindings.defaults.gesture.combos.last.label, 'forward');
     expect(VoxBindings.defaults.cursor.note, isNull);
-    expect(VoxBindings.defaults.cursor.combos.single.sequence, ['pop', 'pop']); // names a target in cursor mode
+    expect(VoxBindings.defaults.cursor.combos, isEmpty); // cursor mode has no combos: a long hiss names a target
     expect(VoxBindings.fromMapOrNull(null), isNull);
     expect(VoxBindings.fromMapOrNull('x'), isNull);
   });

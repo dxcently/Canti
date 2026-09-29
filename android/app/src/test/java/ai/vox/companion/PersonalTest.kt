@@ -302,6 +302,10 @@ class PersonalTest {
         assertEquals(Personal.Rewritten(Personal.ignoreLine(hum), "rise"), Personal.rewrite(ign, hum, "rise"))
         assertEquals(Personal.Rewritten(hum, "rise"), Personal.rewrite(MatchResult("none"), hum, "rise"))
         assertEquals(Personal.Rewritten(hum, "rise", trusted = true), Personal.rewrite(MatchResult("gesture", EnrollClass("gesture", "rise")), hum, "rise"))   // [train] agreeing gesture: kept, trusted (relabel: GestureRelabelTest)
+        // 2026-09-28: an old enrolled gesture:pop class matches a click: folded to "click", so it agrees (trusted), never relabels to "pop".
+        val clickLine = "a tongue click; instant sound; loudness normal; sounds like mouth sound"
+        assertEquals(Personal.Rewritten(clickLine, "click", trusted = true),
+            Personal.rewrite(MatchResult("gesture", EnrollClass("gesture", "pop")), clickLine, "click"))
     }
 
     // --- deciding -------------------------------------------------------------------------------------------------------
