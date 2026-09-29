@@ -75,6 +75,18 @@ data class JoyProfile(
     }
     val needsRecalibration: Boolean get() = missingSteps.isNotEmpty()
 
+    /** Clears one step's measured fields (the same fields [JoyCalibration.skip] resets), shared by the skip and
+     *  calib_delete so a deleted step reads as never measured. Does not touch `skipped` or the gate. */
+    fun resetStep(step: String): JoyProfile = when (step) {
+        "hum" -> copy(homeSt = null, clarityOn = null)
+        "glide" -> copy(loSt = null, hiSt = null)
+        "vowels" -> copy(centroids = null, vowelDeadZone = null, vowelFull = null, vowelReport = null)
+        "clicks" -> copy(clicksExamples = null)
+        "hiss" -> copy(hissExamples = null)
+        "whistle" -> copy(whistle = null)
+        else -> copy(room = null)
+    }
+
     /** The accuracy of each vowel: how often it steered its own way (ee right, ah none, oo left). */
     fun vowelAcc(v: String): Double? = vowelReport?.get(v)?.get(JoyCalibration.VOWEL_WANT[v])
 
@@ -351,15 +363,7 @@ class JoyCalibration(val spec: JoySpec, val source: String, base: JoyProfile? = 
         }
         tMs?.let { tNow = it }
         val s = step
-        draft = when (s) {
-            "hum" -> draft.copy(homeSt = null, clarityOn = null)
-            "glide" -> draft.copy(loSt = null, hiSt = null)
-            "vowels" -> draft.copy(centroids = null, vowelDeadZone = null, vowelFull = null, vowelReport = null)
-            "clicks" -> draft.copy(clicksExamples = null)
-            "hiss" -> draft.copy(hissExamples = null)
-            "whistle" -> draft.copy(whistle = null)
-            else -> draft.copy(room = null)
-        }
+        draft = draft.resetStep(s)
         if (s in setOf("clicks", "hiss", "room")) derive()
         mark(s, true)
         clearSteps(); reason = null

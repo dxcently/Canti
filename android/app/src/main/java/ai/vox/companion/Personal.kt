@@ -196,6 +196,26 @@ class EnrollmentStore(val profile: String, val source: String? = null) {
             tmp.writeText(s.toJson().toString())
             require(tmp.renameTo(f)) { "could not write $f" }
         }
+
+        /** The per-source trash of soft-deleted takes: files/enroll/<profile>@<source>.trash.json. */
+        fun trashFile(dir: File, profile: String, source: String) = File(File(dir, "enroll"), "$profile@$source.trash.json")
+
+        /** The trash entries (newest first), or null when absent / empty / damaged. */
+        fun loadTrash(dir: File, profile: String, source: String): JSONArray? {
+            val f = trashFile(dir, profile, source)
+            if (!f.exists()) return null
+            return try { JSONObject(f.readText()).getJSONArray("entries") } catch (e: Exception) { null }
+        }
+
+        /** Persists the trash (a null or empty [entries] removes the file). */
+        fun saveTrash(dir: File, profile: String, source: String, entries: JSONArray?) {
+            val f = trashFile(dir, profile, source)
+            f.parentFile?.mkdirs()
+            if (entries == null || entries.length() == 0) { f.delete(); return }
+            val tmp = File(f.parentFile, f.name + ".tmp")
+            tmp.writeText(JSONObject().put("entries", entries).toString())
+            require(tmp.renameTo(f)) { "could not write $f" }
+        }
     }
 }
 

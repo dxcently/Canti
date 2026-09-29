@@ -1822,6 +1822,8 @@ class VoxService : AccessibilityService() {
         }
         override fun store(source: String) = loadStore(source)
         override fun change(source: String, what: String, change: (EnrollmentStore) -> Unit) = changeStore(source, what, change)
+        override fun trash(source: String) = EnrollmentStore.loadTrash(filesDir, profile.name, source)
+        override fun saveTrash(source: String, entries: org.json.JSONArray?) = EnrollmentStore.saveTrash(filesDir, profile.name, source, entries)
         override fun wallMs() = System.currentTimeMillis()
         override fun log(vararg fields: Pair<String, Any?>) { EventLog.ev("train", *fields) }
         override fun push(status: Map<String, Any?>) { trainSink?.invoke(status) }
@@ -1939,7 +1941,7 @@ class VoxService : AccessibilityService() {
             }
             "joy_state" -> reply.put("joystick", joy?.describe() ?: JSONObject.NULL)
             "joy_recentre" -> { joy?.recentre("ctl"); reply.put("joystick", joy?.describe() ?: JSONObject.NULL) }
-            "calib_start", "calib_step", "calib_redo", "calib_retry", "calib_skip", "calib_save", "calib_cancel", "calib_status", "calib_get" -> {
+            "calib_start", "calib_step", "calib_redo", "calib_retry", "calib_skip", "calib_save", "calib_cancel", "calib_delete", "calib_undelete", "calib_status", "calib_get" -> {
                 val args = m.keys().asSequence().filter { it != "op" && it != "type" }.associateWith { m.get(it) as Any? }
                 val r = (joy ?: throw IllegalArgumentException("the joystick did not start")).calibCommand(op, args)
                 reply.put("calib", r?.let { JSONObject(it) } ?: JSONObject.NULL)
@@ -1966,7 +1968,7 @@ class VoxService : AccessibilityService() {
             }
             "enroll_list" -> reply.put("enrollment", enrollSummary(m.optString("source").ifEmpty { settings.mic.source }))
             // [train] gesture training (GestureTraining.kt): the UI channel's train_* methods, same args and reply
-            "train_status", "train_start", "train_record", "train_retry", "train_skip", "train_keep", "train_next", "train_goto", "train_confirm", "train_cancel", "train_delete" -> {
+            "train_status", "train_start", "train_record", "train_retry", "train_skip", "train_keep", "train_next", "train_goto", "train_confirm", "train_cancel", "train_delete", "train_undelete", "train_trash_clear" -> {
                 val args = m.keys().asSequence().filter { it != "op" && it != "type" }.associateWith { m.get(it) as Any? }
                 val r = (train ?: throw IllegalArgumentException("gesture training did not start")).command(op, args)
                 reply.put("train", trainJson(r))
