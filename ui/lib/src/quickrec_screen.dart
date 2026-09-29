@@ -17,7 +17,7 @@ Future<void> openQuickRec(BuildContext context, VoxBackend backend, {RecorderBac
         builder: (_) => QuickRecScreen(backend: backend, recorder: recorder ?? recorderBackendFor(backend), snap: snap)));
 
 /// The label picker: what the sound actually was. "misfire / other" sends `misfire`.
-const quickLabels = ['rise', 'fall', 'dip', 'arch', 'pop', 'pop pop', 'click', 'hiss', 'hum', 'misfire'];
+const quickLabels = ['rise', 'fall', 'dip', 'arch', 'pop', 'pop pop', 'click', 'click click', 'click click click', 'hiss', 'hum', 'misfire'];
 
 /// The quick record screen (SHARED CONTRACT §5): the last ~12 s of mic audio, already in RAM, with the sounds Canti
 /// heard in it and what it did; pick a sound, say what it really was, and save. Nothing touches storage until SAVE;
@@ -301,6 +301,8 @@ class _QuickRecScreenState extends State<QuickRecScreen> {
   static ExpectedShape _expectedFor(String label, HeardSound heard) {
     final seq = switch (label) {
       'pop pop' => const ['pop', 'pop'],
+      'click click' => const ['click', 'click'],
+      'click click click' => const ['click', 'click', 'click'],
       'hum' => const ['flat'],
       'misfire' => [heard.label ?? 'flat'],
       _ => [label],

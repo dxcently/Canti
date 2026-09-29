@@ -53,7 +53,7 @@ void main() {
     final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_SAVED': 'v1'});
     await tester.pump();
     await tester.pump();
-    expect(find.text('CALIBRATE 4/8'), findsOneWidget);
+    expect(find.text('CALIBRATE 3/7'), findsOneWidget);
     p.backend.dispose();
   });
 
@@ -69,7 +69,7 @@ void main() {
   });
 
   testWidgets('the calibrate preview holds a failed step with its reason', (tester) async {
-    final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_HOLD': 'failed', 'VOX_PREVIEW_FAIL': 'pops'});
+    final p = await preview(tester, {'VOX_PREVIEW': 'calibrate', 'VOX_PREVIEW_HOLD': 'failed', 'VOX_PREVIEW_FAIL': 'clicks'});
     await waitFor(tester, find.byKey(const Key('calib_reason')), ticks: 1200);
     expect(find.text('TRY AGAIN'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

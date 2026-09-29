@@ -292,7 +292,7 @@ class VoxEvent {
 /// One resolved binding for the status screen's bindings window: what a sound (or a two-sound combo) does, and where
 /// that came from (`default`, `app-only`, `global`, `app` or `cursor`; a user rule is one of the last three).
 class VoxBinding {
-  const VoxBinding(this.label, this.source, [this.sequence = const []]);
+  const VoxBinding(this.label, this.source, [this.sequence = const [], this.long]);
 
   /// The action's option text (`swipe up`, `back`, `cursor up`, ...: the short label, D186), or `custom rule` / `ignored`.
   final String label;
@@ -303,10 +303,14 @@ class VoxBinding {
   /// The sound sequence; empty for a single sound (those are keyed by sound in [VoxModeBindings.sounds]).
   final List<String> sequence;
 
+  /// What a long hold of the sound does (`listen for a name`), or null for a single-tap-only sound.
+  final String? long;
+
   factory VoxBinding.fromMap(Map<Object?, Object?> m, {List<String> sequence = const []}) => VoxBinding(
         (m['label'] as String?) ?? '?',
         m['source'] as String?,
         sequence,
+        m['long'] as String?,
       );
 }
 
@@ -349,7 +353,7 @@ class VoxBindings {
   final VoxModeBindings cursor;
 
   /// The single sounds shown as glyphs, in order (contours then discrete).
-  static const sounds = ['rise', 'fall', 'arch', 'dip', 'flat', 'pop', 'click', 'hiss'];
+  static const sounds = ['rise', 'fall', 'arch', 'dip', 'flat', 'click', 'hiss'];
 
   factory VoxBindings.fromMap(Map<Object?, Object?> m) => VoxBindings(
         gesture: VoxModeBindings.fromMap((m['gesture'] as Map<Object?, Object?>? ?? const {}).cast<Object?, Object?>()),
@@ -387,8 +391,8 @@ class VoxBindings {
         'dip': VoxBinding('cursor left', 'default'),
         'flat': VoxBinding('stop', 'default'),
         'click': VoxBinding('click', 'default'),
-        // A long hiss listens for a name (the service's `long` key; E10UI shows it).
-        'hiss': VoxBinding('back', 'default'),
+        // A long hiss listens for a name (the service's `long` key; the bindings window shows it).
+        'hiss': VoxBinding('back', 'default', [], 'listen for a name'),
       },
       combos: [],
     ),
@@ -451,12 +455,12 @@ abstract class VoxBackend {
   /// Stores either or both (the offset clamped); answers the settings as stored.
   Future<LevelGateSettings> setLevelGateSettings({bool? enabled, int? offsetDb});
 
-  /// Starts a calibration of the voice cursor for a sound source (`phone`, `usb`, `pico`): all 8 steps, or [steps] (an
+  /// Starts a calibration of the voice cursor for a sound source (`phone`, `usb`, `pico`): all 7 steps, or [steps] (an
   /// ordered subset, e.g. a version 1 profile's missing steps). The run starts on its first step. With [resume] the
   /// run starts at the first step not in the saved `done_steps` (the default when progress exists and is < 24 h old).
   Future<void> calibStart(String source, {List<String>? steps, bool? resume});
 
-  /// Records one step: `hum`, `glide`, `vowels` or `pops`.
+  /// Records one step: `hum`, `glide`, `vowels` or `clicks`.
   Future<void> calibStep(String step);
 
   /// Records one step again.

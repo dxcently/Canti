@@ -9,11 +9,11 @@ import 'shape_plot.dart';
 // VoiceJoystick's calibration (android, PROTOCOL.md "Voice joystick" > Calibration); the desktop prototype is
 // extractor/joystick.py's setup.
 
-/// The recorded steps, in order (calibration v2: eight).
-const calibSteps = ['hum', 'glide', 'vowels', 'pops', 'clicks', 'whistle', 'hiss', 'room'];
+/// The recorded steps, in order (calibration v2: seven).
+const calibSteps = ['hum', 'glide', 'vowels', 'clicks', 'whistle', 'hiss', 'room'];
 
-/// The steps that count sounds (`heard`): pops, clicks, hiss.
-const calibCountedSteps = ['pops', 'clicks', 'hiss'];
+/// The steps that count sounds (`heard`): clicks, hiss.
+const calibCountedSteps = ['clicks', 'hiss'];
 
 /// The steps that follow a pitch (the live readout's Pitch row).
 const calibPitchSteps = ['hum', 'glide', 'vowels', 'whistle'];
@@ -32,7 +32,7 @@ String? _s(Object? v) => v is String ? v : null;
 Map<Object?, Object?>? _m(Object? v) => v is Map ? v.cast<Object?, Object?>() : null;
 
 /// The level gate a calibration derived (`level_gate`): sounds under [minSnrDb] over the room, or quieter than
-/// [minLevelDbfs], are ignored. [from] is `calibration` (from the pops, clicks and hiss heard) or `default`.
+/// [minLevelDbfs], are ignored. [from] is `calibration` (from the clicks and hiss heard) or `default`.
 @immutable
 class LevelGate {
   const LevelGate({
@@ -84,7 +84,7 @@ class LevelGate {
 }
 
 /// A saved (or just measured) calibration (profile version 2): the home note, the range, how well each vowel was told
-/// apart, the pops, clicks and hisses heard, the whistle range, the room's floor and the level gate. A skipped or
+/// apart, the clicks and hisses heard, the whistle range, the room's floor and the level gate. A skipped or
 /// never measured step's fields are null; [missingSteps] are the steps neither measured nor skipped (a version 1
 /// profile: clicks, whistle, hiss, room).
 @immutable
@@ -94,7 +94,6 @@ class CalibResult {
     this.rangeLoHz,
     this.rangeHiHz,
     this.vowelAcc = const {},
-    this.popsHeard,
     this.voicingThreshold,
     this.source,
     this.savedAtMs,
@@ -118,7 +117,6 @@ class CalibResult {
 
   /// `ee`, `ah`, `oo` -> accuracy 0..1 (null when the vowel had no frames).
   final Map<String, double?> vowelAcc;
-  final int? popsHeard;
   final double? voicingThreshold;
 
   /// The profile's source and when it was saved (a saved profile only).
@@ -137,16 +135,13 @@ class CalibResult {
   final double? roomFloorDbfs;
   final LevelGate? levelGate;
 
-  /// A per-person click / pop rule was derived.
+  /// A per-person click rule was derived.
   final bool? relabelRule;
 
   /// The steps neither measured nor skipped.
   final List<String> missingSteps;
   /// Some steps are missing (the service says so; [fromMap] also infers it from [missingSteps]).
   final bool needsRecalibration;
-
-  /// Fewer than 2 of 3 pops heard: the pops may be missed in use.
-  bool get popsWeak => (popsHeard ?? 0) < 2;
 
   static CalibResult? fromMap(Object? o) {
     final m = _m(o);
@@ -157,7 +152,6 @@ class CalibResult {
       rangeLoHz: _d(m['range_lo_hz']),
       rangeHiHz: _d(m['range_hi_hz']),
       vowelAcc: {for (final k in const ['ee', 'ah', 'oo']) k: _d(_m(v[k])?['acc'])},
-      popsHeard: _i(m['pops_heard']),
       voicingThreshold: _d(m['voicing_threshold']),
       source: _s(m['source']),
       savedAtMs: _i(m['saved_at_ms']),
@@ -184,7 +178,6 @@ class CalibResult {
         'range_lo_hz': rangeLoHz,
         'range_hi_hz': rangeHiHz,
         'vowels': {for (final e in vowelAcc.entries) e.key: {'acc': e.value}},
-        'pops_heard': popsHeard,
         'voicing_threshold': voicingThreshold,
         'skipped': skipped,
         'clicks_heard': clicksHeard,
@@ -308,8 +301,6 @@ class CalibStatus {
     this.state,
     this.waitingForSteady = false,
     this.live = const CalibLive(),
-    this.popsN = 0,
-    this.popsNeed = 3,
     this.clicksN = 0,
     this.clicksNeed = 3,
     this.hissN = 0,
@@ -346,8 +337,6 @@ class CalibStatus {
   final String? state;
   final bool waitingForSteady;
   final CalibLive live;
-  final int popsN;
-  final int popsNeed;
   final int clicksN;
   final int clicksNeed;
   final int hissN;
@@ -381,7 +370,7 @@ class CalibStatus {
   /// The draft's saved pitch scale (the voice range; the whistle range during `whistle`), or null.
   final PitchScale? scale;
 
-  /// Where the current step sits in the run (1..8).
+  /// Where the current step sits in the run (1..7).
   final CalibPos pos;
 
   /// The hub rows: every step with its one-word result.
@@ -390,9 +379,8 @@ class CalibStatus {
   /// Where a cancelled run left off (the inactive map), or null.
   final CalibResume? resume;
 
-  /// (heard, asked) for a counted step (pops, clicks, hiss), else null.
+  /// (heard, asked) for a counted step (clicks, hiss), else null.
   (int, int)? heard(String step) => switch (step) {
-        'pops' => (popsN, popsNeed),
         'clicks' => (clicksN, clicksNeed),
         'hiss' => (hissN, hissNeed),
         _ => null,
@@ -430,8 +418,6 @@ class CalibStatus {
       state: _s(m['state']),
       waitingForSteady: m['waiting_for_steady'] == true || m['state'] == 'waiting',
       live: CalibLive.fromMap(m['live']),
-      popsN: _i(heard['pops_n']) ?? 0,
-      popsNeed: _i(heard['pops_need']) ?? 3,
       clicksN: _i(heard['clicks_n']) ?? 0,
       clicksNeed: _i(heard['clicks_need']) ?? 3,
       hissN: _i(heard['hiss_n']) ?? 0,

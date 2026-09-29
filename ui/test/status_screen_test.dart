@@ -281,6 +281,20 @@ void main() {
     expect(find.text('HISS CLICK'), findsOneWidget);
   });
 
+  testWidgets('the bindings window shows click click click -> listen', (tester) async {
+    await pumpApp(tester); // the Vocab defaults
+    final next = find.byTooltip('Next page');
+    for (var i = 0; i < 2; i++) {
+      await tester.ensureVisible(next);
+      await tester.pumpAndSettle();
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('listen'), findsOneWidget); // click click click
+    expect(find.text('CLICK ×3'), findsOneWidget);
+    expect(find.text('home'), findsOneWidget); // click click
+  });
+
   test('VoxBindings parses the status map shape, and the defaults carry click hiss = forward', () {
     final b = VoxBindings.fromMap({
       'gesture': {
@@ -291,21 +305,24 @@ void main() {
         'note': null,
       },
       'cursor': {
-        'sounds': {'pop': {'label': 'click', 'source': 'default'}},
+        'sounds': {'hiss': {'label': 'back', 'source': 'default', 'long': 'listen for a name'}},
         'combos': [],
-        'note': 'voice joystick: hums move the cursor, a pop clicks, hiss goes back',
+        'note': 'voice joystick: hums move the cursor, clicks tap, hiss goes back',
       },
     });
     expect(b.gesture.sounds['rise']!.label, 'swipe up');
     expect(b.gesture.sounds['click'], isNull);
     expect(b.gesture.combos.single.sequence, ['click', 'hiss']);
     expect(b.gesture.combos.single.label, 'forward');
-    expect(b.cursor.note, 'voice joystick: hums move the cursor, a pop clicks, hiss goes back');
+    expect(b.cursor.note, 'voice joystick: hums move the cursor, clicks tap, hiss goes back');
+    expect(b.cursor.sounds['hiss']!.long, 'listen for a name'); // the `long` key is parsed
     expect(VoxBindings.defaults.gesture.combos.map((c) => c.sequence.join(' ')),
         ['click click click', 'click click', 'hiss click', 'click hiss']);
     expect(VoxBindings.defaults.gesture.combos.last.label, 'forward');
     expect(VoxBindings.defaults.cursor.note, isNull);
     expect(VoxBindings.defaults.cursor.combos, isEmpty); // cursor mode has no combos: a long hiss names a target
+    expect(VoxBindings.defaults.cursor.sounds['hiss']!.long, 'listen for a name');
+    expect(VoxBindings.defaults.cursor.sounds['hiss']!.label, 'back');
     expect(VoxBindings.fromMapOrNull(null), isNull);
     expect(VoxBindings.fromMapOrNull('x'), isNull);
   });

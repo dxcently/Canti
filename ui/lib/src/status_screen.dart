@@ -412,7 +412,7 @@ class _StatusScreenState extends State<StatusScreen> {
                 _Note(
                   signal: Signal.waiting,
                   text: 'The voice cursor is not calibrated for the ${sourceLabel(s.soundSource)}. A 25 s setup teaches '
-                      'it your voice: your hum, your range, three vowels and your pops.',
+                      'it your voice: your hum, your range, three vowels and your clicks.',
                 ),
                 SizedBox(height: p(3)),
                 FilledButton.icon(
@@ -838,10 +838,12 @@ String? _ruleTag(String? source) => switch (source) {
       _ => null,
     };
 
-/// A binding's name-bar text: its label, with the source of a user rule after it.
+/// A binding's name-bar text: its label, with the source of a user rule after it. A sound with a long hold
+/// (`long`), like the cursor's hiss, reads "short: back, long: listen for a name".
 String _bindingLabel(VoxBinding b) {
   final tag = _ruleTag(b.source);
-  return tag == null ? b.label : '${b.label} · $tag';
+  final label = b.long == null ? b.label : 'short: ${b.label}, long: ${b.long}';
+  return tag == null ? label : '$label · $tag';
 }
 
 class _BindingsWindowState extends State<_BindingsWindow> {
