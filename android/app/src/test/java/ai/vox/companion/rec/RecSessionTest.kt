@@ -10,7 +10,7 @@ import java.nio.file.Files
 
 /** RecSession writes the exact layout range_layout.validate_session reads (contract §7). */
 class RecSessionTest {
-    private val spec = File("../../extractor/prompts/range_v1.json").readBytes()
+    private val spec = File("../../extractor/prompts/range_v2.json").readBytes()
 
     private fun take(block: String = "range", id: String = "bottom_hz", rep: Int = 1) = RangePlan.Take(
         takeId = "$block-$id-r$rep", block = block, kind = "takes", cue = "c",
@@ -30,7 +30,7 @@ class RecSessionTest {
         assertEquals("phone built-in mic", meta.getString("mic"))
         assertEquals(16000, meta.getInt("rate"))
         assertEquals(1, meta.getInt("channels"))
-        assertEquals("range_v1", meta.getString("spec"))
+        assertEquals("range_v2", meta.getString("spec"))
         assertFalse(meta.getBoolean("synthetic"))
         assertEquals("short", meta.getString("profile"))
         assertEquals("self", meta.getString("speaker"))

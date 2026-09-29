@@ -47,7 +47,7 @@ class RecEngineTest {
         override val filesDir = Files.createTempDirectory("rec").toFile()
     }
 
-    private val spec = File("../../extractor/prompts/range_v1.json").readBytes()
+    private val spec = File("../../extractor/prompts/range_v2.json").readBytes()
 
     private fun ringWrite(r: RingBuffer, samples: ShortArray, firstFrame: Long, gen: Int) {
         val b = ByteBuffer.allocateDirect(samples.size * 2).order(ByteOrder.nativeOrder())
@@ -333,5 +333,37 @@ class RecEngineTest {
         assertEquals(mapOf("sessions" to listOf("range-a"), "quickrec" to listOf("111", "222")),
             (out["deleted"] as Map<*, *>).mapValues { (_, v) -> (v as List<*>).sortedBy { it.toString() } })
         assertTrue(File(e.filesDir, "range/range-b").exists())
+    }
+
+    @Test fun livePitchTraceInStatus() {
+        val s = FakeScheduler(); val e = FakeEnv()
+        val ring = RingBuffer()
+        ringWrite(ring, ShortArray(16000), 0, 0)
+        val r = engine(s, e, ring, HeardLog())
+        r.command("rec_start", mapOf("who" to "me", "profile" to "short"))
+        r.command("rec_next", mapOf("take_id" to "range-bottom_hz-r1"))   // hum tone
+        s.advance(RecEngine.READY_MS)
+        assertEquals("recording", r.state)
+        r.onTick(200.0, -40.0); r.onTick(null, -45.0); r.onTick(220.0, -38.0)
+        @Suppress("UNCHECKED_CAST")
+        val live = r.command("rec_status", emptyMap())["live"] as Map<String, Any?>
+        assertEquals(20L, live["tick_ms"])
+        assertEquals(listOf(200.0, null, 220.0), live["trace_hz"])
+    }
+
+    @Test fun openRefusesDifferentSpecVersion() {
+        val s = FakeScheduler(); val e = FakeEnv()
+        val r = engine(s, e, RingBuffer(), HeardLog())
+        r.command("rec_start", mapOf("who" to "me", "profile" to "short"))
+        val name = r.openName!!
+        r.command("rec_close", emptyMap())
+        // rewrite the session to look like a range_v1 session
+        val dir = File(e.filesDir, "range/$name")
+        File(dir, "spec.json").writeBytes(File("../../extractor/prompts/range_v1.json").readBytes())
+        val metaFile = File(dir, "session.json")
+        val meta = JSONObject(metaFile.readText()); meta.put("spec", "range_v1")
+        metaFile.writeText(meta.toString(2) + "\n")
+        val out = r.command("rec_open", mapOf("name" to name))
+        assertEquals("This session was recorded with range_v1; the app records range_v2. Start a new session.", out["error"])
     }
 }

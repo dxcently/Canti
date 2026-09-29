@@ -46,9 +46,10 @@ class RecSession(
         require(!metaFile.exists()) { "session already exists: $name" }
         root.mkdirs()
         specFile.writeBytes(specBytes)
+        val version = JSONObject(String(specBytes, Charsets.UTF_8)).optString("version")
         val meta = JSONObject()
             .put("device", "phone").put("mic", mic).put("rate", rate).put("channels", 1)
-            .put("spec", "range_v1").put("synthetic", false).put("profile", profile).put("speaker", speaker)
+            .put("spec", version).put("synthetic", false).put("profile", profile).put("speaker", speaker)
             .put("range", JSONObject()
                 .put("bottom_hz", JSONObject.NULL).put("home_hz", JSONObject.NULL)
                 .put("top_hz", JSONObject.NULL).put("whistle_home_hz", JSONObject.NULL).put("below_f0_min", false))
@@ -160,20 +161,131 @@ class RecSession(
     /** All label rows in order. */
     fun labelRows(): List<JSONObject> = rows(labelsFile)
 
-    /** take_id -> the take's row: its last heard row, else its last missed one (range_layout.take_rows). */
+    /** take_id -> the take's effective row: its last heard row, else its last missed one (range_layout.take_rows). */
     fun latestLabels(): Map<String, JSONObject> = takeRows(labelRows())
 
-    /** name -> the last background row. */
-    fun latestBackgrounds(): Map<String, JSONObject> = rows(backgroundsFile).associateBy { it.getString("name") }
+    /** name -> the last effective background row. */
+    fun latestBackgrounds(): Map<String, JSONObject> {
+        val out = LinkedHashMap<String, JSONObject>()
+        for (r in effectiveRows(rows(backgroundsFile)).rows) out[r.getString("name")] = r
+        return out
+    }
 
     fun ratingRows(): List<JSONObject> = rows(ratingsFile)
 
-    /** The redo count for the next save of [takeId]: previous rows + 1 (0 when none). */
-    fun redoFor(takeId: String): Int = labelRows().count { it.getString("take_id") == takeId }
+    /** The redo count for the next save of [takeId]: 1 + the max redo over ALL take rows (excluded ones included, so an
+     *  `.a<N>` file name is never reused); op rows never count. */
+    fun redoFor(takeId: String): Int =
+        (labelRows().filter { !it.has("op") && it.optString("take_id") == takeId }.maxOfOrNull { it.optInt("redo") } ?: -1) + 1
 
     /** Total bytes under the session root (for rec_list). */
     fun bytes(): Long = bytesCache ?: (if (root.isDirectory) root.walkBottomUp().filter { it.isFile }.sumOf { it.length() } else 0L)
         .also { bytesCache = it }
+
+    // --- delete / restore / purge (contract T) ------------------------------------------------------------------------
+
+    /** Soft-delete a take: move its WAV(s) to trash/<del_id>/<file>, THEN append the delete row. Returns del_id. */
+    fun delete(takeId: String, scope: String, attempt: Int?): String {
+        require(scope == "take" || scope == "attempt") { "bad delete scope" }
+        val rows = labelRows()
+        val files = deleteFiles(rows, takeId, scope, attempt)
+        val delId = newDelId(rows)
+        val moved = moveToTrash(delId, files)
+        appendJsonl(labelsFile, JSONObject().put("op", "delete").put("del_id", delId).put("take_id", takeId)
+            .put("scope", scope).put("attempt", attempt ?: JSONObject.NULL)
+            .put("files", JSONArray(moved)).put("trash", "trash/$delId").put("t", System.currentTimeMillis() / 1000.0))
+        return delId
+    }
+
+    /** Soft-delete a background (scope "take"): move its WAV to trash, THEN append the row to backgrounds.jsonl. */
+    fun deleteBackground(name: String): String {
+        val rows = rows(backgroundsFile)
+        val files = deleteFiles(rows, name, "take", null)
+        val delId = newDelId(rows)
+        val moved = moveToTrash(delId, files)
+        appendJsonl(backgroundsFile, JSONObject().put("op", "delete").put("del_id", delId).put("name", name)
+            .put("scope", "take").put("attempt", JSONObject.NULL)
+            .put("files", JSONArray(moved)).put("trash", "trash/$delId").put("t", System.currentTimeMillis() / 1000.0))
+        return delId
+    }
+
+    /** Undo a delete: move its files back, THEN append the restore row. Refused (no row) if a destination exists again,
+     *  if the delete was purged, or if it was already restored. Returns the take_id (or background name). */
+    fun restore(delId: String): String {
+        for (journal in listOf(labelsFile, backgroundsFile)) {
+            val rows = rows(journal)
+            val d = rows.firstOrNull { it.optString("op") == "delete" && it.optString("del_id") == delId } ?: continue
+            val purged = HashSet<String>()
+            for (r in rows) if (r.optString("op") == "purge") r.optJSONArray("del_ids")?.let { a ->
+                for (i in 0 until a.length()) purged.add(a.getString(i))
+            }
+            if (delId in purged) throw IllegalArgumentException("$delId: already purged, cannot restore")
+            if (rows.any { it.optString("op") == "restore" && it.optString("del_id") == delId })
+                throw IllegalArgumentException("$delId: already restored")
+            val files = d.getJSONArray("files")
+            for (i in 0 until files.length()) {
+                val f = files.getString(i)
+                if (File(root, f).exists()) throw IllegalArgumentException("$delId: $f exists now (the take was re-recorded)")
+            }
+            for (i in 0 until files.length()) {
+                val f = files.getString(i)
+                require(File(root, "trash/$delId/$f").renameTo(File(root, f))) { "could not restore $f" }
+            }
+            File(root, "trash/$delId").deleteRecursively()
+            val key = if (d.has("take_id")) "take_id" else "name"
+            appendJsonl(journal, JSONObject().put("op", "restore").put("del_id", delId).put(key, d.get(key))
+                .put("t", System.currentTimeMillis() / 1000.0))
+            return d.getString(key)
+        }
+        throw IllegalArgumentException("unknown delete '$delId'")
+    }
+
+    /** Remove trash/<del_id>/ for each id and append a purge row to the journal that holds each delete. [delIds] null
+     *  purges every restorable delete (clear trash). Returns the ids purged. */
+    fun purge(delIds: List<String>?): List<String> {
+        val ids = delIds ?: (effectiveRows(rows(labelsFile)).restorable + effectiveRows(rows(backgroundsFile)).restorable)
+        for (did in ids) File(root, "trash/$did").deleteRecursively()
+        val bg = rows(backgroundsFile).filter { it.optString("op") == "delete" }.map { it.optString("del_id") }.toSet()
+        val takes = ids.filter { it !in bg }
+        val bgs = ids.filter { it in bg }
+        if (takes.isNotEmpty() || bgs.isEmpty())
+            appendJsonl(labelsFile, JSONObject().put("op", "purge").put("del_ids", JSONArray(takes))
+                .put("take_id", JSONObject.NULL).put("t", System.currentTimeMillis() / 1000.0))
+        if (bgs.isNotEmpty())
+            appendJsonl(backgroundsFile, JSONObject().put("op", "purge").put("del_ids", JSONArray(bgs))
+                .put("name", JSONObject.NULL).put("t", System.currentTimeMillis() / 1000.0))
+        return ids
+    }
+
+    private fun deleteFiles(rows: List<JSONObject>, key: String, scope: String, attempt: Int?): List<String> {
+        val files = LinkedHashSet<String>()
+        for (r in rows) {
+            if (r.has("op") || rowKey(r) != key) continue
+            when {
+                scope == "take" -> files.add(r.getString("file"))
+                attempt != null -> if (isNoSound(r) && r.optInt("attempt") == attempt) files.add(r.getString("file"))
+                !isNoSound(r) -> files.add(r.getString("file"))
+            }
+        }
+        return files.toList()
+    }
+
+    private fun newDelId(rows: List<JSONObject>): String =
+        "d${System.currentTimeMillis()}-${rows.count { it.optString("op") == "delete" }}"
+
+    private fun moveToTrash(delId: String, files: List<String>): List<String> {
+        val moved = ArrayList<String>()
+        for (f in files) {
+            val src = File(root, f)
+            if (src.exists()) {
+                val dst = File(root, "trash/$delId/$f")
+                dst.parentFile?.mkdirs()
+                require(src.renameTo(dst)) { "could not move $f to trash" }
+                moved.add(f)
+            }
+        }
+        return moved
+    }
 
     private fun writeWavAtomic(file: File, samples: ShortArray) {
         file.parentFile?.mkdirs()
@@ -215,15 +327,59 @@ class RecSession(
         fun takeFile(block: String, takeId: String, attempt: Int?): String =
             if (attempt == null) "takes/$block/$takeId.wav" else "takes/$block/$takeId.a$attempt.wav"
 
+        /** A data/op row's target: its take_id (labels journal), else its name (backgrounds journal). */
+        fun rowKey(r: JSONObject): String = if (r.has("take_id")) r.optString("take_id") else r.optString("name")
+
+        fun isNoSound(r: JSONObject): Boolean = r.optBoolean("no_sound")
+
+        /** (effective rows, deletes in force, restorable del_ids) for one journal, in journal order (contract T). */
+        class Effective(val rows: List<JSONObject>, val inForce: List<String>, val restorable: List<String>)
+
+        fun effectiveRows(rows: List<JSONObject>): Effective {
+            val deletes = LinkedHashMap<String, JSONObject>()
+            val order = ArrayList<String>()
+            val restored = HashSet<String>()
+            val purged = HashSet<String>()
+            for (r in rows) when (r.optString("op")) {
+                "delete" -> { deletes[r.getString("del_id")] = r; order.add(r.getString("del_id")) }
+                "restore" -> restored.add(r.getString("del_id"))
+                "purge" -> r.optJSONArray("del_ids")?.let { a -> for (i in 0 until a.length()) purged.add(a.getString(i)) }
+            }
+            val inForce = order.filter { it !in restored }
+            val restorable = inForce.filter { it !in purged }
+            val excluded = HashSet<Int>()
+            for (did in inForce) {
+                val d = deletes[did]!!
+                val key = rowKey(d)
+                val scope = d.optString("scope")
+                val attempt = if (d.has("attempt") && !d.isNull("attempt")) d.getInt("attempt") else null
+                val dIdx = rows.indexOf(d)
+                for (i in 0 until dIdx) {
+                    val r = rows[i]
+                    if (r.has("op") || rowKey(r) != key) continue
+                    when {
+                        scope == "take" -> excluded.add(i)
+                        attempt != null -> if (isNoSound(r) && r.optInt("attempt") == attempt) excluded.add(i)
+                        !isNoSound(r) -> excluded.add(i)
+                    }
+                }
+            }
+            val effective = rows.filterIndexed { i, r -> !r.has("op") && i !in excluded }
+            return Effective(effective, inForce, restorable)
+        }
+
         /** take_id -> its last heard row, else its last row (only missed attempts) — range_layout.take_rows. */
         fun takeRows(rows: List<JSONObject>): Map<String, JSONObject> {
             val out = LinkedHashMap<String, JSONObject>()
-            for (r in rows) {
+            for (r in effectiveRows(rows).rows) {
                 val id = r.getString("take_id")
                 val prev = out[id]
-                if (!r.optBoolean("no_sound") || prev == null || prev.optBoolean("no_sound")) out[id] = r
+                if (!isNoSound(r) || prev == null || isNoSound(prev)) out[id] = r
             }
             return out
         }
+
+        /** Every missed (no_sound) attempt, in journal order (range_layout.no_sound_rows). */
+        fun noSoundRows(rows: List<JSONObject>): List<JSONObject> = effectiveRows(rows).rows.filter(::isNoSound)
     }
 }

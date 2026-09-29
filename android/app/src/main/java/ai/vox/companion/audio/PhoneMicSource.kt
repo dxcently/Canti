@@ -76,10 +76,10 @@ class PhoneMicSource(
     val ring = RingBuffer()
     val heard = HeardLog()
     private val heardListener = HeardLogListener(heard)
-    /** [rec] Whether a recorder session is open, read live (VoxService sets it; null = the gate is off): every
-     *  phone/usb sound is dropped as "recording" while it is. */
-    @Volatile var recorderOpen: (() -> Boolean)? = null
-    val recorderRecording: Boolean get() = recorderOpen?.invoke() == true
+    /** [rec] Whether a recorder session is dropping mic sounds, read live (VoxService sets it; null = the gate is off):
+     *  every phone/usb sound is dropped as its reason while a session is open. */
+    @Volatile var recDrop: (() -> String?)? = null
+    val recorderRecording: Boolean get() = recDrop?.invoke() != null
     /** [rec] Capture states go to the recorder (abort a take on stop / restart). Set by VoxService. */
     @Volatile var recCaptureState: ((state: String, gen: Int) -> Unit)? = null
     private val recTap = object : MicCapture.MonoTap {
@@ -120,6 +120,7 @@ class PhoneMicSource(
         override fun onTicks(rows: DoubleArray, n: Int, baseMs: Long) {
             tickSink?.invoke(rows, n, baseMs)
             trainTickSink?.invoke(rows, n, baseMs)   // [train]
+            recTickSink?.invoke(rows, n, baseMs)      // [rec]
         }
     })
 
@@ -134,7 +135,7 @@ class PhoneMicSource(
         capture.tickClarityOn = clarityOn
         capture.tickF0MaxHz = f0MaxHz
         joyTicks = on
-        capture.ticks = on || trainTicks   // [train] gesture training may keep them on
+        capture.ticks = on || trainTicks || recTicks   // [train] [rec] gesture training / the recorder may keep them on
     }
 
     // [train] Gesture training's live pitch trace (GestureTrainer.onTick): the same ticks, wanted independently of the
@@ -144,7 +145,17 @@ class PhoneMicSource(
     @Volatile private var trainTicks = false
     fun setTrainTicks(on: Boolean) {
         trainTicks = on
-        capture.ticks = joyTicks || on
+        capture.ticks = joyTicks || trainTicks || recTicks
+    }
+
+    // [rec] The recorder's live pitch trace (RecEngine.onTick): the same ticks, wanted during a hum/whistle take
+    // (gesture mode only, where the joystick's ticks are off). Audio thread; [rows] is reused.
+    @Volatile var recTickSink: ((rows: DoubleArray, n: Int, baseMs: Long) -> Unit)? = null
+    @Volatile private var recTicks = false
+    fun setRecTicks(on: Boolean, f0MaxHz: Double) {
+        if (on) capture.tickF0MaxHz = f0MaxHz   // turning off leaves the joystick's ceiling alone
+        recTicks = on
+        capture.ticks = joyTicks || trainTicks || recTicks
     }
 
     /** The capture is running (the mic hears). */
@@ -424,7 +435,7 @@ class PhoneMicSource(
         val f0Hz = if (pitched) TrainJudge.f0Hz(sf)?.let { Math.round(it).toDouble() } else null
         // The drop precedence: touch ?: level gate ?: joystick ?: recording ?: dry_run (a recorder session drops sounds
         // like calibration does, so a hiss cannot press Back on the recorder screen).
-        val drop = touch?.let { "touch" } ?: level?.reason ?: joy ?: if (recorderRecording) "recording" else if (dry) "dry_run" else null
+        val drop = touch?.let { "touch" } ?: level?.reason ?: joy ?: recDrop?.invoke() ?: if (dry) "dry_run" else null
         EventLog.ev("mic_sound", "label" to n.optString("label"), "sound" to n.optLong("sound"), "source" to source,
             "t_start_ms" to n.optLong("t_start_ms"), "t_end_ms" to n.optLong("t_end_ms"),
             "detect_ms" to Math.round(detect * 10) / 10.0, "latency_ms" to Math.round(lat * 10) / 10.0,
@@ -524,7 +535,7 @@ class PhoneMicSource(
         Measure.startError(settings.source, capture.isRunning, measure != null)?.let { err ->
             return JSONObject().put("ok", false).put("error", err)
         }
-        if (recorderRecording) return JSONObject().put("ok", false).put("error", "Test recorder is open")   // [rec]
+        if (recDrop?.invoke() != null) return JSONObject().put("ok", false).put("error", "Test recorder is open")   // [rec]
         val phase = m.getString("phase")
         val everyMs = m.optInt("every_ms", Measure.DEFAULT_EVERY_MS).coerceIn(2000, 30000)
         val gestures = if (m.has("gestures")) {

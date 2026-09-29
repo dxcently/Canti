@@ -872,11 +872,14 @@ for release = set `DEV_RECORDER` false (or delete package `rec` + the `[rec]` li
 `uiStatus` gains `dev_recorder` (the gate) and `recording` (a recorder session is open); the UI shows every
 recorder/quick-record entry only when `dev_recorder == true`.
 
-- The recorder runs `extractor/prompts/range_v1.json` (`short` 42 takes; `full` 269 takes + 7 backgrounds), bundled as
-  the asset `range/range_v1.json` by a Gradle copy task, and writes the exact `range_layout.validate_session` layout
-  under `files/range/<name>/` (spec.json verbatim; session.json with `recorder:"app"`/`range_pending`/`app_range`/
-  `skipped_by_sitting` and `range` Hz null; labels.jsonl / backgrounds.jsonl / ratings.jsonl; `takes/` / `backgrounds/`
-  WAVs — tmp + rename before the label row, last row per take_id wins).
+- The recorder runs `extractor/prompts/range_v2.json` (`short` 42 takes; `full` 269 takes + 7 backgrounds), bundled as
+  the asset `range/range_v2.json` by a Gradle copy task (DEBUG source set only, so a release APK ships no spec), and
+  writes the exact `range_layout.validate_session` layout under `files/range/<name>/` (spec.json verbatim; session.json
+  with `recorder:"app"`/`range_pending`/`app_range`/`skipped_by_sitting` and `range` Hz null; labels.jsonl /
+  backgrounds.jsonl / ratings.jsonl; `takes/` / `backgrounds/` WAVs — tmp + rename before the label row, last row per
+  take_id wins). A session is bound to its spec version: `rec_open` refuses a different version ("This session was
+  recorded with range_v1; the app records range_v2. Start a new session.") and a byte-for-byte differ for the same
+  version; `rec_list` marks each session `resumable` (its spec version matches the bundled one).
 - Quick record snapshots the last ~12 s RAM ring plus the HeardLog window into one pending snapshot; nothing touches
   storage until `qr_save` writes `files/quickrec/<id>/{clip.wav, meta.json}`.
 
@@ -884,7 +887,9 @@ Ops (method channel `ai.vox/recorder`, main thread; the same names are debug ops
 like `measure_*`; with the gate off the channel answers `{enabled:false}` and the debug ops `{ok:false,
 "recorder disabled"}`): `rec_list {}`, `rec_start {who:"me"|"other", speaker?, profile:"short"|"full"}`, `rec_open
 {name}`, `rec_status {}`, `rec_next {take_id?}`, `rec_go {}`, `rec_abort {}`, `rec_skip {}`, `rec_redo_last {}`,
-`rec_rate {block, rating:1..5, note}`, `rec_close {}`, `rec_clear {sessions?, quickrec?}`, `qr_snap {}`, `qr_pending
+`rec_rate {block, rating:1..5, note}`, `rec_close {}`, `rec_clear {sessions?, quickrec?}`, `rec_delete {name?,
+take_id, scope:"take"|"attempt", attempt?: int|null}`, `rec_restore {name?, del_id}`, `rec_trash_clear {name?,
+del_ids?}`, `qr_snap {}`, `qr_pending
 {}`, `qr_save {id, label, note?, sound?}`, `qr_discard {id}`. Kotlin pushes `rec_status {map}` on every change and every
 100 ms while ready/countdown/recording, and `qr_snapshot {map}` from the badge's QUICK REC menu row (which then opens
 the `quickrec` route).
@@ -893,10 +898,10 @@ the `quickrec` route).
 idle|ready|countdown|recording|saved|no_sound|rate|done|error, error, reason, take: {take_id, block, block_title, i,
 n, block_i, block_n, cue, expect, cond, bg, kind, quiet, manual, target_s, max_s, seconds, redo}, countdown_s, rec_s,
 level: {bars_db, min_db, peak_dbfs, note}, heard: [HeardSound...], last: {take_id, saved, dur_ms, reason, f0_hz,
-below_f0_min}|null, blocks: [{id, title, intro, done, total, rating, skipped}], done, total, skipped, bytes,
+below_f0_min}|null, live: {trace_hz: [Hz|null...], tick_ms: 20}|null, blocks: [{id, title, intro, done, total, rating, skipped}], done, total, skipped, bytes,
 backgrounds_done, backgrounds_total, rated_blocks, next: {take_id, cue}|null, defaults: {distances_cm, speed_s, gap_s},
 scale: {low_hz, home_hz, high_hz, from:"calibration"}|null, plan: [{take_id, block}]}`. HeardSound: `{label, t_start_ms, t_end_ms, rel_ms,
-dur_ms, pitch16, f0_hz, dropped, gated, relabel, did: {n, sequence, action, ok}|null, did_text, ago_s?}`.
+dur_ms, pitch16, f0_hz, dropped, gated, relabel, did: {n, sequence, action, ok}|null, did_text, ago_s?, raw_label?}`.
 
 `plan` is the open profile's whole take list in plan order (the order `range_layout.build_plan` gives; `short` 42,
 `full` 276 with the backgrounds). It is fixed for the session, so it is in every command reply and every state-change
@@ -915,6 +920,14 @@ attempt's redo number). A heard attempt keeps the plain `takes/<block>/<take_id>
 checks every missed attempt's file and fields; `range_suite` counts each one as a gate miss (kept 0) and reports them
 under `no_sound`.
 
+A take (or background) can be soft-deleted and undone (contract T, same for v1 and v2 sessions): `rec_delete` moves the
+WAV(s) to `trash/<del_id>/<its original relative path>` then appends the `op:"delete"` row (a background's row has
+`name` in place of `take_id`), `rec_restore` moves them back then appends `op:"restore"`, `rec_trash_clear` removes
+`trash/<del_id>/` and appends `op:"purge"` rows. The journals stay append-only; a delete excludes the earlier rows its
+scope names (a deleted take is not done and is prompted again), and ratings are never touched. The live pitch trace
+(`live.trace_hz`, a 20 ms tick's f0 Hz or null) is filled during a hum/whistle take and kept for the last take in
+`saved`/`no_sound`; a heard `pop` folds to `click` in `heard[].label` with the raw kept as `raw_label`.
+
 "What Canti did" (`did` / `did_text`), from the in-memory event log only (no audio): a dropped sound is `ignored:
 <why>`; a sound followed within 1 s by `media_gate{dropped:true}` of its kind is `ignored: media lock`; otherwise the
 delivered sounds are taken in time order by the resolves that follow them (each resolve takes the last k delivered
@@ -931,7 +944,7 @@ misfire), note, sound, rate, seconds, source (phone|usb), mic, app, mode, sounds
 (names and ids are checked, never a path; refused while a session is open) and replies `{ok, deleted: {sessions,
 quickrec}}`.
 
-Events: `rec{event: open|take|skip|rate|close|clear|abort, name, fields}` (take ids, reasons, counts only; never audio).
+Events: `rec{event: open|take|skip|rate|close|clear|abort|delete|restore|purge, name, fields}` (take ids, reasons, counts only; never audio).
 
 `mic_sound` (all builds) gains `pitch16` (16 floats, semitones from the sound's start, rounded to 0.1; `[]` when
 unpitched) and `f0_hz` (median f0 from `fp[0]` as `TrainJudge.f0Hz`, rounded to 1 Hz; null when unpitched). While a
@@ -941,7 +954,7 @@ recorder session is open every phone/usb sound is dropped with `mic_sound{droppe
 `rec_start` refuses unless the source is phone|usb, the capture is listening, the mode is gesture ("Switch Canti to
 gesture mode first"), no calibration/training/measurement is open, and ≥ 200 MB is free; the other way round,
 `calib_start` and a training start refuse with "Test recorder is open" while a session is open; `rec_open` refuses a differing
-spec (byte-for-byte), rate or mic. A capture stop/restart aborts only the in-flight take (state `error`, session open);
+spec version (see above) or, for the same version, a byte-for-byte differ, a differing rate or mic. A capture stop/restart aborts only the in-flight take (state `error`, session open);
 the session closes on `rec_close`, UiBridge close, or 10 min idle — never on BackgroundGuard (a background may play on
 the phone). The PC pulls with `android/suite/range_phone.py pull` (see extractor/RANGE.md): every file is
 size-checked and each session validated before anything local is replaced, and the phone copy is deleted only with

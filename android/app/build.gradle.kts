@@ -57,20 +57,20 @@ kotlin {
     jvmToolchain(17)
 }
 
-// [rec] The recorder's bundled spec: extractor/prompts/range_v1.json, copied into a generated assets dir so the app
-// bundles the exact spec bytes (asset path `range/range_v1.json`), never a hand copy. JVM tests read the extractor
-// file directly instead of the asset (the asset is not on the test classpath).
+// [rec] The recorder's bundled spec: extractor/prompts/range_v2.json, copied into a generated assets dir (asset path
+// `range/range_v2.json`), never a hand copy. The dir is added to the DEBUG source set only, so a release APK ships no
+// spec and assembleRelease never needs the task. JVM tests read the extractor file directly instead of the asset.
 val recAssetsDir = layout.buildDirectory.dir("generated/recAssets")
 val copyRangeSpec = tasks.register<Copy>("copyRangeSpec") {
-    from(file("../../extractor/prompts/range_v1.json"))
+    from(file("../../extractor/prompts/range_v2.json"))
     into(recAssetsDir.map { it.dir("range") })
 }
 tasks.whenTaskAdded {
-    if (name.startsWith("merge") && name.endsWith("Assets")) dependsOn(copyRangeSpec)
+    if (name == "mergeDebugAssets") dependsOn(copyRangeSpec)
 }
 android {
     sourceSets {
-        named("main") { assets.srcDir(recAssetsDir) }
+        named("debug") { assets.srcDir(recAssetsDir) }
     }
 }
 
