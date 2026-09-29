@@ -389,6 +389,10 @@ class GestureTrainingTest {
         val un = t.status(null)["unconfirmed"] as List<Map<String, Any?>>
         assertEquals(1, un.size)
         assertEquals(id.toLong(), (un[0]["id"] as Number).toLong()); assertEquals("rise", un[0]["gesture"]); assertEquals("arch", un[0]["heard"])
+        // the review plots the take itself: its pitch16 and f0 ride along
+        assertEquals(rising.toList(), un[0]["pitch16"])
+        assertEquals(180, (un[0]["f0_hz"] as Number).toInt())
+        assertEquals(1400, (un[0]["dur_ms"] as Number).toInt())
         // confirm: it now takes part in matching (meta.confirmed true), and leaves the review list
         t.command("train_confirm", mapOf("id" to id, "keep" to true))
         assertTrue(h.store("phone").find("rise")!!.examples.single().meta!!.getBoolean("confirmed"))

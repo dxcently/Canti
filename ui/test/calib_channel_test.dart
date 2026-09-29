@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vox_ui/vox_ui.dart';
 
 /// The service answers a refused calib_* command with `error` inside the status map (not a platform exception):
-/// the flow must show it, and a refused `calib_save` must not read as saved.
+/// the hub's controller must show it as the plain message.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const ch = MethodChannel('test.calib');
@@ -25,15 +25,14 @@ void main() {
   tearDown(() =>
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(ch, null));
 
-  test('a refused calib_save shows its error and is not saved', () async {
-    final f = CalibFlow(backend: ChannelBackend(methods: ch), source: 'phone')..attach();
-    await f.begin();
-    expect(f.error, isNull);
-    await f.save();
+  test('a refused calib_save shows its error in plain words', () async {
+    final c = CalibController(backend: ChannelBackend(methods: ch), source: 'phone')..attach();
+    await c.start();
+    expect(c.error, isNull);
+    await c.save();
     await pumpEventQueue();
     expect(calls, containsAllInOrder(['calib_start', 'calib_save']));
-    expect(f.saved, isFalse);
-    expect(f.finished, isFalse);
-    expect(f.error, contains('the phone mic is off'));
+    expect(c.error, 'the phone mic is off');
+    c.dispose();
   });
 }

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'backend.dart';
 import 'calibration.dart';
+import 'channel_backend.dart' show CalibCommandError;
 
 /// An in-memory [VoxBackend] for widget tests and the Linux desktop runner. It simulates a connected VOX device that
 /// confirms every command (or, with [confirmDevice] false, never answers, so commands fail after [deviceTimeout]).
@@ -208,6 +209,13 @@ class FakeBackend implements VoxBackend {
   /// The saved profiles per source (what `calib_get` answers).
   final calibSaved = <String, CalibResult>{};
 
+  /// The per-step progress per source (`calib_progress_<source>`: `done_steps`, `current`, `updated_ms`).
+  final calibProgress = <String, Map<String, Object?>>{};
+
+  /// When set, calib_start / calib_step / calib_redo are refused with it, as the service refuses them with the mic off
+  /// ("the mic is off (paused): resume Canti first"): the command throws and a push carries it as `error`.
+  String? calibRefusal;
+
   /// With [calibAuto]: the steps that fail on their first recording, and the engine's reason.
   final calibFailOnce = <String, String>{};
 
@@ -251,26 +259,42 @@ class FakeBackend implements VoxBackend {
   int calibHiss = 2;
 
   @override
-  Future<void> calibStart(String source, {List<String>? steps}) async {
-    calibCalls.add(('calib_start', {'source': source, 'steps': ?steps}));
+  Future<void> calibStart(String source, {List<String>? steps, bool? resume}) async {
+    calibCalls.add(('calib_start', {'source': source, 'steps': ?steps, 'resume': ?resume}));
+    _cRefuse();
     if (source != (current.soundSource ?? 'phone') || source == 'pico') {
       throw StateError(source == 'pico' ? 'the Pico mic cannot be calibrated yet' : '$source is not the sound source');
     }
     if (steps != null && (steps.isEmpty || steps.toSet().length != steps.length || !steps.every(calibSteps.contains))) {
       throw ArgumentError('steps must be an ordered subset of $calibSteps, no repeats');
     }
+    _cBegin(source, steps, resume);
+    if (calibAuto) _cPlay(_cRemaining.isEmpty ? _cRun.first : _cRemaining.first);
+  }
+
+  /// Opens a run (calib_start; calib_step / calib_redo with no run open, as the service does: resumed).
+  void _cBegin(String source, List<String>? steps, bool? resume) {
+    // `resume` (the default when progress exists) runs only the steps not already saved per-step.
+    final progress = calibProgress[source];
+    final doneSteps = <String>{..._progressDone(progress)};
     _cSource = source;
     _cRun = [...steps ?? calibSteps];
     _cFinished.clear();
-    // the draft starts from the saved profile, with the run's steps taken out of `skipped` (they are recorded again)
+    if (resume != false && progress != null && steps == null) {
+      _cFinished.addAll(doneSteps);
+    }
+    // the draft starts from the saved profile (which per-step saves keep current), with the run's steps taken out of
+    // `skipped` (they are recorded again)
     _cDraft = {...?calibSaved[source]?.toMap()};
     _cDraft['skipped'] = [for (final s in _steps(_cDraft['skipped'])) if (!_cRun.contains(s)) s];
-    if (calibAuto) _cPlay(_cRun.first);
+    _cOpen = true;
   }
 
   @override
   Future<void> calibStep(String step) async {
     calibCalls.add(('calib_step', {'step': step}));
+    _cRefuse();
+    if (!_cOpen) _cBegin(current.soundSource ?? 'phone', null, null);
     if (!calibAuto) return;
     // a no-op while that step is already waiting or recording
     if (step == _cStep && (_cState == 'waiting' || _cState == 'recording')) return;
@@ -280,6 +304,8 @@ class FakeBackend implements VoxBackend {
   @override
   Future<void> calibRedo(String step) async {
     calibCalls.add(('calib_redo', {'step': step}));
+    _cRefuse();
+    if (!_cOpen) _cBegin(current.soundSource ?? 'phone', null, null);
     if (calibAuto) _cPlay(step);
   }
 
@@ -297,6 +323,7 @@ class FakeBackend implements VoxBackend {
     _cTimer?.cancel();
     _cFill(step, skipped: true);
     _cFinished.add(step);
+    _cPersist();
     _cFailed = null;
     // the run's next unfinished step after it starts by itself; never a wrap round
     final next = _cRun.skip(_cRun.indexOf(step) + 1).where((s) => !_cFinished.contains(s)).firstOrNull;
@@ -315,6 +342,7 @@ class FakeBackend implements VoxBackend {
     if (_cSource != null && r != null) {
       calibSaved[_cSource!] = CalibResult.fromMap({...r.toMap(), 'source': _cSource, 'saved_at_ms': 1790000000000})!;
     }
+    calibProgress.remove(_cSource);
     _cStop();
   }
 
@@ -324,13 +352,48 @@ class FakeBackend implements VoxBackend {
     _cStop();
   }
 
+  /// The service ended the run by itself (background, idle, UI closed): finished steps are already saved per-step, so
+  /// only the in-flight step is lost. Mirrors PROTOCOL's `calib{event: cancel, by}`.
+  void calibBackgroundCancel({String by = 'app background'}) {
+    _cStop(by: by);
+  }
+
   @override
   Future<CalibResult?> calibGet(String source) async {
     calibCalls.add(('calib_get', {'source': source}));
     return calibSaved[source];
   }
 
+  @override
+  Future<CalibStatus> calibStatusMap() async {
+    calibCalls.add(('calib_status', {}));
+    return CalibStatus.fromMap(_cStatusOrInactive());
+  }
+
+  /// The current status map: the active one while a step runs, else the inactive map (as Kotlin's: `resume`,
+  /// `missing_steps`, no `hub`).
+  Map<String, Object?> _cStatusOrInactive() {
+    if (_cStep != null) return _cStatus();
+    final src = _cSource ?? current.soundSource;
+    final p = calibSaved[src];
+    final done = <String>{..._progressDone(calibProgress[src])};
+    final undone = [for (final s in calibSteps) if (!done.contains(s)) s];
+    final missing = p == null ? const <String>[] : _missingOf(p.toMap());
+    return {
+      'active': false,
+      'source': src,
+      'state': null,
+      'calibrated': p != null,
+      'skipped': p?.skipped ?? const <String>[],
+      'needs_recalibration': missing.isNotEmpty,
+      'missing_steps': missing,
+      'resume': undone.isEmpty || done.isEmpty ? null : {'step': undone.first, 'done_steps': done.toList()},
+    };
+  }
+
   // The made-up recording (calibAuto): ticks of [calibTick]; a wait for a steady note, then the step's length.
+  /// A run is open (calib_start, or a calib_step / calib_redo that opened one; until save / cancel).
+  bool _cOpen = false;
   String? _cSource;
   String? _cStep;
   String? _cFailed;
@@ -384,6 +447,7 @@ class FakeBackend implements VoxBackend {
         _cTimer?.cancel();
         _cFill(step, skipped: false);
         _cFinished.add(step);
+        _cPersist();
         _cState = _cRemaining.isEmpty ? 'done' : 'step_done';
       } else if (_cI >= wait) {
         _cState = 'recording';
@@ -395,19 +459,56 @@ class FakeBackend implements VoxBackend {
   /// Stops the made-up recording where it is (the desktop preview holds a screen still for a screenshot).
   void calibFreeze() => _cTimer?.cancel();
 
-  void _cStop() {
+  void _cStop({String? by}) {
     _cTimer?.cancel();
     _cStep = null;
-    final p = calibSaved[_cSource];
+    _cOpen = false;
+    final src = _cSource ?? current.soundSource;
+    final p = calibSaved[src];
+    final done = <String>{..._progressDone(calibProgress[src])};
     _calibOut.add(CalibStatus.fromMap({
       'active': false,
-      'source': _cSource,
+      'source': src,
       'state': null,
       'calibrated': p != null,
       'skipped': p?.skipped ?? const <String>[],
       'needs_recalibration': p?.needsRecalibration ?? false,
       'missing_steps': p?.missingSteps ?? const <String>[],
+      'resume': done.isEmpty || done.length == calibSteps.length
+          ? null
+          : {'step': [for (final s in calibSteps) if (!done.contains(s)) s].first, 'done_steps': done.toList()},
+      if (by != null) 'error': 'The calibration stopped (the Canti service ended it).',
     }));
+  }
+
+  void _cRefuse() {
+    final why = calibRefusal;
+    if (why == null) return;
+    _calibOut.add(CalibStatus.fromMap({..._cStatusOrInactive(), 'error': why}));
+    throw CalibCommandError(why);
+  }
+
+  /// A step's one-word hub result: `ok` when done (measured or skipped), else `·`.
+  static String _cWord(String step, Set<String> done) => done.contains(step) ? 'ok' : '·';
+
+  /// The steps a progress map has finished, in [calibSteps] order.
+  List<String> _progressDone(Map<String, Object?>? p) =>
+      [for (final s in _steps(p?['done_steps'])) s];
+
+  /// Per-step save: when a step finishes its values merge into the saved profile at once (`complete: false`) and the
+  /// progress is written. A cancel therefore loses only the in-flight step.
+  void _cPersist() {
+    final src = _cSource;
+    if (src == null) return;
+    final r = CalibResult.fromMap(_cResultMap());
+    if (r != null) {
+      calibSaved[src] = CalibResult.fromMap({...r.toMap(), 'source': src, 'saved_at_ms': DateTime.now().millisecondsSinceEpoch})!;
+    }
+    calibProgress[src] = {
+      'done_steps': [for (final s in calibSteps) if (_cFinished.contains(s)) s],
+      'current': _cStep,
+      'updated_ms': DateTime.now().millisecondsSinceEpoch,
+    };
   }
 
   /// A step's made-up measurement into the draft (or nulls, skipped).
@@ -450,9 +551,9 @@ class FakeBackend implements VoxBackend {
 
   static List<String> _steps(Object? v) => v is List ? [for (final x in v) if (x is String) x] : const [];
 
-  /// The draft as the service answers it (`result`): version 2, with the steps neither measured nor skipped.
-  Map<String, Object?> _cResultMap() {
-    final d = _cDraft;
+  /// The steps neither measured nor skipped in the profile map [d] (Kotlin's JoyProfile.missingSteps: from the
+  /// fields, so a per-step save lists the steps still to do).
+  static List<String> _missingOf(Map<String, Object?> d) {
     final skipped = _steps(d['skipped']).toSet();
     bool has(String s) => switch (s) {
           'hum' => d['home_hz'] != null,
@@ -464,7 +565,13 @@ class FakeBackend implements VoxBackend {
           'hiss' => d['hiss_heard'] != null,
           _ => d['room_floor_dbfs'] != null,
         };
-    final missing = [for (final s in calibSteps) if (!skipped.contains(s) && !has(s)) s];
+    return [for (final s in calibSteps) if (!skipped.contains(s) && !has(s)) s];
+  }
+
+  /// The draft as the service answers it (`result`): version 2, with the steps neither measured nor skipped.
+  Map<String, Object?> _cResultMap() {
+    final d = _cDraft;
+    final missing = _missingOf(d);
     return {
       ...d,
       'version': 2,
@@ -512,6 +619,11 @@ class FakeBackend implements VoxBackend {
     if (done && calibCountedSteps.contains(step)) heard[step] = _cCount(step);
     if (waiting) sub = step == 'whistle' ? 'waiting for a steady whistle' : 'waiting for a steady note';
     if (failed) sub = 'failed: retry or skip';
+    final expect = _cExpect(step);
+    final scale = step == 'whistle'
+        ? {'low_hz': 880.0, 'home_hz': 1400.0, 'high_hz': 2350.0}
+        : {'low_hz': 96.0, 'home_hz': 142.0, 'high_hz': 318.0};
+    final doneSteps = {..._cFinished, ..._progressDone(calibProgress[_cSource])};
     return {
       'active': true,
       'source': _cSource,
@@ -521,7 +633,11 @@ class FakeBackend implements VoxBackend {
       'sub': sub,
       'progress': done ? 1.0 : f,
       'waiting_for_steady': waiting,
-      'live': live,
+      'live': {
+        ...live,
+        'trace_hz': _cTraceHz(step, f, j),
+        'checks': _cChecks(step, f, waiting, done, failed),
+      },
       'heard': {
         'pops_n': heard['pops'] ?? 0,
         'pops_need': 3,
@@ -537,7 +653,54 @@ class FakeBackend implements VoxBackend {
       'remaining': _cRemaining,
       'result': _cFinished.isEmpty ? null : _cResultMap(),
       'calibrated': calibSaved.containsKey(_cSource),
+      'expect': expect,
+      'scale': calibPitchSteps.contains(step) ? scale : null,
+      'pos': {'i': calibSteps.indexOf(step) + 1, 'n': calibSteps.length},
+      'hub': [
+        for (final s in calibSteps) {'id': s, 'done': doneSteps.contains(s), 'result_word': _cWord(s, doneSteps)},
+      ],
     };
+  }
+
+  /// The wanted shape for a pitched step (`hum`/`glide`/`whistle`; null elsewhere), as the service sends it.
+  Map<String, Object?>? _cExpect(String step) => switch (step) {
+        'hum' => {'sequence': ['flat'], 'start': 'home', 'span_st': 4, 'tol_st': 1.5, 'dur_s': 3, 'tone': 'hum'},
+        'glide' => {'sequence': ['arch'], 'start': 'low', 'span_st': 4, 'tol_st': 1.5, 'dur_s': 5, 'tone': 'hum'},
+        'whistle' => {'sequence': ['arch'], 'start': 'low', 'span_st': 4, 'tol_st': 1.5, 'dur_s': 5, 'tone': 'whistle'},
+        _ => null,
+      };
+
+  /// The joystick ticks (20 ms, the last 5 s) for a pitched step, following the expected contour.
+  List<double?> _cTraceHz(String step, double f, int j) {
+    if (!const ['hum', 'glide', 'whistle'].contains(step)) return const [];
+    final n = math.min(j * 5, 250);
+    double pitchAt(double t) => switch (step) {
+          'glide' => (96 * math.pow(318 / 96, t < 0.5 ? t * 2 : 2 - t * 2)).toDouble(),
+          'whistle' => (880 * math.pow(2350 / 880, t < 0.5 ? t * 2 : 2 - t * 2)).toDouble(),
+          _ => 142.0,
+        };
+    return [for (var i = 0; i < n; i++) pitchAt((i + 1) / n)];
+  }
+
+  /// The provisional grade of a pitched step while it records (pending until there is enough data).
+  List<Map<String, Object?>> _cChecks(String step, double f, bool waiting, bool done, bool failed) {
+    if (!const ['hum', 'glide', 'whistle'].contains(step)) return const [];
+    if (failed) {
+      return [
+        {'id': 'pitch', 'label': 'PITCH', 'state': 'ok', 'value': '0 st', 'want': 'home'},
+        {'id': 'shape', 'label': 'SHAPE', 'state': 'miss', 'value': null, 'want': step},
+      ];
+    }
+    if (waiting) {
+      return [
+        {'id': 'pitch', 'label': 'PITCH', 'state': 'pending'},
+        {'id': 'shape', 'label': 'SHAPE', 'state': 'pending'},
+      ];
+    }
+    return [
+      {'id': 'pitch', 'label': 'PITCH', 'state': 'ok', 'value': '0 st', 'want': step == 'hum' ? 'home' : 'low'},
+      {'id': 'shape', 'label': 'SHAPE', 'state': done || f >= 0.6 ? 'ok' : 'pending'},
+    ];
   }
 
   static const _loop = [

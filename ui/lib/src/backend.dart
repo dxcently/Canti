@@ -455,8 +455,9 @@ abstract class VoxBackend {
   Future<LevelGateSettings> setLevelGateSettings({bool? enabled, int? offsetDb});
 
   /// Starts a calibration of the voice cursor for a sound source (`phone`, `usb`, `pico`): all 8 steps, or [steps] (an
-  /// ordered subset, e.g. a version 1 profile's missing steps). The run starts on its first step.
-  Future<void> calibStart(String source, {List<String>? steps});
+  /// ordered subset, e.g. a version 1 profile's missing steps). The run starts on its first step. With [resume] the
+  /// run starts at the first step not in the saved `done_steps` (the default when progress exists and is < 24 h old).
+  Future<void> calibStart(String source, {List<String>? steps, bool? resume});
 
   /// Records one step: `hum`, `glide`, `vowels` or `pops`.
   Future<void> calibStep(String step);
@@ -483,4 +484,7 @@ abstract class VoxBackend {
   /// The service's `calib_status` pushes (about 10 Hz while a calibration is active, and on every change), and
   /// each calibration command's answer (the status after it).
   Stream<CalibStatus> calibStatus();
+
+  /// The current `calib_status` map (a query: the hub reads the inactive map with `hub` and `resume`).
+  Future<CalibStatus> calibStatusMap();
 }

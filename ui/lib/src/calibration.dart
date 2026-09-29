@@ -1,12 +1,11 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import 'backend.dart';
+import 'shape_plot.dart';
 
 // The voice cursor's calibration: what the service sends (`calib_status`, `calib_get`), the cursor settings, and
-// [CalibFlow], the setup screen's state (which page, which steps are done, redo, save, cancel). The service side is
+// the hub rows. The screens are hub_screen.dart (CalibController holds the live status). The service side is
 // VoiceJoystick's calibration (android, PROTOCOL.md "Voice joystick" > Calibration); the desktop prototype is
 // extractor/joystick.py's setup.
 
@@ -24,24 +23,8 @@ const calibSources = ['phone', 'usb', 'pico'];
 
 List<String> _steps(Object? v) => v is List ? [for (final x in v) if (x is String) x] : const [];
 
-/// The setup screen's pages: the intro, one per step, the result.
-enum CalibPage {
-  intro,
-  hum,
-  glide,
-  vowels,
-  pops,
-  clicks,
-  whistle,
-  hiss,
-  room,
-  result;
-
-  /// The step this page records, or null (intro, result).
-  String? get step => calibSteps.contains(name) ? name : null;
-
-  static CalibPage ofStep(String step) => CalibPage.values.byName(step);
-}
+/// The items of a list as objects, for nested status lists (checks, hub rows).
+List<Object?> _list(Object? v) => v is List ? v.cast<Object?>() : const [];
 
 double? _d(Object? v) => v is num ? v.toDouble() : null;
 int? _i(Object? v) => v is num ? v.round() : null;
@@ -220,13 +203,27 @@ class CalibResult {
 /// What the mic hears right now (`calib_status.live`).
 @immutable
 class CalibLive {
-  const CalibLive({this.voiced = false, this.pitchHz, this.levelDb, this.vowel, this.vowelConf});
+  const CalibLive({
+    this.voiced = false,
+    this.pitchHz,
+    this.levelDb,
+    this.vowel,
+    this.vowelConf,
+    this.traceHz = const [],
+    this.checks = const [],
+  });
 
   final bool voiced;
   final double? pitchHz;
   final double? levelDb;
   final String? vowel;
   final double? vowelConf;
+
+  /// The joystick ticks (20 ms, the last 5 s), null = unvoiced.
+  final List<double?> traceHz;
+
+  /// The provisional grade of the step so far.
+  final List<ShapeCheck> checks;
 
   static CalibLive fromMap(Object? o) {
     final m = _m(o) ?? const {};
@@ -236,6 +233,64 @@ class CalibLive {
       levelDb: _d(m['level_db']),
       vowel: _s(m['vowel']),
       vowelConf: _d(m['vowel_conf']),
+      // nulls are the unvoiced ticks (gaps in the trace), so they stay
+      traceHz: [for (final x in _list(m['trace_hz'])) _d(x)],
+      checks: [
+        for (final c in _list(m['checks'])) ShapeCheck.fromMap(c),
+      ],
+    );
+  }
+}
+
+/// One row of the hub: a step and its one-word result.
+@immutable
+class CalibStepInfo {
+  const CalibStepInfo({required this.id, this.done = false, this.resultWord = '·'});
+
+  final String id;
+  final bool done;
+
+  /// `ok` | `skipped` | `·` (the E9 contract also allows `low` | `noisy`).
+  final String resultWord;
+
+  static CalibStepInfo fromMap(Object? o) {
+    final m = _m(o) ?? const {};
+    return CalibStepInfo(
+      id: _s(m['id']) ?? '?',
+      done: m['done'] == true,
+      resultWord: _s(m['result_word']) ?? '·',
+    );
+  }
+}
+
+/// Where a step sits in the run (1-based).
+@immutable
+class CalibPos {
+  const CalibPos({this.i = 1, this.n = 8});
+
+  final int i;
+  final int n;
+
+  static CalibPos fromMap(Object? o) {
+    final m = _m(o) ?? const {};
+    return CalibPos(i: _i(m['i']) ?? 1, n: _i(m['n']) ?? 8);
+  }
+}
+
+/// Where a cancelled run left off: the step `calib_start {resume: true}` begins at, and the steps done so far.
+@immutable
+class CalibResume {
+  const CalibResume({this.step, this.doneSteps = const []});
+
+  final String? step;
+  final List<String> doneSteps;
+
+  static CalibResume? fromMap(Object? o) {
+    if (o is! Map) return null;
+    final m = o.cast<Object?, Object?>();
+    return CalibResume(
+      step: _s(m['step']),
+      doneSteps: _steps(m['done_steps']),
     );
   }
 }
@@ -270,6 +325,11 @@ class CalibStatus {
     this.remaining,
     this.missingSteps = const [],
     this.needsRecalibration = false,
+    this.expect,
+    this.scale,
+    this.pos = const CalibPos(),
+    this.hub = const [],
+    this.resume,
   });
 
   final bool active;
@@ -315,6 +375,21 @@ class CalibStatus {
   final List<String> missingSteps;
   final bool needsRecalibration;
 
+  /// The wanted shape for a pitched step (hum/glide/whistle; null for the others).
+  final ExpectedShape? expect;
+
+  /// The draft's saved pitch scale (the voice range; the whistle range during `whistle`), or null.
+  final PitchScale? scale;
+
+  /// Where the current step sits in the run (1..8).
+  final CalibPos pos;
+
+  /// The hub rows: every step with its one-word result.
+  final List<CalibStepInfo> hub;
+
+  /// Where a cancelled run left off (the inactive map), or null.
+  final CalibResume? resume;
+
   /// (heard, asked) for a counted step (pops, clicks, hiss), else null.
   (int, int)? heard(String step) => switch (step) {
         'pops' => (popsN, popsNeed),
@@ -322,6 +397,26 @@ class CalibStatus {
         'hiss' => (hissN, hissNeed),
         _ => null,
       };
+
+  /// The hub's eight rows. The active map carries them (`hub`); the inactive one (no run: the hub's usual case, and
+  /// after a cancel) has none, so they are derived as Kotlin does: a step is done when the saved profile has it (not in
+  /// `missing_steps`) or the saved progress lists it (`resume.done_steps`); a skipped one reads `skipped`.
+  List<CalibStepInfo> get hubRows {
+    if (hub.isNotEmpty) return hub;
+    final done = <String>{
+      ...?resume?.doneSteps,
+      if (calibrated == true || missingSteps.isNotEmpty)
+        for (final s in calibSteps)
+          if (!missingSteps.contains(s)) s,
+    };
+    return [
+      for (final s in calibSteps)
+        CalibStepInfo(
+            id: s,
+            done: done.contains(s),
+            resultWord: skipped.contains(s) ? 'skipped' : (done.contains(s) ? 'ok' : '·')),
+    ];
+  }
 
   static CalibStatus fromMap(Map<Object?, Object?> m) {
     final heard = _m(m['heard']) ?? const {};
@@ -353,6 +448,11 @@ class CalibStatus {
       remaining: m['remaining'] is List ? _steps(m['remaining']) : null,
       missingSteps: _steps(m['missing_steps']),
       needsRecalibration: m['needs_recalibration'] == true,
+      expect: m['expect'] is Map ? ExpectedShape.fromMap(m['expect']) : null,
+      scale: PitchScale.fromMap(m['scale']),
+      pos: CalibPos.fromMap(m['pos']),
+      hub: [for (final s in _list(m['hub'])) CalibStepInfo.fromMap(s)],
+      resume: CalibResume.fromMap(m['resume']),
     );
   }
 }
@@ -436,310 +536,3 @@ String sourceLabel(String? source) => switch (source) {
       final other => other,
     };
 
-/// The calibration screen's state. The service records each step and pushes `calib_status`; this keeps the page,
-/// the steps done, failed and skipped, the result, and whether a redo goes back to the result.
-///
-/// The flow: intro, then [begin] (`calib_start`, which starts the hum). When a step's status says `step_done`, [next]
-/// starts the next step (`calib_step`), or shows the result after the last. A step whose status says `failed` shows
-/// the engine's reason and waits: [retry] (`calib_retry`) records it again, [skip] (`calib_skip`) keeps its defaults
-/// and moves on. [skip] also works where the service allows it before a failure ([canSkip]: waiting for a steady
-/// note, a counted step before anything was heard, the room). Nothing is skipped or restarted without the user.
-/// [redo] records a done step again (`calib_redo`); a redo from the result goes back to the result. [save]
-/// (`calib_save`) and [cancel] (`calib_cancel`) end it. The pager can show any page reached so far ([goTo]) without
-/// recording anything. When the service moves on by itself (after a skip), the screen follows it.
-///
-/// With [steps] (a profile's `missing_steps`), the run records only those, in order: [begin] sends `calib_start`
-/// (the service starts the hum) and at once `calib_step` for the first of them. The service's draft starts from the
-/// saved profile, so the other steps keep their values.
-class CalibFlow extends ChangeNotifier {
-  CalibFlow({required this.backend, required this.source, List<String>? steps})
-      : steps = [for (final s in calibSteps) if (steps == null || steps.contains(s)) s];
-
-  final VoxBackend backend;
-  final String source;
-
-  /// The steps this run records, in [calibSteps] order (all of them, or the missing ones).
-  final List<String> steps;
-
-  /// Only some steps (the missing ones).
-  bool get partial => steps.length < calibSteps.length;
-
-  /// The pages of this run: the intro, its steps, the result.
-  List<CalibPage> get pages => [CalibPage.intro, for (final s in steps) CalibPage.ofStep(s), CalibPage.result];
-
-  CalibPage _page = CalibPage.intro;
-  CalibPage _furthest = CalibPage.intro;
-  CalibStatus? _status;
-  CalibResult? _result;
-  String? _error;
-  bool _started = false;
-  bool _finished = false;
-  bool _saved = false;
-  bool _busy = false;
-  bool _redoing = false;
-  final _done = <String>{};
-  final _skipped = <String>{};
-  final _failed = <String, String>{};
-
-  /// The step last commanded, until the service has shown it running (a `step_done` before that is stale).
-  String? _pending;
-  StreamSubscription<CalibStatus>? _sub;
-
-  CalibPage get page => _page;
-  CalibPage get furthest => _furthest;
-  CalibStatus? get status => _status;
-  CalibResult? get result => _result;
-  String? get error => _error;
-  bool get started => _started;
-  bool get finished => _finished;
-  bool get saved => _saved;
-  bool get busy => _busy;
-
-  /// A redo started from the result: done means back to the result.
-  bool get redoing => _redoing;
-  Set<String> get done => Set.unmodifiable(_done);
-
-  /// The steps skipped (their defaults kept), in this run and in the draft.
-  Set<String> get skipped => {..._skipped, ...?_result?.skipped};
-
-  /// This page's step has been recorded (or skipped).
-  bool get pageDone => _page.step != null && _done.contains(_page.step);
-
-  /// Why this page's step failed (the engine's reason), or null. It stays until [retry] or [skip].
-  String? get pageFailure => _failed[_page.step];
-
-  /// The status, if it is about this page's step (the live readout).
-  CalibStatus? get pageStatus {
-    final s = _status;
-    return s != null && s.step != null && s.step == _page.step && _pending != s.step ? s : null;
-  }
-
-  /// The service would take `calib_skip` now: the step failed, waits for a steady note, has heard nothing countable
-  /// yet (pops, clicks, hiss), or is the room.
-  bool get canSkip {
-    final step = _page.step;
-    if (step == null || _finished || pageDone) return false;
-    if (_failed.containsKey(step)) return true;
-    final s = pageStatus;
-    if (s == null || !s.active) return false;
-    if (s.state == 'waiting') return true;
-    if (s.state != 'recording') return false;
-    return step == 'room' || (s.heard(step)?.$1 ?? 1) == 0;
-  }
-
-  /// Where this page is in the run (the pager).
-  int get pageIndex => pages.indexOf(_page);
-
-  /// Listens to the service's pushes.
-  void attach() => _sub ??= backend.calibStatus().listen(onStatus, onError: (Object e) => _fail('status', e));
-
-  void dismissError() {
-    _error = null;
-    notifyListeners();
-  }
-
-  /// One push from the service (also each command's answer).
-  @visibleForTesting
-  void onStatus(CalibStatus s) {
-    if (_finished) return;
-    if (s.source != null && s.source != source) return;
-    _status = s;
-    if (s.error != null) _error = s.error;
-    if (s.result != null) _result = s.result;
-    if (_started && s.active) {
-      // this run's skips; a skipped step that is being recorded again stays open until it finishes
-      for (final k in s.skipped) {
-        if (!steps.contains(k) || k == _pending || (k == s.step && !s.stepDone)) continue;
-        _skipped.add(k);
-        _done.add(k);
-        _failed.remove(k);
-      }
-    }
-    final step = s.step;
-    if (step != null && calibSteps.contains(step)) {
-      if (_pending == step && !s.stepDone && !s.failed) _pending = null;
-      if (_pending != step) {
-        if (s.failed) {
-          _failed[step] = s.reason ?? 'This step did not work.';
-          _done.remove(step);
-        } else if (s.stepDone || s.state == 'done') {
-          _failed.remove(step);
-          _done.add(step);
-        } else {
-          _failed.remove(step);
-          _follow(step);
-        }
-      }
-    }
-    if (_started && !s.active && s.error == null) _error = 'The calibration stopped (the Canti service ended it).';
-    notifyListeners();
-  }
-
-  /// The service is recording [step]: show it if the screen is not busy elsewhere (on the intro, or on a step that is
-  /// finished), unless a redo from the result is under way or it is not a step of this run.
-  void _follow(String step) {
-    if (!_started || _redoing || !steps.contains(step) || step == _page.step || _done.contains(step)) return;
-    if (_page == CalibPage.intro || pageDone) _show(CalibPage.ofStep(step));
-  }
-
-  /// Starts the calibration: `calib_start` with this run's steps (a partial run); the service starts on the first.
-  Future<void> begin() async {
-    if (_started || _busy) return;
-    _started = true;
-    _error = null;   // an earlier refusal must not read as this start failing (the run would go on, unseen)
-    _show(CalibPage.ofStep(steps.first));
-    await _call('start', () => backend.calibStart(source, steps: partial ? steps : null));
-    if (_error != null) {
-      _started = false;
-      _show(CalibPage.intro);
-    }
-  }
-
-  /// The run's steps not finished yet, in order: the service's `remaining` (this screen's own count only until a
-  /// status carries it).
-  List<String> get _remaining => _status?.remaining ?? [for (final s in steps) if (!_done.contains(s)) s];
-
-  /// Once this page's step is done, the result comes next (every other step of the run is finished, or a redo from
-  /// the result is under way), not another step.
-  bool get nextIsResult {
-    final step = _page.step;
-    return _redoing || !_remaining.any((s) => s != step);
-  }
-
-  /// After a step is done: the run's next unfinished step (`remaining[0]`), or the result once the run is done (or
-  /// after a redo from the result: the service goes back to done, nothing else starts).
-  Future<void> next() async {
-    final step = _page.step;
-    if (step == null || !_done.contains(step) || _busy) return;
-    final rest = [for (final s in _remaining) if (s != step) s];
-    if (_redoing || rest.isEmpty) {
-      _redoing = false;
-      _show(CalibPage.result);
-      return;
-    }
-    final nextStep = rest.first;
-    // The service already records it (it moves on by itself after a skip): just show it.
-    if (_status?.step == nextStep) {
-      _show(CalibPage.ofStep(nextStep));
-      return;
-    }
-    await _startStep(nextStep, redo: false);
-  }
-
-  /// Records a done step again (from its page or from the result).
-  Future<void> redo(String step) async {
-    if (!_started || _finished || _busy) return;
-    _redoing = _page == CalibPage.result || _redoing;
-    _skipped.remove(step);
-    await _startStep(step, redo: true);
-  }
-
-  /// Records the failed step again (`calib_retry`).
-  Future<void> retry() async {
-    final step = _page.step;
-    if (step == null || !_failed.containsKey(step) || _busy || _finished) return;
-    _failed.remove(step);
-    _done.remove(step);
-    _pending = step;
-    notifyListeners();
-    await _call('retry', backend.calibRetry);
-  }
-
-  /// Keeps the defaults for this step (`calib_skip`) and moves on. The service never wraps round: the run's next
-  /// unfinished step after this one starts by itself (nothing more is sent); with none, the run is done (the result),
-  /// or an earlier step is still open (`step_done`) and this screen asks for it (`calib_step remaining[0]`).
-  Future<void> skip() async {
-    final step = _page.step;
-    if (step == null || !canSkip || _busy) return;
-    final run = _status?.runSteps ?? steps;
-    final rest = [for (final s in _remaining) if (s != step) s];
-    final after = run.skip(run.indexOf(step) + 1).where(rest.contains).firstOrNull;
-    await _call('skip', backend.calibSkip);
-    if (_error != null) return;
-    _failed.remove(step);
-    _skipped.add(step);
-    _done.add(step);
-    if (_redoing || rest.isEmpty) {
-      _redoing = false;
-      _show(CalibPage.result);
-    } else if (after != null) {
-      _show(CalibPage.ofStep(after));
-    } else {
-      await _startStep(rest.first, redo: false);
-    }
-  }
-
-  Future<void> save() async {
-    if (!_started || _finished || _busy) return;
-    _finished = true;
-    _saved = true;
-    await _call('save', backend.calibSave);
-    if (_error != null) {
-      _finished = false;
-      _saved = false;
-      notifyListeners();
-    }
-  }
-
-  /// Ends the calibration without saving (nothing is sent if it never started or already ended).
-  Future<void> cancel() async {
-    if (_finished) return;
-    _finished = true;
-    if (_started) await _call('cancel', backend.calibCancel);
-    notifyListeners();
-  }
-
-  /// Shows a page of this run reached before (the pager, by [pages] index); records nothing.
-  void goTo(int index) {
-    final ps = pages;
-    if (index < 0 || index >= ps.length || ps[index].index > _furthest.index) return;
-    _show(ps[index]);
-  }
-
-  Future<void> _startStep(String step, {required bool redo}) async {
-    _done.remove(step);
-    _failed.remove(step);
-    _pending = step;
-    _show(CalibPage.ofStep(step));
-    await _call(redo ? 'redo' : 'step', () => redo ? backend.calibRedo(step) : backend.calibStep(step));
-  }
-
-  void _show(CalibPage p) {
-    _page = p;
-    if (p.index > _furthest.index) _furthest = p;
-    notifyListeners();
-  }
-
-  Future<void> _call(String what, Future<void> Function() f) async {
-    _busy = true;
-    notifyListeners();
-    try {
-      await f();
-    } catch (e) {
-      _fail(what, e);
-    } finally {
-      _busy = false;
-      notifyListeners();
-    }
-  }
-
-  void _fail(String what, Object e) {
-    final m = RegExp(r'PlatformException\([^,]*, (.*?), ').firstMatch('$e');
-    _error = '$what: ${m?.group(1) ?? e}';
-    notifyListeners();
-  }
-
-  bool _disposed = false;
-
-  @override
-  void notifyListeners() {
-    if (!_disposed) super.notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    _sub?.cancel();
-    super.dispose();
-  }
-}

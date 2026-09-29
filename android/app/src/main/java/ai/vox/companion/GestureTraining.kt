@@ -730,14 +730,18 @@ class GestureTrainer(private val host: TrainHost) {
             )
         }
         // Takes stored with a label the user has not confirmed yet (the review screen's "sounded like X, keep as Y?").
+        // The take's own pitch16 and f0 ride along so the review plots the actual take, not the canonical outline.
         val unconfirmed = mutableListOf<Map<String, Any?>>()
         for (g in TrainPlan.GESTURES) {
             val cls = st.find(g)?.takeIf { it.kind == EnrollmentStore.GESTURE } ?: continue
             for ((i, ex) in cls.examples.withIndex()) {
                 val m = ex.meta ?: continue
-                if (m.optBoolean("label_mismatch") && !m.optBoolean("confirmed"))
-                    unconfirmed += linkedMapOf("id" to m.optLong("id", -1), "gesture" to g,
-                        "heard" to m.optJSONObject("heard")?.optString("label"), "pos" to i)
+                if (!m.optBoolean("label_mismatch") || m.optBoolean("confirmed")) continue
+                val heard = m.optJSONObject("heard")
+                fun opt(k: String) = heard?.takeIf { !it.isNull(k) }?.opt(k)
+                unconfirmed += linkedMapOf("id" to m.optLong("id", -1), "gesture" to g,
+                    "heard" to heard?.optString("label"), "pos" to i,
+                    "pitch16" to ex.pitch16.toList(), "f0_hz" to opt("f0_hz"), "dur_ms" to opt("dur_ms"))
             }
         }
         val c = s

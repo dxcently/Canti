@@ -40,10 +40,19 @@ class ShapeCheck {
         'miss' => CheckState.miss,
         _ => CheckState.pending,
       },
-      value: m['value'] as String?,
-      want: m['want'] as String?,
+      value: _text(m['value']),
+      want: _text(m['want']),
     );
   }
+
+  /// The service sends numbers for some values (PITCH: st from HOME, SHAPE: st, LENGTH: ms, SOUND: Hz): kept as text
+  /// (a cast would throw on them).
+  static String? _text(Object? v) => switch (v) {
+        String s => s,
+        int n => '$n',
+        double d => d == d.roundToDouble() ? '${d.round()}' : d.toStringAsFixed(2),
+        _ => null,
+      };
 }
 
 /// The source's saved pitch scale (rec_status.scale): low/home/high in Hz, from the calibration profile.
@@ -259,6 +268,7 @@ class ShapePlot extends StatelessWidget {
     this.showLegend = true,
     this.caption,
     this.alignToHeard = false,
+    this.grow = false,
   });
 
   final ExpectedShape expected;
@@ -273,7 +283,8 @@ class ShapePlot extends StatelessWidget {
 
   final List<ShapeCheck> checks;
 
-  /// The plot's height in art px.
+  /// The plot's height in art px (its fixed height when not [grow]; the preferred height when [grow], which fills
+  /// whatever the parent gives and so shrinks rather than overflows on a short screen).
   final int height;
   final bool showLegend;
   final String? caption;
@@ -281,6 +292,10 @@ class ShapePlot extends StatelessWidget {
   /// (Added to §9, optional.) Shift [heard] so the first sound starts at t = 0, where the aim starts: the recorder's
   /// sounds are timed from GO (the user starts a beat later), a snapshot's from the clip start.
   final bool alignToHeard;
+
+  /// Fill the available height (the parent gives a bounded height, e.g. an `Expanded`) instead of a fixed [height]
+  /// plot: the calibration / training / review screens grow the graph into the otherwise-empty lower half.
+  final bool grow;
 
   /// [heard] as drawn: shifted to start at 0 when [alignToHeard].
   List<HeardSound> get _heard {
@@ -295,12 +310,8 @@ class ShapePlot extends StatelessWidget {
     final t = CantiTheme.of(context);
     final ink = t.ink;
     final heard = _heard;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (expected.contour)
-          _ContourPlot(
+    final plot = expected.contour
+        ? _ContourPlot(
             key: const Key('shape_plot_contour'),
             expected: expected,
             scale: scale,
@@ -308,14 +319,25 @@ class ShapePlot extends StatelessWidget {
             liveTickS: liveTickS,
             heard: heard,
             height: height,
+            fill: grow,
           )
-        else
-          _BeatStrip(
+        : _BeatStrip(
             key: const Key('shape_plot_beat'),
             expected: expected,
             heard: heard,
             height: height,
-          ),
+            fill: grow,
+          );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: grow ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (grow)
+          // Fill the space the parent gives (a tight Expanded); no hard minimum, so a short screen (rotation, a
+          // resized window) shrinks the plot instead of overflowing.
+          Expanded(child: plot)
+        else
+          plot,
         if (caption != null) ...[
           SizedBox(height: p(2)),
           PixelSnap(child: Text(caption!, style: p.body(ink, line: 11))),
@@ -406,6 +428,7 @@ class _ContourPlot extends StatelessWidget {
     required this.liveTickS,
     required this.heard,
     required this.height,
+    required this.fill,
   });
 
   final ExpectedShape expected;
@@ -414,6 +437,7 @@ class _ContourPlot extends StatelessWidget {
   final double liveTickS;
   final List<HeardSound> heard;
   final int height;
+  final bool fill;
 
   /// The y axis spans [stMin, stMax] semitones (relative to LOW in absolute mode, to the start note otherwise); x
   /// spans 0..xMax seconds.
@@ -473,41 +497,36 @@ class _ContourPlot extends StatelessWidget {
     final abs = scale != null && scale!.absolute;
     final gutter = abs ? 22 : 0;
     final plotH = p(height);
-    return SizedBox(
-      height: plotH,
-      width: double.infinity,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: PixelPaint(
-              art: _ContourArt(
-                expected: expected,
-                scale: scale,
-                liveHz: liveHz,
-                liveTickS: liveTickS,
-                heard: heard,
-                stMin: g.stMin,
-                stMax: g.stMax,
-                xMax: g.xMax,
-                startSt: _startSt(),
-                gutter: gutter,
-                ink: t.ink,
-              ),
-            ),
-          ),
-          if (abs)
-            for (final (tag, hz) in [('HIGH', scale!.highHz!), ('HOME', scale!.homeHz!), ('LOW', scale!.lowHz!)])
-              Positioned(
-                left: p(3),
-                width: p(gutter - 2),
-                top: _tagTop(p, plotH, g, hzToSt(hz, scale!.lowHz!)),
-                child: PixelSnap(
-                  child: Text(tag, style: p.body(t.ink, line: 9), maxLines: 1, overflow: TextOverflow.clip),
-                ),
-              ),
-        ],
-      ),
+    final art = _ContourArt(
+      expected: expected,
+      scale: scale,
+      liveHz: liveHz,
+      liveTickS: liveTickS,
+      heard: heard,
+      stMin: g.stMin,
+      stMax: g.stMax,
+      xMax: g.xMax,
+      startSt: _startSt(),
+      gutter: gutter,
+      ink: t.ink,
     );
+    Widget stackAt(double h) => Stack(
+          children: [
+            Positioned.fill(child: PixelPaint(art: art)),
+            if (abs)
+              for (final (tag, hz) in [('HIGH', scale!.highHz!), ('HOME', scale!.homeHz!), ('LOW', scale!.lowHz!)])
+                Positioned(
+                  left: p(3),
+                  width: p(gutter - 2),
+                  top: _tagTop(p, h, g, hzToSt(hz, scale!.lowHz!)),
+                  child: PixelSnap(
+                    child: Text(tag, style: p.body(t.ink, line: 9), maxLines: 1, overflow: TextOverflow.clip),
+                  ),
+                ),
+          ],
+        );
+    if (!fill) return SizedBox(height: plotH, width: double.infinity, child: stackAt(plotH));
+    return LayoutBuilder(builder: (context, bc) => SizedBox.expand(child: stackAt(bc.maxHeight)));
   }
 
   /// The tag's top so its middle sits on the dotted line (mirrors [_ContourArt._y]).
@@ -680,11 +699,12 @@ class _ContourArt extends PixelArt {
 /// Two lanes on one time axis: EXAMPLE (an outlined box per expected sound, [ExpectedShape.gapS] apart) and YOU (a
 /// filled box per heard sound at its relMs, with its label), with the "too late" hatch after gap + 0.6 s.
 class _BeatStrip extends StatelessWidget {
-  const _BeatStrip({super.key, required this.expected, required this.heard, required this.height});
+  const _BeatStrip({super.key, required this.expected, required this.heard, required this.height, required this.fill});
 
   final ExpectedShape expected;
   final List<HeardSound> heard;
   final int height;
+  final bool fill;
 
   @override
   Widget build(BuildContext context) {
@@ -696,7 +716,7 @@ class _BeatStrip extends StatelessWidget {
     final xMax = math.max(late + 0.4, heard.fold(0.0, (a, h) => math.max(a, (h.relMs ?? 0) / 1000 + 0.3)));
     const labelW = 40, box = 9, lane = 13; // labelW: "EXAMPLE" in the body face, and a gap
     return SizedBox(
-      height: p(math.max(height, 2 * lane + 10)),
+      height: fill ? null : p(math.max(height, 2 * lane + 10)),
       width: double.infinity,
       child: LayoutBuilder(
         builder: (context, bc) {

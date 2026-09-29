@@ -7,6 +7,7 @@ export 'src/calibration.dart';
 export 'src/calibration_screen.dart';
 export 'src/channel_backend.dart';
 export 'src/fake_backend.dart';
+export 'src/hub_screen.dart';
 export 'src/pair_screen.dart';
 export 'src/quickrec_screen.dart';
 export 'src/recorder.dart';

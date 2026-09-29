@@ -59,7 +59,8 @@ class ButtonArt extends PixelArt {
 /// A window: paper fill, a double-line frame with notched corners, a title tab on the top edge and, when [onClose]
 /// is set, a close box (a 48 dp target in the top-right corner).
 class PixelWindow extends StatelessWidget {
-  const PixelWindow({super.key, required this.title, required this.child, this.onClose, this.closeLabel = 'Close'});
+  const PixelWindow(
+      {super.key, required this.title, required this.child, this.onClose, this.closeLabel = 'Close', this.expand = false});
 
   /// Shown in capitals in the tab.
   final String title;
@@ -67,18 +68,22 @@ class PixelWindow extends StatelessWidget {
   final VoidCallback? onClose;
   final String closeLabel;
 
+  /// Fill the parent's height (a step / take / review screen's single window), so its content can expand a plot.
+  final bool expand;
+
   @override
   Widget build(BuildContext context) {
     final p = Px.of(context);
     final t = CantiTheme.of(context);
     final label = title.toUpperCase();
     final tabH = 8 * p.text + 4;
-    return Stack(
+    final content = Padding(padding: EdgeInsets.fromLTRB(p(6), p(tabH + 3), p(6), p(6)), child: child);
+    final stack = Stack(
       children: [
         Positioned.fill(
           child: PixelPaint(art: _WindowArt(t.ink, t.paper, label.length * 8 * p.text + 6, tabH, onClose != null)),
         ),
-        Padding(padding: EdgeInsets.fromLTRB(p(6), p(tabH + 3), p(6), p(6)), child: child),
+        if (expand) Positioned.fill(child: content) else content,
         Positioned(
           left: p(8),
           top: p(2),
@@ -102,6 +107,7 @@ class PixelWindow extends StatelessWidget {
           ),
       ],
     );
+    return expand ? SizedBox.expand(child: stack) : stack;
   }
 }
 
@@ -579,13 +585,28 @@ class PixelToggle<T> extends StatelessWidget {
   }
 }
 
-/// ◀ n/m ▶ with 48 dp arrow targets; wraps around.
+/// ◀ n/m ▶ with 48 dp arrow targets; wraps around unless [wrap] is false, which disables the arrows at the ends (the
+/// take/step header arrows move backwards/forwards, not loop).
 class PixelPager extends StatelessWidget {
-  const PixelPager({super.key, required this.index, required this.count, required this.onChanged});
+  const PixelPager(
+      {super.key,
+      required this.index,
+      required this.count,
+      required this.onChanged,
+      this.wrap = true,
+      this.canPrev = true,
+      this.canNext = true});
 
   final int index;
   final int count;
   final ValueChanged<int> onChanged;
+
+  /// Whether ◀ at 0 and ▶ at the end wrap to the other end (true) or are disabled (false).
+  final bool wrap;
+
+  /// Whether ◀ / ▶ may move at all (off while a step is busy, say); on top of [wrap].
+  final bool canPrev;
+  final bool canNext;
 
   @override
   Widget build(BuildContext context) {
@@ -594,13 +615,19 @@ class PixelPager extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         PixelIconButton(
-            glyph: Marks.left, tooltip: 'Previous page', framed: false, onPressed: () => onChanged((index - 1) % count)),
+            glyph: Marks.left,
+            tooltip: 'Previous page',
+            framed: false,
+            onPressed: canPrev && (wrap || index > 0) ? () => onChanged((index - 1 + (wrap ? count : 0)) % count) : null),
         PixelBox(
           padding: EdgeInsets.fromLTRB(p(4), p(3), p(3), p(3)),
           child: PixelSnap(child: Text('${index + 1}/$count', style: p.title(CantiTheme.of(context).ink))),
         ),
         PixelIconButton(
-            glyph: Marks.right, tooltip: 'Next page', framed: false, onPressed: () => onChanged((index + 1) % count)),
+            glyph: Marks.right,
+            tooltip: 'Next page',
+            framed: false,
+            onPressed: canNext && (wrap || index < count - 1) ? () => onChanged((index + 1) % count) : null),
       ],
     );
   }
