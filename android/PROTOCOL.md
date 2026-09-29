@@ -691,7 +691,8 @@ The confirmer's `result` is one of:
   that would come too soon reuses the previous watch's timeout screenshot if it is under 1 s old (`screenshot
   reused`), else the watch runs on events alone (`by: screenshot rate-limited`); a timeout screenshot that would come
   too soon waits out the interval.
-- `no visible change`.
+- `no visible change`. A "no visible change" confirm on the current follow-up slot plays the badge's ignored shrug
+  (`badge{event: no-change, watch}`), never a retry.
 
 Clicks, long clicks, selections and focus changes that arrive while our own injected gesture is running, or within
 250 ms after it, are echoes of our touch. They are counted in `echoes_ignored` and never confirm anything.
@@ -742,7 +743,8 @@ Other events: `absorbed{sound, tail_of, gap_ms, clock}` (above), `mode`, `arm`, 
 `match`, `enroll` and `fp_floors{fp_version, status, source, note}` (personalization, below),
 `train{event: start | take | skip | keep | delete | done | end, ...}` (*Gesture training*, below),
 `forward{result: clicked | click-failed | no-forward, where, why, waited_ms, menu_closed}` and
-`badge{event: moved | menu | long-press | tap-to-wake | pass-through | tucked | untucked | state, ...}` (the Canti head; `state` carries the held state on each change, for the app's header; `tucked` while a Canti screen is in front), `hold{kind, sound, ...}` / `hold{event, why}` and `auto_scroll{event: start | stop, action, app, hold, why, pct_per_s, ms}` (*Hold messages*),
+`badge{event: moved | menu | long-press | tap-to-wake | pass-through | tucked | untucked | state | no-change, ...}` (the Canti head; `state` carries the held state on each change, for the app's header; `tucked` while a Canti screen is in front; `no-change` is the ignored shrug after a "no visible change" confirm on the current follow-up slot), `hold{kind, sound, ...}` / `hold{event, why}` and `auto_scroll{event: start | stop, action, app, hold, why, pct_per_s, ms}` (*Hold messages*),
+`followup{n, kind, dir, result: label | run | tap | choose | cant_undo | nothing | fallback, last_kind, age_ms, confirm, why}` (*Spoken follow-ups*, below; no label or option text in this event),
 and the BLE link's events:
 - `ble{what, ...}`: `start`, `scan`, `found{address, name, rssi}`, `state{state, why, address}`,
   `priority{high}` (the result of `requestConnectionPriority(HIGH)`, asked right after connecting), `mtu{mtu}`,
@@ -1213,6 +1215,7 @@ and a match on the screen: chatter never taps.
 | `go back`, `back`, `go home`, `scroll up/down`, `go down`, `move up a bit`, a lone `down` / `up` (= scroll **only in a listen window a pop pop opened**, user decision; outside one, e.g. a future always-listening mic, it is `ignore` and needs a verb), `go back to the previous screen`, `hold on a second` (= pause), `next`, `previous`, `pause`, `open camera`, ... (variants → the `Vocab.PHRASES` phrase); `scroll down three times`, `next twice` | navigation (a count repeats only scrolls and next/previous, at most 5) | `RuleDecider` on the phrase (user phrase rules first, the screen tie-break for next/previous and play/pause: a video feed, Reels / Shorts / TikTok, flings vertically); never a model |
 | `open\|launch\|start\|go to\|go back to\|switch to\|return to <app>` | open app | launcher labels + aliases, fuzzy (`you tube`, `tick tock`, `net flicks`); `getLaunchIntentForPackage` in user 0. Two installed apps with the name (YouTube and a mod): the `app_prefer` one (default: RVX for YouTube; also applied when only the official app matched the name but RVX is installed), else the most recently used if usage access is already granted (Canti never asks for it), else the official package, else toast "which YouTube? ..." and nothing opens. A known app's name that is not installed (`open snapchat`): toast "no app called snapchat", `exec{action: open_app, name, ok: false, how: "not installed"}`, **never a tap**; `launch`/`switch to`/`go back to` + an unknown name never taps either |
 | `tap\|click\|press\|select <thing>`, or `open <thing>` that is no app | tap | `TargetMatcher` on the screen's targets: one clear match (≥ 0.85, 0.1 ahead) is tapped; weak or several are highlighted (numbered, rise/fall move, click taps, hiss cancels, speech narrows); none → the model's `target` question if the decider is not `rules`, else a toast |
+| `try again`, `again`, `once more`; `the other one`, `other one`, `not that one`, `the next one`, `next one`; `the one below`/`above`, `the one (on\|to) the (left\|right)`; `undo`, `undo that` | a follow-up on the **last** action (retry / other / direction / undo) | app-side only, no model (*Spoken follow-ups*, below) |
 | `type <text>`, `write <text>` (only in a listen window) | type into the focused text box | *Typing by voice*, below; checked before the rest of the grammar on the best hypothesis, as the recognizer wrote it |
 | `dictate`, `start dictation` (only in a listen window) | dictation mode | *Typing by voice*, below |
 | anything else, in cursor mode | tap (a bare word such as `home` falls back to the command) | as above |
@@ -1221,6 +1224,24 @@ and a match on the screen: chatter never taps.
 Volume and swipe forms are the grammar's own commands (like opening an app): the model vocabulary, its option lists and
 `Vocab.SOURCE_DIGEST` are unchanged, and the decider path (rules, models) keeps `volume_up` / `volume_down` (one system
 step on the same call-aware stream) and `swipe_*` / `next_item`.
+
+**Spoken follow-ups** (`Followup.kt`, on the last action only). One in-memory slot, no history; it holds the action
+(and, for a tapped target, the ranked other candidates), never persisted and never in a log field. **Precedence:** a
+user phrase rule wins first, then an exact on-screen label (normalised like the query; an app's own "Undo" / "Try
+again" button is the better action, in every mode), then the follow-up, then the normal parse. Only the exact phrases
+match ("try again", "again", "once more", "the other one", "other one", "not that one", "the next one", "next one",
+"the one below|above", "the one (on|to) the (left|right)", "undo", "undo that"); anything longer is not a follow-up
+("scroll down again" stays the scroll, "go back" stays navigation, "try the other tab" is not a follow-up). The slot is
+valid only within 30 s and only while the app in front is unchanged (an app switch or age ends it). `retry` repeats the
+action (even a confirmed one); `other` picks a different candidate than the last target; a direction picks the
+nearest on-screen target next to the last pick. `undo` is a limited inverse: `swipe_up`↔`swipe_down`,
+`swipe_left`↔`swipe_right`, `scroll_up`↔`scroll_down`, `zoom_in`↔`zoom_out`, `next_item`↔`previous_item`,
+`volume_up`↔`volume_down`; a spoken volume step reverses its direction; a tap / click / app launch / target pick goes
+back **only** when its confirm was "confirmed (events)" and the evidence was a window change; an outward action or
+target is never undone; `back`, `home`, `recents`, `listen`, typing and timers are not undoable ("can't undo that").
+A follow-up's own execution becomes the new slot, so "undo" twice re-applies the original direction. `go back` is
+navigation, not undo. `followup{n, kind, dir, result: label|run|tap|choose|cant_undo|nothing|fallback, last_kind,
+age_ms, confirm, why}` — no label or option text in this event.
 Numbers are words or digits (`twenty five`, `1.5`, `a hundred`); `for`/`to` count as 4/2 only straight before a unit
 ("timer for minutes" = 4 min). The n-best: every hypothesis is parsed and the most concrete command wins (a known
 command, then a tap on something on screen, then a timer without a length, then unparsed); ties keep the recognizer's

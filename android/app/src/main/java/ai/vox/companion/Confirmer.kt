@@ -93,6 +93,8 @@ class Confirmer(
     private val ownWindow: (Int) -> Boolean = OwnWindows::contains,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     private val schedule: (Long, () -> Unit) -> Unit = { ms, r -> handler.postDelayed(r, ms) },
+    /** Called from [finish] with each watch's outcome (also "superseded"), after the log line. */
+    private val onResult: (watch: Long, action: String, result: String, by: String?) -> Unit = { _, _, _, _ -> },
 ) {
     /** [before] = the tree fingerprint before dispatch, null when not taken ([treeBaseline]). */
     private class Watch(val id: Long, val action: String, val before: Int?, val t0: Long, val injected: Boolean) {
@@ -186,6 +188,7 @@ class Confirmer(
         lastResult = result; lastBy = by
         EventLog.ev("confirm", "watch" to w.id, "action" to w.action, "result" to result, "by" to by,
             "ms" to clock() - w.t0, "echoes_ignored" to w.echoesIgnored, "tree_baseline" to (w.before != null))
+        onResult(w.id, w.action, result, by)
     }
 
     enum class Kind { STRONG, CONTENT, ECHO, OTHER }

@@ -108,6 +108,8 @@ class VoxService : AccessibilityService() {
     private var generation = 0L
     private var decisionCount = 0L
     private val recent = ArrayDeque<Pair<String, Long>>()   // action key, time
+    // [followup] spoken follow-ups ("try again", "undo", ...) on the last action (Followup.kt); memory only, never logged.
+    private val followups = FollowupMemory()
     private val labelCache = HashMap<String, String>()
     // The phrase window: the recognizer (`asr_engine`), the window around it, the last problem the user must fix.
     private var asr: PhraseRecognizer = StubPhraseRecognizer()
@@ -195,7 +197,8 @@ class VoxService : AccessibilityService() {
         audio.registerAudioPlaybackCallback(playbackWatch, main)
         audio.registerAudioDeviceCallback(routeWatch, main)
         overlay = Overlay(this, ::screenW, ::screenH)
-        confirmer = Confirmer(main, packageName, { MainLoad.time("tree:fingerprint") { TreeReader.fingerprint(TreeReader.appRoot(this)) } }, { settings.confirmTimeoutMs }, ::grabGrid)
+        confirmer = Confirmer(main, packageName, { MainLoad.time("tree:fingerprint") { TreeReader.fingerprint(TreeReader.appRoot(this)) } }, { settings.confirmTimeoutMs }, ::grabGrid,
+            onResult = ::onConfirmResult)
         MainLoad.mainThread = Thread.currentThread()
         MainLoad.onSlow = { what, ms -> EventLog.ev("main_slow", "what" to what, "ms" to Math.round(ms * 10) / 10.0, "app" to lastPkg) }
         main.removeCallbacks(heartbeat); main.post(heartbeat)
@@ -821,6 +824,7 @@ class VoxService : AccessibilityService() {
     private fun disarm(why: String) {
         armed = false
         generation++
+        followups.clear()   // [followup]
         sequencer.cancel()
         holdScroll.stop("disarm ($why)"); dropBufferedHold()
         overlay.stop(); executor.cancelDrag(); cancelChoice("disarm")
@@ -836,6 +840,7 @@ class VoxService : AccessibilityService() {
         paused = p
         if (p) {
             generation++
+            followups.clear()   // [followup]
             sequencer.cancel()
             holdScroll.stop("pause"); dropBufferedHold()
             overlay.stop(); executor.cancelDrag(); cancelChoice("pause")
@@ -1120,6 +1125,8 @@ class VoxService : AccessibilityService() {
             is SpeechCommand.Volume -> {
                 val n = ++decisionCount
                 val r = try { executor.setVolume(c) } catch (e: Exception) { Executor.Result(false, "error: $e") }
+                // [followup] a spoken volume change is its own last slot ("try again" / "undo").
+                followups.record(Last.Volume(c.op, c.stream, SystemClock.elapsedRealtime(), currentApp(), watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "volume", "stream" to c.stream.key, "op" to c.op.describe(), "ok" to r.ok, "how" to r.how,
                     "watch" to r.watch)
                 trace("exec", JSONObject().put("action", "volume").put("stream", c.stream.key).put("op", c.op.describe()).put("ok", r.ok).put("how", r.how))
@@ -1153,7 +1160,10 @@ class VoxService : AccessibilityService() {
                     updateBadge("which ${c.label}?")
                     return
                 }
+                val appBefore = currentApp()   // [followup] before the launch, as perform() does
                 val r = try { executor.launchApp(pkg) } catch (e: Exception) { Executor.Result(false, "error: $e") }
+                // [followup] a spoken app launch is its own last slot ("try again" / "undo" -> back when it changed windows).
+                followups.record(Last.OpenApp(pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
                 EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to c.pkg, "opened" to pkg.takeIf { it != c.pkg }, "label" to c.label, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
                 trace("exec", JSONObject().put("action", "open_app").put("app", c.pkg).put("ok", r.ok).put("how", r.how))
                 if (!r.ok) toast("couldn't open ${c.label}")
@@ -1168,6 +1178,8 @@ class VoxService : AccessibilityService() {
                 toast(if (r.ok) "timer: ${timerText(s)}" else "no timer set: ${r.how}")
                 updateBadge("timer")
             }
+            // [followup] spoken follow-ups on the last action (Followup.kt): decided app-side only, no model.
+            is SpeechCommand.Followup -> followup(c, screenTargets)
         }
     }
 
@@ -1184,6 +1196,84 @@ class VoxService : AccessibilityService() {
         EventLog.ev("state", "n" to n, "text" to scene.text())
         val d = try { RuleDecider().decide(DecisionInput(scene, profile)) } catch (e: Exception) { Decision("none", "error:${e.javaClass.simpleName}") }
         act(n, generation, "listening", d, local = true)
+    }
+
+    /** True for an action that a follow-up may repeat/undo; "none", listening and cursor moves/stop/grid are not. */
+    // [followup]
+    private fun followupRecordable(action: String) = action != "none" && action != "listen_for_phrase" &&
+        !action.startsWith("move_") && action != "stop" && !action.startsWith("grid_pick_")
+
+    /** The confirmer's answer to a watch: fill the follow-up slot, and a "no visible change" shrugs (never retries). */
+    // [followup]
+    private fun onConfirmResult(watch: Long, action: String, result: String, by: String?) {
+        val appNow = currentApp()
+        followups.onConfirm(watch, result, by, appNow)
+        if (result == "no visible change" && followups.current(SystemClock.elapsedRealtime(), appNow)?.watch == watch) {
+            if (ignoredGate.admit(SystemClock.elapsedRealtime())) {
+                try { overlay.badgePlayOnce(BadgeState.IGNORED) } catch (_: Exception) {}
+            }
+            EventLog.ev("badge", "event" to "no-change", "watch" to watch)
+        }
+    }
+
+    /** A spoken follow-up on the last action (Followup.kt): exact on-screen label wins, else [resolve] the slot. */
+    // [followup]
+    private fun followup(c: SpeechCommand.Followup, screenTargets: () -> List<Target>) {
+        val n = ++decisionCount
+        val now = SystemClock.elapsedRealtime()
+        val targets = screenTargets()
+        val saidNorm = TargetQuery.normalize(c.said)
+        // 1. LABEL WINS (every mode): an app's own "Undo" / "Try again" button is the better action. Exact equality only.
+        val labelHit = targets.firstOrNull { it.label.isNotBlank() && TargetQuery.normalize(it.label) == saidNorm }
+        if (labelHit != null) {
+            followupLog(n, c, "label", followups.current(now, currentApp()), null, now)
+            tapTarget(n, labelHit, "label over follow-up")
+            return
+        }
+        val last = followups.current(now, currentApp())
+        val plan = resolve(c.kind, c.dir, c.said, last, targets)
+        followupLog(n, c, followupResult(plan), last, (plan as? Plan.CantUndo)?.why ?: (plan as? Plan.Nothing)?.why, now)
+        when (plan) {
+            is Plan.Run -> act(n, generation, plan.mode, Decision(plan.action, "followup:${c.kind.name.lowercase()}", explicit = true), local = true)
+            is Plan.RunVolume -> {
+                val r = try { executor.setVolume(SpeechCommand.Volume(plan.stream, plan.op)) } catch (e: Exception) { Executor.Result(false, "error: $e") }
+                followups.record(Last.Volume(plan.op, plan.stream, SystemClock.elapsedRealtime(), currentApp(), watch = r.watch))
+                EventLog.ev("exec", "n" to n, "action" to "volume", "stream" to plan.stream.key, "op" to plan.op.describe(), "ok" to r.ok, "how" to r.how, "watch" to r.watch)
+                if (!r.ok) toast("couldn't change the volume")
+                updateBadge("volume")
+            }
+            is Plan.RunApp -> {
+                val appBefore = currentApp()
+                val r = try { executor.launchApp(plan.pkg) } catch (e: Exception) { Executor.Result(false, "error: $e") }
+                followups.record(Last.OpenApp(plan.pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
+                EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to plan.pkg, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
+                if (!r.ok) toast("couldn't open the app")
+                updateBadge("open ${plan.pkg}")
+            }
+            is Plan.Tap -> tapTarget(n, plan.target, "followup ${c.kind.name.lowercase()}", alternatives = plan.alternatives)
+            is Plan.Choose -> startChoice(n, plan.targets)
+            is Plan.CantUndo -> { toast(plan.why); updateBadge("") }
+            is Plan.Nothing -> { toast(plan.why); updateBadge("") }
+            Plan.Fallback -> c.fallback?.let { runCommand(it, screenTargets) } ?: toast("nothing to pick instead")
+        }
+    }
+
+    // [followup]
+    private fun followupResult(p: Plan): String = when (p) {
+        is Plan.Run, is Plan.RunVolume, is Plan.RunApp -> "run"
+        is Plan.Tap -> "tap"
+        is Plan.Choose -> "choose"
+        is Plan.CantUndo -> "cant_undo"
+        is Plan.Nothing -> "nothing"
+        Plan.Fallback -> "fallback"
+    }
+
+    // [followup] No label/option text here: the tap's own `target` event logs the option as today.
+    private fun followupLog(n: Long, c: SpeechCommand.Followup, result: String, last: Last?, why: String?, now: Long) {
+        EventLog.ev("followup", "n" to n, "kind" to c.kind.name.lowercase(),
+            "dir" to c.dir?.name?.lowercase(), "result" to result,
+            "last_kind" to when (last) { is Last.Action -> "action"; is Last.Volume -> "volume"; is Last.OpenApp -> "open_app"; is Last.Pick -> "pick"; null -> null },
+            "age_ms" to last?.let { now - it.at }, "confirm" to last?.confirm, "why" to why)
     }
 
     /**
@@ -1236,7 +1326,11 @@ class VoxService : AccessibilityService() {
         trace("target", JSONObject().put("query", query).put("query_raw", c.query).put("targets", targets.size).put("result", when (out) {
             is Targets.Outcome.Tap -> "tap"; is Targets.Outcome.Choose -> "choose"; else -> "not on screen" }))
         when (out) {
-            is Targets.Outcome.Tap -> tapTarget(n, out.target, "named")
+            is Targets.Outcome.Tap -> {
+                // [followup] the other ranked candidates become the "other one" list (score >= WEAK, up to 4).
+                val alternatives = TargetMatcher.rank(targets, query).filter { it.score >= TargetMatcher.WEAK && it.target != out.target }.take(4).map { it.target }
+                tapTarget(n, out.target, "named", alternatives = alternatives)
+            }
             is Targets.Outcome.Choose -> startChoice(n, out.targets)
             is Targets.Outcome.NotOnScreen -> when {
                 c.fallback != null -> runCommand(c.fallback) { targets }
@@ -1459,11 +1553,16 @@ class VoxService : AccessibilityService() {
             return
         }
         val t0 = SystemClock.elapsedRealtime()
+        // [followup] capture the app in front before the action so a follow-up knows what it acted on (never for
+        // "none", a listen, or cursor moves / stop / grid, which are not repeatable actions).
+        val appBefore = if (followupRecordable(d.action)) currentApp() else null
         val r = try { executor.perform(d.action, mode, confirmed) } catch (e: Exception) { Executor.Result(false, "error: $e") }
         // prep_ms: main-thread time up to the dispatch call (the Confirmer's before-fingerprint included).
         EventLog.ev("exec", "n" to n, "action" to d.action, "ok" to r.ok, "how" to r.how, "watch" to r.watch,
             "prep_ms" to SystemClock.elapsedRealtime() - t0)
         trace("exec", JSONObject().put("action", d.action).put("ok", r.ok).put("how", r.how).put("prep_ms", SystemClock.elapsedRealtime() - t0))
+        // [followup] the slot records the action whatever the outcome (ok or not); a later "try again" re-runs it.
+        if (appBefore != null) followups.record(Last.Action(d.action, mode, t0, appBefore, watch = r.watch))
         lastSwipe = if (r.ok && p != null && p.sequence.size == 1 && d.action in HoldScrollTrigger.DIRECTIONS)
             HoldScrollTrigger.Swipe(n, d.action, p.app, mode, p.stamps.lastOrNull(), p.firstAt) else null
         if (d.action != "none" && r.ok) {
@@ -1532,20 +1631,31 @@ class VoxService : AccessibilityService() {
         }
         when (out) {
             is Targets.Outcome.NotOnScreen -> { toast("not on screen"); EventLog.ev("target", "n" to n, "result" to "not on screen"); updateBadge("not on screen") }
-            is Targets.Outcome.Tap -> tapTarget(n, out.target, "confident")
+            is Targets.Outcome.Tap -> {
+                // [followup] the model's other candidates (NONE and the pick excluded, p >= 0.05) become the "other one" list.
+                val byOption = targets.associateBy { it.option }
+                val alternatives = a.top(3).mapNotNull { (opt, p) ->
+                    if (p >= 0.05 && opt != TargetVocab.NONE_OPTION && opt != out.target.option) byOption[opt] else null
+                }
+                tapTarget(n, out.target, "confident", alternatives = alternatives)
+            }
             is Targets.Outcome.Choose -> startChoice(n, out.targets)
         }
     }
 
-    /** A tap on a named screen target; an outward button ("Like", "Follow", "Send") waits for a confirm pop first. */
-    private fun tapTarget(n: Long, t: Target, why: String, confirmed: Boolean = false) {
+    /** A tap on a named screen target; an outward button ("Like", "Follow", "Send") waits for a confirm pop first.
+     *  [alternatives] ([followup]) are the ranked other candidates, recorded with the tap for "the other one". */
+    private fun tapTarget(n: Long, t: Target, why: String, confirmed: Boolean = false, alternatives: List<Target> = emptyList()) {
         if (!confirmed && Outward.isOutwardTarget(t.label)) {
             askConfirm(n, generation, deviceMode, "tap ${t.label}", "target", "outward button", settings.outwardConfirmMs) {
-                tapTarget(n, t, why, confirmed = true)
+                tapTarget(n, t, why, confirmed = true, alternatives = alternatives)
             }
             return
         }
+        val appBefore = currentApp()   // [followup]
         val r = try { executor.tapTarget(t, confirmed) } catch (e: Exception) { Executor.Result(false, "error: $e") }
+        // [followup] a tapped target is its own last slot (the tapped target plus the other candidates).
+        followups.record(Last.Pick(t, alternatives, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
         EventLog.ev("target", "n" to n, "result" to "tap", "why" to why, "option" to t.option, "x" to t.cx, "y" to t.cy,
             "ok" to r.ok, "how" to r.how, "watch" to r.watch)
         trace("exec", JSONObject().put("action", "tap_target").put("option", t.option).put("ok", r.ok).put("how", r.how))
@@ -1597,6 +1707,14 @@ class VoxService : AccessibilityService() {
         when (val r = SpokenPick.parse(text, c.candidates)) {
             is SpokenPick.Result.Tap -> pickChoice(r.index)
             SpokenPick.Result.Cancel -> cancelChoice("spoken cancel")
+            SpokenPick.Result.Next -> {
+                // [followup] "the other one" / "the next one" while picking: move the highlight (as rise does), keep listening.
+                c.next()
+                try { overlay.selectTarget(c.index) } catch (e: Exception) { EventLog.ev("error", "where" to "highlight", "error" to e.toString()) }
+                armChoiceTimeout()
+                openChoiceListening()
+                EventLog.ev("choice", "n" to choiceN, "event" to "select", "text" to text, "selected" to c.index + 1, "option" to c.selected.option)
+            }
             is SpokenPick.Result.Narrow -> {
                 if (r.targets.size == 1) {
                     val t = r.targets[0]
@@ -1631,14 +1749,15 @@ class VoxService : AccessibilityService() {
         val c = choice ?: return
         val t = c.candidates[idx - 1]
         EventLog.ev("choice", "n" to choiceN, "event" to "spoken_pick", "selected" to idx, "option" to t.option)
-        tapPicked(t, "spoken $idx")
+        // [followup] the open choice's other candidates (in order) become the "other one" list.
+        tapPicked(t, "spoken $idx", alternatives = c.candidates.filterIndexed { i, _ -> i != idx - 1 })
     }
 
-    private fun tapPicked(t: Target, why: String) {
+    private fun tapPicked(t: Target, why: String, alternatives: List<Target> = emptyList()) {
         val n = choiceN; val gen = generation
         cancelChoice(null)
         // Let the highlight window disappear before the tap (and before the confirmer's first screenshot).
-        main.postDelayed({ if (gen == generation && armed) tapTarget(n, t, why) }, 120)
+        main.postDelayed({ if (gen == generation && armed) tapTarget(n, t, why, alternatives = alternatives) }, 120)
     }
 
     /** The rules-only narrowing path: show only [targets], renumbered, and keep listening (user decision). */
@@ -2346,7 +2465,7 @@ class VoxService : AccessibilityService() {
                 reply.put("result", tr)
             }
             "reset" -> {
-                generation++; sequencer.cancel(); sequencer.resetClock(); clickMerge.reset(); cursorClickGuard.reset(); holdScroll.stop("reset"); dropBufferedHold(); lastSwipe = null; overlay.stop(); executor.cancelDrag(); listenWindow.cancel("reset"); dictation.stop("reset"); recent.clear()
+                generation++; sequencer.cancel(); sequencer.resetClock(); clickMerge.reset(); cursorClickGuard.reset(); holdScroll.stop("reset"); dropBufferedHold(); lastSwipe = null; overlay.stop(); executor.cancelDrag(); listenWindow.cancel("reset"); dictation.stop("reset"); recent.clear(); followups.clear()   // [followup]
                 cancelChoice("reset")
                 lastMsgId = null; armed = true; paused = false
                 if (m.optBoolean("clear_log")) EventLog.clear()

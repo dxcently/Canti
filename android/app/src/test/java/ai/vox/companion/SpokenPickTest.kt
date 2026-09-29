@@ -46,6 +46,14 @@ class SpokenPickTest {
         }
     }
 
+    @Test fun theOtherAndNextPhrasesMoveTheHighlight() {
+        for (s in listOf("the other one", "other one", "not that one", "the next one", "next one")) {
+            assertTrue("$s", SpokenPick.parse(s, any3()) is SpokenPick.Result.Next)
+        }
+        // "one" is a number word: the Next check runs before number parsing
+        assertTrue(SpokenPick.parse("the other one", any3()) is SpokenPick.Result.Next)
+    }
+
     // --- narrowing -----------------------------------------------------------------------------------------------------
 
     @Test fun narrowingToOneTapsIt() {

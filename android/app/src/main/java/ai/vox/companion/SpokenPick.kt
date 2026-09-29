@@ -25,6 +25,8 @@ object SpokenPick {
         /** Pick the 1-based candidate [index] (already range-checked). */
         data class Tap(val index: Int) : Result()
         object Cancel : Result()
+        /** Move the highlight to the next candidate (a follow-up "the other one" / "the next one" while picking). */
+        object Next : Result()
         /** The narrowed candidates (>= 1): one means tap it, several means renumber and keep listening. */
         data class Narrow(val targets: List<Target>) : Result()
         /** Keep the current choice and show [text]. */
@@ -34,6 +36,8 @@ object SpokenPick {
     }
 
     private val CANCEL = setOf("cancel", "never mind", "nevermind", "forget it")
+    /** Follow-up "other/next" phrases move the highlight (checked before the number words: "one" is a number). */
+    private val NEXT = setOf("the other one", "other one", "not that one", "the next one", "next one")
     private val LEAD_FILLER = setOf("number", "option", "open", "tap", "click", "press", "pick", "choose", "select",
         "the", "a", "an", "one", "of", "please", "it", "that", "this", "item")
 
@@ -42,6 +46,7 @@ object SpokenPick {
         val words = cleaned.split(' ').filter { it.isNotEmpty() }
         if (words.isEmpty()) return Result.Hint("say a number or more words")
         if (cleaned in CANCEL) return Result.Cancel
+        if (cleaned in NEXT) return Result.Next
 
         pickNumber(words)?.let { n ->
             return if (n in 1..candidates.size) Result.Tap(n)

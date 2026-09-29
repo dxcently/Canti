@@ -937,6 +937,113 @@ def tree_spoken_go_home_cancels_the_choice_and_goes_home(c: Ctx):
         srv.close()
 
 
+# --- spoken follow-ups (Followup.kt) ----------------------------------------------------------------------------------
+
+@test
+def followup_try_again_repeats_the_last_action(c: Ctx):
+    c.open(LIST)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="scroll down")
+    e1 = c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_down", 5)
+    assert e1 and e1["ok"], [e["ev"] for e in c.ev.since(m)]
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="try again")
+    f = c.ev.wait(m2, lambda e: e["ev"] == "followup" and e.get("result") == "run", 5)
+    assert f and f["kind"] == "retry" and f["last_kind"] == "action", [e["ev"] for e in c.ev.since(m2)]
+    e2 = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_down", 5)
+    assert e2 and e2["ok"], e2
+
+
+@test
+def followup_undo_after_swipe_swipes_back(c: Ctx):
+    c.open(LIST)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="scroll down")
+    c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_down", 5)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="undo")
+    f = c.ev.wait(m2, lambda e: e["ev"] == "followup" and e.get("result") == "run", 5)
+    assert f and f["kind"] == "undo", [e["ev"] for e in c.ev.since(m2)]
+    e = c.ev.wait(m2, lambda e: e["ev"] == "exec" and e.get("action") == "scroll_up", 5)
+    assert e and e["ok"], e
+
+
+@test
+def followup_cant_undo_after_home(c: Ctx):
+    c.open(MENU)
+    sh(f"am start -W -n {FEED}")
+    time.sleep(1.0)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="go home")
+    c.ev.wait(m, lambda e: e["ev"] == "exec" and e.get("action") == "home", 5)
+    m2 = c.ev.mark()
+    c.vox.control("phrase", text="undo")
+    f = c.ev.wait(m2, lambda e: e["ev"] == "followup" and e.get("result") == "cant_undo", 5)
+    assert f and f["why"] == "can't undo that", [e["ev"] for e in c.ev.since(m2)]
+    assert c.ev.wait(m2, lambda e: e["ev"] == "toast" and e.get("text") == "can't undo that", 5)
+
+
+@test
+def followup_no_visible_change_shrugs(c: Ctx):
+    c.open(STATIC)
+    m = c.ev.mark()
+    o = c.act("click")
+    assert o["confirm"]["result"] == "no visible change", o
+    assert c.ev.wait(m, lambda e: e["ev"] == "badge" and e.get("event") == "no-change", 3), \
+        [e["ev"] for e in c.ev.since(m)]
+
+
+@test
+def followup_the_other_one_taps_the_next_candidate(c: Ctx):
+    srv = FakeSystemOne()
+    try:
+        srv.option_format = "v2i"
+        enable_tree_context(c, srv)
+        c.open(TREE)
+        m = c.ev.mark()
+        c.vox.control("phrase", text="open vocabulary")
+        ch = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "choose", 5)
+        assert ch and len(ch["candidates"]) == 3, ch
+        c.vox.control("phrase", text="1")   # tap the first "01 Vocabulary" (L05)
+        tap = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
+        assert tap and "01 Vocabulary · L05" in tap["option"], tap
+        m2 = c.ev.mark()
+        c.vox.control("phrase", text="the other one")
+        f = c.ev.wait(m2, lambda e: e["ev"] == "followup" and e.get("result") == "choose", 3)
+        assert f and f["kind"] == "other", [e["ev"] for e in c.ev.since(m2)]
+        ch2 = c.ev.wait(m2, lambda e: e["ev"] == "target" and e.get("result") == "choose", 3)
+        assert ch2 and len(ch2["candidates"]) == 2, ch2
+        c.vox.control("phrase", text="1")   # pick the first remaining candidate and tap it
+        tap2 = c.ev.wait(m2, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
+        assert tap2 and "01 Vocabulary · L05" not in tap2["option"], tap2
+    finally:
+        srv.close()
+
+
+@test
+def followup_the_one_below_taps_the_item_below(c: Ctx):
+    srv = FakeSystemOne()
+    try:
+        srv.option_format = "v2i"
+        enable_tree_context(c, srv)
+        c.open(TREE)
+        m = c.ev.mark()
+        c.vox.control("phrase", text="open vocabulary")
+        ch = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "choose", 5)
+        assert ch and len(ch["candidates"]) == 3, ch
+        c.vox.control("phrase", text="1")   # tap L05's "01 Vocabulary"
+        tap = c.ev.wait(m, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
+        assert tap and "01 Vocabulary · L05" in tap["option"], tap
+        m2 = c.ev.mark()
+        c.vox.control("phrase", text="the one below")
+        f = c.ev.wait(m2, lambda e: e["ev"] == "followup" and e.get("result") == "tap", 3)
+        assert f and f["kind"] == "direction" and f["dir"] == "below", [e["ev"] for e in c.ev.since(m2)]
+        tap2 = c.ev.wait(m2, lambda e: e["ev"] == "target" and e.get("result") == "tap", 3)
+        assert tap2 and "01 Vocabulary · L06" in tap2["option"], tap2
+    finally:
+        srv.close()
+
+
 # --- F-Droid stand-ins: one gesture each ------------------------------------------------------------------------------
 
 # --- personalization (enrolled custom / ignore sounds) ------------------------------------------------------------------
