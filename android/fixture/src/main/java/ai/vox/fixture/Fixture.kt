@@ -263,6 +263,13 @@ class TreeActivity : Activity() {
             })
         }
         root.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        // Edge-to-edge (targetSdk 35): keep the echo out from under the status bar, where accessibility reports it not
+        // visible to the user and the confirmer cannot see the tap land.
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
         setContentView(root)
     }
 
