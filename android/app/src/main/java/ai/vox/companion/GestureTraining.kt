@@ -235,6 +235,10 @@ interface TrainHost : Scheduler {
     fun store(source: String): EnrollmentStore
     /** Changes [source]'s store and persists it (IllegalArgumentException with a reason on failure). */
     fun change(source: String, what: String, change: (EnrollmentStore) -> Unit)
+    /** The per-source trash of deleted takes (newest first), as a JSON array, or null when empty. */
+    fun trash(source: String): JSONArray?
+    /** Replaces [source]'s trash (a null or empty array removes it). */
+    fun saveTrash(source: String, entries: JSONArray?)
     fun wallMs(): Long
     fun log(vararg fields: Pair<String, Any?>)
     fun push(status: Map<String, Any?>)
@@ -287,6 +291,8 @@ class GestureTrainer(private val host: TrainHost) {
         const val TICK_MS = 20               // one live tick
         /** Auto-advance this long after a pass (the next undone cell), unless a command cancelled it. */
         const val AUTO_ADVANCE_MS = 1200L
+        /** The per-source trash of soft-deleted takes keeps at most this many entries (the oldest drop off). */
+        const val TRASH_MAX = 20
     }
 
     private inner class Session(val source: String, var gesture: String, var queue: List<TrainPlan.Cell>) {
@@ -325,6 +331,7 @@ class GestureTrainer(private val host: TrainHost) {
         // any command (other than a passive status read) cancels a pending auto-advance
         if (method != "train_status") { s?.autoAdvance?.invoke(); s?.autoAdvance = null }
         val src = (args["source"] as? String)
+        var undoId: Long? = null
         val err = try {
             when (method) {
                 "train_status" -> {}
@@ -342,15 +349,19 @@ class GestureTrainer(private val host: TrainHost) {
                     args["keep"] as? Boolean ?: throw IllegalArgumentException("train_confirm needs {keep}"))
                 "train_cancel" -> cancel("ui")
                 // train_delete does NOT fold: {gesture: "pop"} removes a legacy pop class (never the click class)
-                "train_delete" -> delete(src ?: host.source(), args["gesture"] as? String ?: throw IllegalArgumentException("train_delete needs {gesture}"),
+                "train_delete" -> undoId = delete(src ?: host.source(), args["gesture"] as? String ?: throw IllegalArgumentException("train_delete needs {gesture}"),
                     args["cell"] as? String)
+                "train_undelete" -> undelete(src ?: host.source(),
+                    (args["id"] as? Number)?.toLong() ?: throw IllegalArgumentException("train_undelete needs {id}"))
+                "train_trash_clear" -> clearTrash(src ?: host.source())
                 else -> throw IllegalArgumentException("unknown training command $method")
             }
             null
         } catch (e: IllegalArgumentException) { e.message ?: e.toString() }
         armIdle()
         val st = status(src)
-        val out = if (err != null) st + mapOf("error" to err) else st
+        val out = (if (err != null) st + mapOf("error" to err) else st)
+            .let { if (undoId != null) it + mapOf("undo_id" to undoId) else it }
         host.push(out)
         return out
     }
@@ -531,18 +542,80 @@ class GestureTrainer(private val host: TrainHost) {
         idleCancel?.invoke(); idleCancel = null
     }
 
-    private fun delete(source: String, gesture: String, cellId: String?) {
+    /** The removed example(s) of a soft delete, re-addable: each example as a SoundFeatures JSON (with the store's
+     *  fp_version) so train_undelete can `st.add` them back. */
+    private fun exampleJson(ver: String, e: EnrollExample): JSONObject =
+        JSONObject().put("fp", JSONArray(e.fp.toList())).put("fp_version", ver)
+            .put("pitch16", JSONArray(e.pitch16.toList())).also { if (e.meta != null) it.put("meta", e.meta) }
+
+    /** The next undo id for [source]'s trash: unique in it (a re-record's example id and the wall clock never collide). */
+    private fun nextTrashId(source: String): Long {
+        val tr = host.trash(source)
+        val max = tr?.let { a -> (0 until a.length()).maxOfOrNull { a.getJSONObject(it).optLong("id", -1L) } ?: -1L } ?: -1L
+        return maxOf(host.wallMs(), max + 1)
+    }
+
+    /** Prepends an entry to [source]'s trash (newest first), capping it at [TRASH_MAX] (the oldest drop off). */
+    private fun pushTrash(source: String, id: Long, gesture: String, cellId: String?, examples: JSONArray, t: Long) {
+        val entry = JSONObject().put("id", id).put("gesture", gesture)
+            .put("cell", cellId ?: JSONObject.NULL).put("examples", examples).put("t", t)
+        val cur = host.trash(source) ?: JSONArray()
+        val next = JSONArray().put(entry)
+        for (i in 0 until cur.length()) if (next.length() < TRASH_MAX) next.put(cur.getJSONObject(i))
+        host.saveTrash(source, next)
+    }
+
+    /** train_delete (soft): the removed example(s) move to the source's trash; the reply's `undo_id` addresses them. */
+    private fun delete(source: String, gesture: String, cellId: String?): Long? {
         // a legacy gesture:pop class (a pop counts as a click, 2026-09-28) can still be deleted whole — never the click class
         require(gesture in TrainPlan.GESTURES || (gesture == "pop" && cellId == null)) { "gesture must be one of ${TrainPlan.GESTURES}" }
         require(s?.let { it.gesture == gesture && it.source == source } != true) { "the $gesture card is being recorded: stop it first" }
         if (cellId != null) TrainPlan.cell(gesture, cellId)
-        host.change(source, "train delete $gesture${cellId?.let { " $it" } ?: ""}") { st ->
-            val c = st.find(gesture) ?: return@change
-            require(c.kind == EnrollmentStore.GESTURE) { "'$gesture' is a ${c.kind} class" }
-            if (cellId == null) st.delete(gesture)
-            else c.examples.indexOfFirst { it.cell == cellId }.takeIf { it >= 0 }?.let { st.delete(gesture, it) }
+        val st = host.store(source)
+        val c = st.find(gesture) ?: return null
+        require(c.kind == EnrollmentStore.GESTURE) { "'$gesture' is a ${c.kind} class" }
+        val removed = if (cellId == null) c.examples.toList() else c.examples.filter { it.cell == cellId }
+        if (removed.isEmpty()) return null
+        val undoId = nextTrashId(source)
+        val examplesJson = JSONArray(removed.map { exampleJson(st.fpVersion ?: "fp1", it) })
+        host.change(source, "train delete $gesture${cellId?.let { " $it" } ?: ""}") { s2 ->
+            val cc = s2.find(gesture) ?: return@change
+            if (cellId == null) s2.delete(gesture)
+            else cc.examples.indexOfFirst { it.cell == cellId }.takeIf { it >= 0 }?.let { s2.delete(gesture, it) }
         }
-        host.log("event" to "delete", "source" to source, "gesture" to gesture, "cell" to cellId)
+        pushTrash(source, undoId, gesture, cellId, examplesJson, host.wallMs())
+        host.log("event" to "delete", "source" to source, "gesture" to gesture, "cell" to cellId, "undo_id" to undoId)
+        return undoId
+    }
+
+    /** train_undelete {id}: puts a trashed delete back, unless that cell (or class) has been recorded again since. */
+    private fun undelete(source: String, id: Long) {
+        require(source in EnrollmentStore.SOURCES) { "source must be one of ${EnrollmentStore.SOURCES}" }
+        val tr = host.trash(source) ?: throw IllegalArgumentException("no deleted take with id $id to restore")
+        val idx = (0 until tr.length()).indexOfFirst { tr.getJSONObject(it).optLong("id", -1L) == id }
+        require(idx >= 0) { "no deleted take with id $id to restore" }
+        val entry = tr.getJSONObject(idx)
+        val gesture = entry.getString("gesture")
+        val cell = entry.optString("cell").takeIf { it.isNotEmpty() }
+        val st = host.store(source)
+        val c = st.find(gesture)
+        val recordedAgain = if (cell != null) c?.examples?.any { it.cell == cell } == true
+            else c != null && c.examples.isNotEmpty()
+        require(!recordedAgain) { "recorded again since" }
+        val exs = entry.getJSONArray("examples")
+        val feats = List(exs.length()) { SoundFeatures.parse(exs.getJSONObject(it), "trash[$it]") }
+        host.change(source, "train undelete $id") { s2 -> s2.add(EnrollmentStore.GESTURE, gesture, feats) }
+        val next = JSONArray()
+        for (i in 0 until tr.length()) if (i != idx) next.put(tr.getJSONObject(i))
+        host.saveTrash(source, if (next.length() == 0) null else next)
+        host.log("event" to "undelete", "source" to source, "id" to id, "gesture" to gesture, "cell" to cell)
+    }
+
+    /** train_trash_clear: empties a source's trash. */
+    private fun clearTrash(source: String) {
+        require(source in EnrollmentStore.SOURCES) { "source must be one of ${EnrollmentStore.SOURCES}" }
+        host.saveTrash(source, null)
+        host.log("event" to "trash_clear", "source" to source)
     }
 
     private fun armIdle() {

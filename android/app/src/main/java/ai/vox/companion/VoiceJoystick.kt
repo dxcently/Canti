@@ -424,6 +424,24 @@ class VoiceJoystick(
                     cancelCalibration("ui")
                     return idleStatus()
                 }
+                "calib_delete" -> {
+                    val src = args["source"] as? String ?: source
+                    require(calib == null) { "Finish or cancel the calibration first" }
+                    val step = JoyCalibration.canonical(args["step"] as? String ?: throw IllegalArgumentException("calib_delete needs {step: ${JoyCalibration.STEPS.joinToString(" | ")}}"))
+                    require(step in JoyCalibration.STEPS) { "step must be one of ${JoyCalibration.STEPS}" }
+                    saves.delete(src, step, spec, System.currentTimeMillis())
+                    EventLog.ev("calib", "event" to "delete", "source" to src, "step" to step)
+                    if (src == source) { loadProfile(); mic?.extractorJson = VxNative.overridesJson(profile?.extractor) }
+                    return idleStatus()
+                }
+                "calib_undelete" -> {
+                    val src = args["source"] as? String ?: source
+                    require(calib == null) { "Finish or cancel the calibration first" }
+                    saves.undelete(src)
+                    EventLog.ev("calib", "event" to "undelete", "source" to src)
+                    if (src == source) { loadProfile(); mic?.extractorJson = VxNative.overridesJson(profile?.extractor) }
+                    return idleStatus()
+                }
                 "calib_status" -> {}
                 else -> throw IllegalArgumentException("unknown calibration command $method")
             }

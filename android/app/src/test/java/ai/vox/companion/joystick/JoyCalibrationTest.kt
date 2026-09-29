@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -594,5 +595,105 @@ class JoyCalibrationTest {
         // the pops examples still feed the level gate
         assertEquals(CalibV2.deriveGate(p.popsExamples, p.clicksExamples, p.hissExamples, p.room, spec), p.gate(spec))
         assertNotEquals(CalibV2.deriveGate(null, p.clicksExamples, p.hissExamples, p.room, spec), p.gate(spec))
+    }
+
+    // --- calib_delete / calib_undelete (range-calibdel-k) ------------------------------------------------------------
+
+    /** The step's measured fields are equal between two profiles (the arrays by content). */
+    private fun assertSameFields(a: JoyProfile, b: JoyProfile, step: String) {
+        when (step) {
+            "hum" -> { assertEquals(a.homeSt, b.homeSt); assertEquals(a.clarityOn, b.clarityOn) }
+            "glide" -> { assertEquals(a.loSt, b.loSt); assertEquals(a.hiSt, b.hiSt) }
+            "vowels" -> {
+                val ac = a.centroids
+                if (ac == null) assertNull(b.centroids) else {
+                    assertNotNull(b.centroids); assertEquals(ac.keys, b.centroids!!.keys)
+                    ac.forEach { (k, v) -> assertTrue("centroids[$k]", b.centroids!![k]!!.contentEquals(v)) }
+                }
+                assertEquals(a.vowelDeadZone, b.vowelDeadZone); assertEquals(a.vowelFull, b.vowelFull); assertEquals(a.vowelReport, b.vowelReport)
+            }
+            "clicks" -> assertEquals(a.clicksExamples, b.clicksExamples)
+            "whistle" -> assertEquals(a.whistle, b.whistle)
+            "hiss" -> assertEquals(a.hissExamples, b.hissExamples)
+            "room" -> assertEquals(a.room, b.room)
+        }
+    }
+
+    @Test fun calibDeleteClearsEachStepAndKeepsTheOthersByteIdentical() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        feed(cal, c, 0.0); if (cal.state == "failed") cal.skip()
+        saves.complete(cal, 2_000)
+        val full = savedProfile(prefs)
+        val fullJson = full.toJson().toString()
+        for (step in JoyCalibration.STEPS) {
+            prefs.m["calib_phone"] = fullJson; prefs.m.remove("calib_progress_phone"); prefs.m.remove("calib_trash_phone")
+            saves.delete("phone", step, spec, 3_000L)
+            val after = savedProfile(prefs)
+            assertTrue("$step missing", step in after.missingSteps)         // not done
+            assertFalse("$step skipped", step in after.skipped)             // and removed from skipped if it was there
+            assertTrue("$step needs recalibration", after.needsRecalibration)
+            for (other in JoyCalibration.STEPS) if (other != step) assertSameFields(full, after, other)
+        }
+    }
+
+    @Test fun calibDeleteRederivesTheGateAndRewritesTheProgress() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        feed(cal, c, 0.0); if (cal.state == "failed") cal.skip()
+        saves.complete(cal, 2_000)
+        val before = savedProfile(prefs)
+        assertNotNull(before.levelGate)
+        saves.delete("phone", "clicks", spec, 3_000L)
+        val after = savedProfile(prefs)
+        // the gate is derived again from the examples left (clicks gone), not the saved value
+        assertEquals(CalibV2.deriveGate(after.popsExamples, null, after.hissExamples, after.room, spec), after.levelGate)
+        assertNotEquals(before.levelGate, after.levelGate)
+        // a complete profile had no progress: the delete writes one with every other finished step
+        assertEquals(listOf("hum", "glide", "vowels", "whistle", "hiss", "room"), savedDone(prefs))
+        assertEquals(mapOf("step" to "clicks", "done_steps" to listOf("hum", "glide", "vowels", "whistle", "hiss", "room")), saves.resume("phone"))
+    }
+
+    @Test fun calibUndoRestoresTheProfileAndProgress() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        feed(cal, c, 0.0); if (cal.state == "failed") cal.skip()
+        saves.complete(cal, 2_000)
+        val full = savedProfile(prefs)
+        saves.delete("phone", "clicks", spec, 3_000L)
+        assertNull(savedProfile(prefs).clicksExamples)
+        val restored = saves.undelete("phone")
+        assertEquals(full.savedAtMs, restored.savedAtMs); assertTrue(restored.complete)
+        assertEquals(full.levelGate, restored.levelGate); assertEquals(full.skipped, restored.skipped)
+        for (step in JoyCalibration.STEPS) assertSameFields(full, restored, step)
+        assertNull(prefs.m["calib_trash_phone"])          // the stash goes
+        assertNull(prefs.m["calib_progress_phone"])       // the complete profile's (absent) progress stays absent
+    }
+
+    @Test fun calibUndeleteRefusedAfterANewSave() {
+        val c = case("setup")
+        val prefs = MapPrefs()
+        val saves = CalibSaves(prefs)
+        val cal = saves.start(spec, "phone", null, null, 1_000)
+        feed(cal, c, 0.0); if (cal.state == "failed") cal.skip()
+        saves.complete(cal, 2_000)
+        saves.delete("phone", "clicks", spec, 3_000L)
+        // the saved profile is written again after the delete (a new save) with a later saved_at_ms
+        val cur = savedProfile(prefs)
+        prefs.m["calib_phone"] = cur.copy(savedAtMs = 4_000L).toJson().toString()
+        val e = assertThrows(IllegalArgumentException::class.java) { saves.undelete("phone") }
+        assertEquals("calibrated again since", e.message)
+        // and a new calib_start clears the stash outright
+        prefs.m["calib_phone"] = cur.copy(savedAtMs = 3_000L).toJson().toString()
+        saves.start(spec, "phone", null, null, 5_000L)
+        assertNull(prefs.m["calib_trash_phone"])
+        val e2 = assertThrows(IllegalArgumentException::class.java) { saves.undelete("phone") }
+        assertEquals("nothing to undelete for phone", e2.message)
     }
 }

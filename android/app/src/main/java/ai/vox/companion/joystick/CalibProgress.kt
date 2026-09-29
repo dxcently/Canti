@@ -63,6 +63,8 @@ class CalibSaves(private val prefs: CalibPrefs, private val onError: (what: Stri
 
     fun profileKey(src: String) = "calib_$src"
     fun progressKey(src: String) = "calib_progress_$src"
+    /** `calib_trash_<source>`: the profile + progress a calib_delete stashed, for calib_undelete (one level). */
+    fun trashKey(src: String) = "calib_trash_$src"
 
     fun load(src: String): JoyProfile? = prefs.get(profileKey(src))?.let {
         try { JoyProfile.fromJson(JSONObject(it)) } catch (e: Exception) { onError("joystick profile", e); null }
@@ -86,6 +88,8 @@ class CalibSaves(private val prefs: CalibPrefs, private val onError: (what: Stri
         baseDone = if (resumed) prevDone.toSet()
             else JoyCalibration.STEPS.filter { it !in cal.steps && base != null && it !in base.missingSteps }.toSet()
         savedFinishes = 0
+        // a new run clears a calib_delete's undo stash (the saved profile is about to change)
+        if (prefs.get(trashKey(src)) != null) prefs.put(mapOf(trashKey(src) to null))
         return cal
     }
 
@@ -115,5 +119,43 @@ class CalibSaves(private val prefs: CalibPrefs, private val onError: (what: Stri
         val done = CalibProgress.doneStepsOf(prog)
         val step = CalibProgress.resumeStep(done) ?: return null
         return linkedMapOf("step" to step, "done_steps" to done)
+    }
+
+    /** calib_delete: clear [step]'s measured fields on [src]'s saved profile (no run may be open). The other steps'
+     *  values are untouched. The old profile + progress are stashed in [trashKey] (one level) for calib_undelete. */
+    fun delete(src: String, step: String, spec: JoySpec, nowMs: Long): JoyProfile {
+        val p = load(src) ?: throw IllegalArgumentException("no saved calibration for $src")
+        require(step in JoyCalibration.STEPS) { "step must be one of ${JoyCalibration.STEPS}" }
+        val prog = progress(src)
+        // stash before writing: the old profile + progress, the step, and the save time the delete writes (the undo's guard)
+        prefs.put(mapOf(trashKey(src) to JSONObject()
+            .put("profile", p.toJson()).put("progress", prog ?: JSONObject.NULL)
+            .put("step", step).put("t", nowMs).toString()))
+        // clear the step (its fields, and `skipped` if it was there), then re-derive the gate from what is left
+        var q = p.resetStep(step)
+        q = q.copy(skipped = q.skipped.filter { it != step }, complete = false, savedAtMs = nowMs,
+            levelGate = CalibV2.deriveGate(q.popsExamples, q.clicksExamples, q.hissExamples, q.room, spec), clickPop = null)
+        // the progress: drop the step from done_steps; a complete profile had none, so write every other finished step
+        val newProg = if (prog != null)
+            CalibProgress.toJson(CalibProgress.doneStepsOf(prog).filter { it != step }, step, nowMs)
+        else CalibProgress.toJson(JoyCalibration.STEPS.filter { it != step }, step, nowMs)
+        prefs.put(mapOf(profileKey(src) to q.toJson().toString(), progressKey(src) to newProg.toString()))
+        return q
+    }
+
+    /** calib_undelete: restore the profile + progress a calib_delete stashed, unless the saved profile has since been
+     *  written again (a new save or run): then it is "calibrated again since". */
+    fun undelete(src: String): JoyProfile {
+        val tr = prefs.get(trashKey(src))?.let {
+            try { JSONObject(it) } catch (e: Exception) { onError("calibration trash", e); null }
+        } ?: throw IllegalArgumentException("nothing to undelete for $src")
+        val t = tr.optLong("t", 0)
+        val p = load(src) ?: throw IllegalStateException("no saved calibration for $src")
+        require(p.savedAtMs == t) { "calibrated again since" }
+        val profile = tr.getJSONObject("profile")
+        val progress = if (tr.isNull("progress")) null else tr.getJSONObject("progress")
+        prefs.put(mapOf(profileKey(src) to profile.toString(),
+            progressKey(src) to progress?.toString(), trashKey(src) to null))
+        return JoyProfile.fromJson(profile)
     }
 }

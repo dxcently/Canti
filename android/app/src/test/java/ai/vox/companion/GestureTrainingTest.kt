@@ -1,5 +1,6 @@
 package ai.vox.companion
 
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -47,6 +48,7 @@ class GestureTrainingTest {
         var drop: String? = null
         var ticksOn = false
         val stores = mutableMapOf<String, EnrollmentStore>()
+        val trashes = mutableMapOf<String, JSONArray>()
         val logs = mutableListOf<Map<String, Any?>>()
         val pushes = mutableListOf<Map<String, Any?>>()
         override fun now() = t
@@ -73,6 +75,8 @@ class GestureTrainingTest {
         override fun wallMs() = ++wall
         override fun store(source: String) = stores.getOrPut(source) { EnrollmentStore("default", source) }
         override fun change(source: String, what: String, change: (EnrollmentStore) -> Unit) = change(store(source))
+        override fun trash(source: String) = trashes[source]
+        override fun saveTrash(source: String, entries: JSONArray?) { if (entries == null) trashes.remove(source) else trashes[source] = entries }
         override fun log(vararg fields: Pair<String, Any?>) { logs += fields.toMap() }
         override fun push(status: Map<String, Any?>) { pushes += status }
     }
@@ -568,5 +572,63 @@ class GestureTrainingTest {
         val ex = h.store("phone").find("click")!!.examples.single()
         assertEquals("pop", ex.meta!!.getJSONObject("heard").getString("label"))
         assertFalse(ex.meta!!.optBoolean("label_mismatch"))
+    }
+
+    // --- soft delete / undo (range-calibdel-k) --------------------------------------------------------------------------
+
+    @Test fun softDeleteTrashesATakeAndUndoRestoresIt() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        h.store("phone").add("gesture", "click", listOf(
+            feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "soft-1").put("id", 1)),
+            feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "soft-2").put("id", 2))))
+        val r = t.command("train_delete", mapOf("gesture" to "click", "cell" to "soft-1"))
+        val undoId = r["undo_id"] as Long
+        assertEquals("soft-2", h.store("phone").find("click")!!.examples.single().cell)   // the other cell stays
+        assertEquals(1, h.trash("phone")!!.length())
+        // undo puts the example back with its cell and id, beside the one that stayed
+        t.command("train_undelete", mapOf("id" to undoId))
+        assertEquals(setOf("soft-1", "soft-2"), h.store("phone").find("click")!!.examples.map { it.cell }.toSet())
+        assertEquals(1L, h.store("phone").find("click")!!.examples.first { it.cell == "soft-1" }.meta!!.getLong("id"))
+        assertNull(h.trash("phone"))
+    }
+
+    @Test fun aWholeClassDeleteComesBackWhole() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        h.store("phone").add("gesture", "hiss", listOf(
+            feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "soft-1")),
+            feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "loud-2"))))
+        val r = t.command("train_delete", mapOf("gesture" to "hiss"))
+        val undoId = r["undo_id"] as Long
+        assertNull(h.store("phone").find("hiss"))
+        t.command("train_undelete", mapOf("id" to undoId))
+        assertEquals(setOf("soft-1", "loud-2"), h.store("phone").find("hiss")!!.examples.mapNotNull { it.cell }.toSet())
+        assertNull(h.trash("phone"))
+    }
+
+    @Test fun undoRefusedAfterARecordAgain() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        h.store("phone").add("gesture", "click", listOf(feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "soft-1"))))
+        val r = t.command("train_delete", mapOf("gesture" to "click", "cell" to "soft-1"))
+        val undoId = r["undo_id"] as Long
+        h.store("phone").add("gesture", "click", listOf(feats(null, DoubleArray(0)).withMeta(JSONObject().put("cell", "soft-1"))))
+        val e = t.command("train_undelete", mapOf("id" to undoId))["error"] as String
+        assertEquals("recorded again since", e)
+    }
+
+    @Test fun trashCapsAtTwentyNewestFirst() {
+        val h = FakeHost(); val t = GestureTrainer(h)
+        val cells = TrainPlan.GESTURES.flatMap { g -> TrainPlan.cells(g).map { g to it.id } }
+        for ((g, cell) in cells.take(21)) {
+            val ex = (if (g in TrainPlan.CONTOURS) feats(200.0, pitchFor(g)) else feats(null, DoubleArray(0)))
+                .withMeta(JSONObject().put("cell", cell))
+            h.store("phone").add("gesture", g, listOf(ex))
+        }
+        val undoIds = mutableListOf<Long>()
+        for ((g, cell) in cells.take(21)) undoIds += t.command("train_delete", mapOf("gesture" to g, "cell" to cell))["undo_id"] as Long
+        val tr = h.trash("phone")!!
+        assertEquals(20, tr.length())                       // the oldest entry dropped off
+        val ids = (0 until tr.length()).map { tr.getJSONObject(it).getLong("id") }
+        assertTrue(undoIds.first() !in ids)                 // the first delete is gone
+        assertEquals(undoIds.drop(1), ids.reversed())       // newest first
     }
 }
