@@ -1,0 +1,222 @@
+===== test_iid =====
+{
+  "sweep-v6-e5-small-e3.test_iid.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.9985,
+    "nll": 0.002590099474619371,
+    "ece": 0.001568937500000008,
+    "false_trigger_rate": 0.00411522633744856,
+    "missed_command_rate": 0.0006605019815059445,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 0.992,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 1.0,
+      "not_deliberate": 1.0,
+      "phrase": 1.0,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.993,
+      "sequence": 1.0,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 8.81,
+    "latency_ms_p95": 9.79
+  },
+  "sweep-v6-e5-small-e3-s2.test_iid.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.999,
+    "nll": 0.0011377162885285916,
+    "ece": 0.0008628809999999937,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.0,
+    "by_kind": {
+      "app_rule": 0.993,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 1.0,
+      "not_deliberate": 1.0,
+      "phrase": 1.0,
+      "phrase_rule": 1.0,
+      "screen_phrase": 1.0,
+      "sequence": 1.0,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 8.83,
+    "latency_ms_p95": 9.77
+  },
+  "sweep-v6-e5-small-e3-ens.test_iid.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 1.0,
+    "nll": 0.0014232381630649316,
+    "ece": 0.0012159385000000036,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.0,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 1.0,
+      "not_deliberate": 1.0,
+      "phrase": 1.0,
+      "phrase_rule": 1.0,
+      "screen_phrase": 1.0,
+      "sequence": 1.0,
+      "unbound": 1.0
+    }
+  }
+}
+
+===== test_unseen_phrasing =====
+{
+  "sweep-v6-e5-small-e3.test_unseen_phrasing.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.996,
+    "nll": 0.010802215313197786,
+    "ece": 0.0019181920000000711,
+    "false_trigger_rate": 0.0022522522522522522,
+    "missed_command_rate": 0.0012853470437017994,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 1.0,
+      "not_deliberate": 1.0,
+      "phrase": 0.967,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.982,
+      "sequence": 1.0,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 8.82,
+    "latency_ms_p95": 9.9
+  },
+  "sweep-v6-e5-small-e3-s2.test_unseen_phrasing.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.986,
+    "nll": 0.04473079601609973,
+    "ece": 0.011899924000000055,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.0,
+    "by_kind": {
+      "app_rule": 0.98,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 0.968,
+      "not_deliberate": 1.0,
+      "phrase": 0.974,
+      "phrase_rule": 0.968,
+      "screen_phrase": 0.982,
+      "sequence": 0.978,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 8.82,
+    "latency_ms_p95": 9.83
+  },
+  "sweep-v6-e5-small-e3-ens.test_unseen_phrasing.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.9975,
+    "nll": 0.012879292716909428,
+    "ece": 0.007311044500000012,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.0,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 1.0,
+      "not_deliberate": 1.0,
+      "phrase": 0.987,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.982,
+      "sequence": 1.0,
+      "unbound": 1.0
+    }
+  }
+}
+
+===== test_unseen_apps =====
+{
+  "sweep-v6-e5-small-e3.test_unseen_apps.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.994,
+    "nll": 0.017586098445481237,
+    "ece": 0.003562427500000055,
+    "false_trigger_rate": 0.0021141649048625794,
+    "missed_command_rate": 0.0013097576948264572,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 0.993,
+      "not_deliberate": 1.0,
+      "phrase": 1.0,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.931,
+      "sequence": 1.0,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 8.77,
+    "latency_ms_p95": 9.79
+  },
+  "sweep-v6-e5-small-e3-s2.test_unseen_apps.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.9895,
+    "nll": 0.04339234583504844,
+    "ece": 0.00876170650000005,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.0,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 0.987,
+      "not_deliberate": 1.0,
+      "phrase": 0.988,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.893,
+      "sequence": 1.0,
+      "unbound": 1.0
+    },
+    "latency_ms_p50": 8.8,
+    "latency_ms_p95": 9.79
+  },
+  "sweep-v6-e5-small-e3-ens.test_unseen_apps.jsonl": {
+    "n": 2000,
+    "coverage": 1.0,
+    "accuracy": 0.9945,
+    "nll": 0.019224814813085234,
+    "ece": 0.004090438999999964,
+    "false_trigger_rate": 0.0,
+    "missed_command_rate": 0.0,
+    "by_kind": {
+      "app_rule": 1.0,
+      "cursor": 1.0,
+      "default": 1.0,
+      "disabled": 1.0,
+      "global_rule": 0.993,
+      "not_deliberate": 1.0,
+      "phrase": 0.994,
+      "phrase_rule": 1.0,
+      "screen_phrase": 0.943,
+      "sequence": 1.0,
+      "unbound": 1.0
+    }
+  }
+}
+

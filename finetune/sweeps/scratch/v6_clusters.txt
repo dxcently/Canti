@@ -1,0 +1,78 @@
+=== test_iid ===  (gold test_iid.jsonl: 2000 rows)
+preds: v6-e5-small-e3, v6-e5-small-e3-s2  pass threshold: 0.95
+
+overall accuracy v6-e5-small-e3           0.9985  (1997/2000)
+overall accuracy v6-e5-small-e3-s2        0.9990  (1998/2000)
+seed mean 0.9988   range 0.9985-0.9990
+
+(no held-out wording clusters for test_iid; nothing more to report)
+
+=== test_unseen_phrasing ===  (gold test_unseen_phrasing.jsonl: 2000 rows)
+preds: v6-e5-small-e3, v6-e5-small-e3-s2  pass threshold: 0.95
+
+overall accuracy v6-e5-small-e3           0.9960  (1992/2000)
+overall accuracy v6-e5-small-e3-s2        0.9860  (1972/2000)
+seed mean 0.9910   range 0.9860-0.9960
+
+cluster                                                  nv6-e5-small-e3v6-e5-small-e3-s2                    pass
+-----------------------------------------------------------------------------------------------------------------
+back "return to the previous screen"                    54     54/54     54/54v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+double_tap "touch the screen two times quickly"         36     36/36     36/36v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+home "jump to the launcher"                             39     39/39     39/39v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+like "give it a heart"                                  25     25/25     25/25v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+listen_for_phrase "wait for my spoken command"          31     31/31     31/31v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+long_press "keep a finger held down"                    41     41/41     41/41v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+next_item "move on to the following one"                32     32/32     32/32v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+notifications "show my alerts"                          34     34/34     34/34v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+open_camera "start the camera app"                      26     26/26     26/26v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+play_pause "start or stop the media"                    39     39/39     39/39v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+previous_item "return to the prior one"                 31     31/31     31/31v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+recents "show my open apps"                             46     46/46     46/46v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+scroll_down "nudge the page down"                       31     31/31     31/31v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+scroll_up "nudge the page up"                           33     33/33     33/33v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+swipe_down "drag the page downward"                     45     45/45     45/45v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+swipe_left "slide the screen to the left"               37     37/37     37/37v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+swipe_right "slide the screen to the right"             41     40/41     41/41v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+swipe_up "push the screen upward"                       33     33/33     12/33v6-e5-small-e3:Y v6-e5-small-e3-s2:N
+take_photo "capture an image"                           28     28/28     28/28v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+tap "touch the screen once"                             35     35/35     35/35v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+volume_down "lower the sound level"                     33     33/33     33/33v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+volume_up "raise the sound level"                       32     32/32     32/32v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+zoom_in "make things bigger"                            38     38/38     38/38v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+zoom_out "make things smaller"                          34     34/34     34/34v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+"app switcher"                                          15     15/15     15/15v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+"enlarge"                                               20     20/20     20/20v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+"favourite"                                             17     17/17     17/17v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+"previous"                                              34     29/34     28/34v6-e5-small-e3:N v6-e5-small-e3-s2:N
+"turn it down"                                          18     18/18     17/18v6-e5-small-e3:Y v6-e5-small-e3-s2:N
+
+clusters passing (>= 0.95): v6-e5-small-e3 28/29
+clusters passing (>= 0.95): v6-e5-small-e3-s2 26/29
+cluster categories: ['action', 'phrase']
+
+=== test_unseen_apps ===  (gold test_unseen_apps.jsonl: 2000 rows)
+preds: v6-e5-small-e3, v6-e5-small-e3-s2  pass threshold: 0.95
+
+overall accuracy v6-e5-small-e3           0.9940  (1988/2000)
+overall accuracy v6-e5-small-e3-s2        0.9895  (1979/2000)
+seed mean 0.9918   range 0.9895-0.9940
+
+cluster                                                  nv6-e5-small-e3v6-e5-small-e3-s2                    pass
+-----------------------------------------------------------------------------------------------------------------
+com.duolingo / (no screen)                              83     83/83     83/83v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.duolingo / dialog                                  226   226/226   222/226v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.duolingo / other                                   200   200/200   196/200v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.google.android.apps.docs / (no screen)              55     55/55     55/55v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.google.android.apps.docs / document                214   208/214   203/214v6-e5-small-e3:Y v6-e5-small-e3-s2:N
+com.google.android.apps.docs / text entry              212   209/212   211/212v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.netflix.mediaclient / (no screen)                   72     72/72     72/72v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.netflix.mediaclient / scrolling list               213   213/213   213/213v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.netflix.mediaclient / video player                 216   215/216   216/216v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.pinterest / (no screen)                             73     73/73     73/73v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.pinterest / photo viewer                           216   216/216   216/216v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+com.pinterest / scrolling list                         220   218/220   219/220v6-e5-small-e3:Y v6-e5-small-e3-s2:Y
+
+clusters passing (>= 0.95): v6-e5-small-e3 12/12
+clusters passing (>= 0.95): v6-e5-small-e3-s2 11/12
+cluster categories: ['app_screen']
+

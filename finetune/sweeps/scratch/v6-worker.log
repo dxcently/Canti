@@ -317,3 +317,4 @@ The queue is running: `device: cuda` confirmed, training progressing (step 100, 
 [in 4.21M out 50.0k · 75 calls · $0.516]
 [162.7 tok/s · first token 2.1s · 6m 18s over 75 calls]
 [waiting: the session parked on a condition it named and will wake when it fires, or when its deadline arrives]
+[context 104.2k/1.00M (10%) · session in 4.21M out 50.0k (4.11M cached) · $0.516]

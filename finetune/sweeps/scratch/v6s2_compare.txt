@@ -1,0 +1,95 @@
+
+=== test_iid ===
+n rows compared: 2000  (agree right 1995, agree wrong 0, discordant 2+3=5)
+
+metric                v6-e5-small-e3v6-e5-small-e3-s2   delta(11-7)
+accuracy                    0.9985      0.9990       +0.0005
+nll                         0.0026      0.0011       -0.0015
+ece                         0.0016      0.0009       -0.0007
+false_trigger_rate          0.0041      0.0000       -0.0041
+missed_command_rate         0.0007      0.0000       -0.0007
+
+kind            v6-e5-small-e3v6-e5-small-e3-s2     delta
+app_rule        272/272=1.0000270/272=0.9926   -0.0074
+cursor          250/252=0.9921252/252=1.0000   +0.0079
+default         236/236=1.0000236/236=1.0000   +0.0000
+disabled          57/57=1.0000  57/57=1.0000   +0.0000
+global_rule     143/143=1.0000143/143=1.0000   +0.0000
+not_deliberate  263/263=1.0000263/263=1.0000   +0.0000
+phrase          156/156=1.0000156/156=1.0000   +0.0000
+phrase_rule     155/155=1.0000155/155=1.0000   +0.0000
+screen_phrase   147/148=0.9932148/148=1.0000   +0.0068
+sequence        241/241=1.0000241/241=1.0000   +0.0000
+unbound           77/77=1.0000  77/77=1.0000   +0.0000
+
+paired (McNemar): seed7-right/seed11-wrong b=2, seed7-wrong/seed11-right c=3, exact two-sided p=1.000000
+
+=== test_unseen_phrasing ===
+n rows compared: 2000  (agree right 1966, agree wrong 2, discordant 26+6=32)
+
+metric                v6-e5-small-e3v6-e5-small-e3-s2   delta(11-7)
+accuracy                    0.9960      0.9860       -0.0100
+nll                         0.0108      0.0447       +0.0339
+ece                         0.0019      0.0119       +0.0100
+false_trigger_rate          0.0023      0.0000       -0.0023
+missed_command_rate         0.0013      0.0000       -0.0013
+
+kind            v6-e5-small-e3v6-e5-small-e3-s2     delta
+app_rule        297/297=1.0000291/297=0.9798   -0.0202
+cursor          232/232=1.0000232/232=1.0000   +0.0000
+default         244/244=1.0000244/244=1.0000   +0.0000
+disabled          75/75=1.0000  75/75=1.0000   +0.0000
+global_rule     154/154=1.0000149/154=0.9675   -0.0325
+not_deliberate  218/218=1.0000218/218=1.0000   +0.0000
+phrase          146/151=0.9669147/151=0.9735   +0.0066
+phrase_rule     156/156=1.0000151/156=0.9679   -0.0321
+screen_phrase   164/167=0.9820164/167=0.9820   +0.0000
+sequence        228/228=1.0000223/228=0.9781   -0.0219
+unbound           78/78=1.0000  78/78=1.0000   +0.0000
+
+paired (McNemar): seed7-right/seed11-wrong b=26, seed7-wrong/seed11-right c=6, exact two-sided p=0.000535
+
+=== test_unseen_apps ===
+n rows compared: 2000  (agree right 1973, agree wrong 6, discordant 15+6=21)
+
+metric                v6-e5-small-e3v6-e5-small-e3-s2   delta(11-7)
+accuracy                    0.9940      0.9895       -0.0045
+nll                         0.0176      0.0434       +0.0258
+ece                         0.0036      0.0088       +0.0052
+false_trigger_rate          0.0021      0.0000       -0.0021
+missed_command_rate         0.0013      0.0000       -0.0013
+
+kind            v6-e5-small-e3v6-e5-small-e3-s2     delta
+app_rule        284/284=1.0000284/284=1.0000   +0.0000
+cursor          213/213=1.0000213/213=1.0000   +0.0000
+default         238/238=1.0000238/238=1.0000   +0.0000
+disabled          66/66=1.0000  66/66=1.0000   +0.0000
+global_rule     152/153=0.9935151/153=0.9869   -0.0065
+not_deliberate  252/252=1.0000252/252=1.0000   +0.0000
+phrase          173/173=1.0000171/173=0.9884   -0.0116
+phrase_rule     144/144=1.0000144/144=1.0000   +0.0000
+screen_phrase   148/159=0.9308142/159=0.8931   -0.0377
+sequence        240/240=1.0000240/240=1.0000   +0.0000
+unbound           78/78=1.0000  78/78=1.0000   +0.0000
+
+paired (McNemar): seed7-right/seed11-wrong b=15, seed7-wrong/seed11-right c=6, exact two-sided p=0.078354
+
+=== disagreements on test_unseen_apps (screen_phrase kind) ===
+test_unseen_apps-1061  kind=screen_phrase  expected=swipe_right  seed7=swipe_right  (right)  seed11=previous_item  (wrong)
+test_unseen_apps-1252  kind=screen_phrase  expected=previous_item  seed7=previous_item  (right)  seed11=swipe_down  (wrong)
+test_unseen_apps-138  kind=screen_phrase  expected=next_item  seed7=next_item  (right)  seed11=swipe_up  (wrong)
+test_unseen_apps-142  kind=screen_phrase  expected=swipe_right  seed7=swipe_right  (right)  seed11=previous_item  (wrong)
+test_unseen_apps-1552  kind=screen_phrase  expected=next_item  seed7=swipe_up  (wrong)  seed11=next_item  (right)
+test_unseen_apps-1792  kind=screen_phrase  expected=swipe_right  seed7=swipe_right  (right)  seed11=previous_item  (wrong)
+test_unseen_apps-1817  kind=screen_phrase  expected=previous_item  seed7=previous_item  (right)  seed11=swipe_left  (wrong)
+test_unseen_apps-1904  kind=screen_phrase  expected=play_pause  seed7=none  (wrong)  seed11=play_pause  (right)
+test_unseen_apps-1949  kind=screen_phrase  expected=none  seed7=play_pause  (wrong)  seed11=none  (right)
+test_unseen_apps-504  kind=screen_phrase  expected=swipe_left  seed7=swipe_left  (right)  seed11=next_item  (wrong)
+test_unseen_apps-512  kind=screen_phrase  expected=next_item  seed7=swipe_up  (wrong)  seed11=next_item  (right)
+test_unseen_apps-590  kind=screen_phrase  expected=next_item  seed7=swipe_up  (wrong)  seed11=next_item  (right)
+test_unseen_apps-666  kind=screen_phrase  expected=next_item  seed7=next_item  (right)  seed11=swipe_up  (wrong)
+test_unseen_apps-669  kind=screen_phrase  expected=swipe_right  seed7=swipe_right  (right)  seed11=previous_item  (wrong)
+test_unseen_apps-685  kind=screen_phrase  expected=next_item  seed7=next_item  (right)  seed11=swipe_up  (wrong)
+test_unseen_apps-690  kind=screen_phrase  expected=play_pause  seed7=none  (wrong)  seed11=play_pause  (right)
+test_unseen_apps-840  kind=screen_phrase  expected=next_item  seed7=next_item  (right)  seed11=swipe_up  (wrong)
+test_unseen_apps-861  kind=screen_phrase  expected=next_item  seed7=next_item  (right)  seed11=swipe_up  (wrong)

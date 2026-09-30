@@ -1,0 +1,8 @@
+[20:18:15] v6s2 queue start
+[20:18:15] TRAIN v6-e5-small-e3-s2 (attempt 1): python students/jevlike/train.py data/v6/train.jsonl --validation data/v6/validation.jsonl --output runs/sweep-v6-e5-small-e3-s2.pt --seed 11
+[20:34:53] TRAIN DONE v6-e5-small-e3-s2 in 998s; {"checkpoint": "runs/sweep-v6-e5-small-e3-s2.pt", "best_val_acc": 1.0, "selected_epoch": 2, "select": "acc", "train_rows_per_s": 121.2, "minutes": 16.5}
+[20:35:20] evaluated v6-e5-small-e3-s2 test_iid: acc 0.999 ece 0.001 ftr 0.000 missed 0.000 {'app_rule': 0.993, 'cursor': 1.0, 'default': 1.0, 'disabled': 1.0, 'global_rule': 1.0, 'not_deliberate': 1.0, 'phrase': 1.0, 'phrase_rule': 1.0, 'screen_phrase': 1.0, 'sequence': 1.0, 'unbound': 1.0}
+[20:35:46] evaluated v6-e5-small-e3-s2 test_unseen_phrasing: acc 0.986 ece 0.012 ftr 0.000 missed 0.000 {'app_rule': 0.98, 'cursor': 1.0, 'default': 1.0, 'disabled': 1.0, 'global_rule': 0.968, 'not_deliberate': 1.0, 'phrase': 0.974, 'phrase_rule': 0.968, 'screen_phrase': 0.982, 'sequence': 0.978, 'unbound': 1.0}
+[20:36:12] evaluated v6-e5-small-e3-s2 test_unseen_apps: acc 0.990 ece 0.009 ftr 0.000 missed 0.000 {'app_rule': 1.0, 'cursor': 1.0, 'default': 1.0, 'disabled': 1.0, 'global_rule': 0.987, 'not_deliberate': 1.0, 'phrase': 0.988, 'phrase_rule': 1.0, 'screen_phrase': 0.893, 'sequence': 1.0, 'unbound': 1.0}
+{"recorded": "v6-e5-small-e3-s2", "unseen_phrasing_acc": 0.986, "rows_in_runs_jsonl": 84}
+[20:36:12] v6s2 queue done

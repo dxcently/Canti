@@ -1,0 +1,71 @@
+[policy] table: /home/khoa/.config/eidolon/policy.rn
+[tool] /home/khoa/.config/eidolon/tools/bg.rn: script `bg` failed to compile:
+error: Missing item {root}::::eidolon::bg_start
+   ┌─ bg:38:33
+   │
+38 │             Some(cmd) => return eidolon::bg_start(cmd).await,
+   │                                 ^^^^^^^^^^^^^^^^^ Missing item {root}::::eidolon::bg_start
+
+→ bash
+
+→ bash
+  ↳ bash -rw-r--r-- 1 khoa users 265996 Sep 29 20:35 preds/sweep-v6-e5-small-e3-s2.test_iid.jsonl⏎-rw-r--r-- …
+  ↳ bash {"name": "v6-e5-small-e3-s2", "status": "ok", "data_version": "data/v6", "command": "python students…
+
+→ bash
+
+→ bash
+  ↳ bash [20:18:15] v6s2 queue start⏎[20:18:15] TRAIN v6-e5-small-e3-s2 (attempt 1): python students/jevlike/…
+  ↳ bash 3:{"train_rows": 40000, "teacher_rows": 0, "teacher_skipped_gold_none": 0, "trainable_params": 33508…
+
+→ write
+  ↳ write created /home/khoa/VOX/finetune/sweeps/scratch/v6s2_compare.py (5441 bytes)
+
+→ bash
+  ↳ bash [exit code 1]⏎--- stderr ---⏎Traceback (most recent call last):⏎  File "/home/khoa/VOX/finetune/swee…
+
+→ edit
+  ↳ edit edited /home/khoa/VOX/finetune/sweeps/scratch/v6s2_compare.py (1 replacement)
+
+→ bash
+  ↳ bash ⏎=== test_iid ===⏎n rows compared: 2000  (agree right 1995, agree wrong 0, discordant 2+3=5)⏎⏎metric…
+
+→ write
+  ↳ write created /home/khoa/VOX/finetune/sweeps/scratch/v6s2-REPORT.md (3496 bytes)
+
+→ bash
+  ↳ bash === disagreements on test_unseen_apps (screen_phrase kind) ===⏎test_unseen_apps-1061  kind=screen_ph…
+
+→ edit
+  ↳ edit edited /home/khoa/VOX/finetune/sweeps/scratch/v6s2-REPORT.md (1 replacement)
+
+→ bash
+  ↳ bash -rw-r--r-- 1 khoa users 5474 Sep 29 20:37 sweeps/scratch/v6s2_compare.py⏎-rw-r--r-- 1 khoa users 588…
+Done. I did not train — I only wrote the three compare/report artifacts and read the coordinator's existing outputs.
+
+**What I verified from files**
+- Training actually completed: `sweeps/scratch/v6s2_queue.log` shows train done in 998 s, device `"cuda"` (train log line 3), ledger row `v6-e5-small-e3-s2` recorded with `--seed 11`.
+- Wall time: train 998 s (16.5 min), predict+eval 79 s, total 1077 s.
+
+**Headline (accuracy / nll / ece / ftr / missed) and McNemar exact p per split**
+
+| split | seed 7 acc | seed 11 acc | Δ | McNemar exact p |
+|---|---|---|---|---|
+| test_iid | 0.9985 | 0.9990 | +0.0005 | 1.000000 |
+| test_unseen_phrasing | 0.9960 | 0.9860 | **-0.0100** | **0.000535** |
+| test_unseen_apps | 0.9940 | 0.9895 | -0.0045 | 0.078354 |
+
+**Verdict on seed noise**
+- test_iid: within noise (p=1.0).
+- test_unseen_apps: within noise (p=0.078).
+- test_unseen_phrasing: **not within noise** — 1.0 pt lower and paired McNemar significant (p=0.000535); error rate rises 0.4% → 1.4%.
+
+**Kinds swinging > 2 pts** (the "anything odd" flag): `global_rule` (-0.032), `phrase_rule` (-0.032), `sequence` (-0.022), `app_rule` (-0.020) on test_unseen_phrasing; `screen_phrase` (-0.038) on test_unseen_apps. Also notable: seed 11 hits `false_trigger_rate=0.0000` and `missed_command_rate=0.0000` on every split (seed 7 had small non-zero values).
+
+**18 disagreeing screen_phrase rows** on test_unseen_apps are listed in full in both `sweeps/scratch/v6s2_compare.txt` and `sweeps/scratch/v6s2-REPORT.md` (id / kind / expected / seed 7 / seed 11). Dominant pattern for seed 11: `swipe_right`→`previous_item`, `next_item`→`swipe_up`, `previous_item`→`swipe_down`/`swipe_left` (a direction-vs-next/prev-media confusion).
+
+**Files written:** `sweeps/scratch/v6s2_compare.py`, `sweeps/scratch/v6s2_compare.txt`, `sweeps/scratch/v6s2-REPORT.md`. Nothing in `data/` or `runs/` touched.
+[in 322.2k out 8762 · 11 calls · $0.094
+]
+[190.1 tok/s · first token 1.3s · 54s over 11 calls]
+[context 35.5k/1.00M (4%) · session in 533.7k out 14.2k (476.6k cached) · $0.152]

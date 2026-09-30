@@ -33,6 +33,9 @@ from torch.utils.data import DataLoader, Dataset
 from jevlike.data import ChoiceExample, HuggingFaceCollator, validate
 from jevlike.model import AttentionHead
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # finetune root, for the students.* namespace package
+from students.jevlike.selection import selection_improves
+
 
 class VoxRows(Dataset):
     """jevlike examples plus the row id and optional teacher distribution."""
@@ -317,8 +320,8 @@ def train(a):
     from common import fit_temperature
     # --select acc (default, jl7 behaviour): keep the epoch with the best val acc (ties: earliest).
     # --select nll: lowest val NLL at T = 1.  --select nll_t: lowest val NLL after fitting T on val for that epoch.
-    better = {"acc": lambda m, b: m["acc"] > b["acc"], "nll": lambda m, b: m["nll"] < b["nll"],
-              "nll_t": lambda m, b: m["nll_t"] < b["nll_t"]}[a.select]
+    # --tie later: on an exact selection-metric tie keep the later epoch instead of the earliest.
+    better = lambda m, b: selection_improves(m, b, a.select, a.tie == "later")
     best, t0, step = None, time.time(), 0
     no_improve = 0
     out = Path(a.output)
@@ -349,6 +352,7 @@ def train(a):
             rec.update(val_T=T, val_nll_T=round(m["nll_t"], 4))
         rec["rows_per_s_epoch"] = round(step * a.batch_size / (time.time() - t0), 1)
         print(json.dumps(rec), flush=True)
+        state = None
         if best is None or better(m, best):
             best = m
             ck_cfg = dict(cfg)
@@ -362,6 +366,15 @@ def train(a):
             no_improve = 0
         else:
             no_improve += 1
+        if a.save_every_epoch:
+            if state is None:
+                state = {n: p.detach().cpu() for n, p in model.named_parameters() if p.requires_grad}
+            ep_cfg = dict(cfg)
+            if a.fit_temperature:
+                ep_cfg["temperature"] = T
+            ep_cfg["selected"] = {"by": "every_epoch", "epoch": epoch + 1, "val_acc": round(acc, 4), "val_nll": round(nll, 4),
+                                  **({"val_nll_T": round(m["nll_t"], 4), "val_T": T} if "T" in m else {})}
+            torch.save({"config": ep_cfg, "state_dict": state}, out.with_name(f"{out.stem}.e{epoch + 1}.pt"))
         if a.patience and no_improve >= a.patience:
             print(json.dumps({"early_stop": epoch + 1}), flush=True)
             break
@@ -430,6 +443,10 @@ def main():
                     help="encode each distinct option once per batch, length-sorted chunks without extra padding (same outputs up to float noise)")
     ap.add_argument("--select", choices=("acc", "nll", "nll_t"), default="acc",
                     help="checkpoint selection on val: acc (default), nll (T = 1) or nll_t (NLL after fitting T on val)")
+    ap.add_argument("--tie", choices=("earliest", "later"), default="earliest",
+                    help="on an exact selection-metric tie keep the earliest epoch (default, reproduces old runs) or the later one")
+    ap.add_argument("--save-every-epoch", action="store_true",
+                    help="also save each epoch's state as <output stem>.e<N>.pt (same format as the final checkpoint)")
     ap.add_argument("--patience", type=int, default=0,
                     help="early stop after N consecutive epochs without a better selection metric (0 = off, default)")
     ap.add_argument("--fit-temperature", action="store_true", help="fit T on val (common.fit_temperature) and store it in the checkpoint config")
