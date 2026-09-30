@@ -1055,6 +1055,10 @@ Default gesture bindings (`finetune/vox/schema.py`, generated into `Vocab.kt`):
 | `click hiss` | `forward` | **App-only** (`schema.APP_ONLY_BINDINGS`): resolved by the rule table in every decider mode (source `rules:app-only`), and never a model option. `forward` is not in `ACTIONS`, so the students' option lists and the datasets are unchanged. A user rule for `click hiss` still overrides it. |
 | `rise`/`fall` + held hum | auto-scroll | Scrolls in the swipe's direction while the hum is held (*Hold messages*: `hold start` within 1 s of the swipe, until `hold end`). A `flat` on its own stays `long_press`. |
 
+**Item swipes** (`ItemSwipe.kt`, `VoxService.itemSwipe`). Spoken `swipe <label> left|right|away` targets a matching visible item; an ambiguous label opens the numbered target picker. Ordinals (`first`…`tenth`, `last`) select list rows, while a deictic item uses the most recent target pick. `away` maps to the physical left/right direction for the current layout. Destructive directions or delete-like labels use the configured hold (`swipe_hold_ms`) and can be cancelled with “no”, “stop” or “cancel”. A completed item swipe is not reversible by gesture; an exact visible “Undo” label is tapped first when spoken as a follow-up.
+
+**System pulls** are executor actions, not model vocabulary actions: “open quick settings” performs `quick_settings`; “close notifications” performs `close_shade` (dismisses the shade where supported, otherwise back); “pull to refresh” performs `pull_refresh` on the topmost scrollable at its top edge. “show notifications” remains the separate navigation action. These are best-effort system gestures and may fail when no suitable window or scrollable is available.
+
 **Forward.** Android has no global forward.
 1. The app clicks a visible, enabled control whose text or content description is exactly `Forward`, `Go forward`,
    `Navigate forward` or `Forward button`, in any of the foreground app's windows. It clicks the node itself or its

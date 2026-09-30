@@ -130,6 +130,14 @@ class FollowupTest {
         assertEquals(Plan.CantUndo("can't undo that"), resolve(FollowKind.UNDO, null, "undo", pick, emptyList()))
     }
 
+    @Test fun exactVisibleFollowupLabelWinsEvenWhenUndoPlanCannotUndo() {
+        val undo = t("Undo")
+        assertEquals(undo, followupLabel("undo", listOf(t("Mail 1"), undo)))
+        assertNull(followupLabel("undo", listOf(t("Mail 1"))))
+        assertNull(followupLabel("undo that", listOf(undo)))
+        assertEquals(Plan.CantUndo("the swipe"), undoPlan(Last.ItemSwipe("Mail 1", "left", 1, "app"), emptyList()))
+    }
+
     @Test fun backHomeRecentsListenAndOtherActionsAreNotUndoable() {
         for (a in listOf("back", "home", "recents", "notifications", "listen_for_phrase", "type_text", "tap")) {
             assertEquals(Plan.CantUndo("can't undo that"), resolve(FollowKind.UNDO, null, "undo", action(a), emptyList()))

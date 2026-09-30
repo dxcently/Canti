@@ -170,3 +170,25 @@ Settings: `log_speech_text` (default false) + `log_speech_text_expiry_ms`; `log_
 - `item_swipe_undo_taps_snackbar_undo` — **real**: "undo" does not restore the row (the on-screen "Undo" label-wins path isn't tapping the snackbar button; needs investigation).
 - `pull_to_refresh_refreshes_fixture` — **real**: the pull-to-refresh drag doesn't reach the scroll container (the `SwipeRow` returns true on `ACTION_DOWN`, claiming the gesture before the `SwipeScrollView` can see the vertical drag).
 - `followup_undo_after_swipe_swipes_back` and `strip_retry_not_after_disarm` — **flaky existing** tests (passed in the two prior full runs, failed this one with a ListView scroll / strip-retry timing).
+
+## Phase E
+
+### Requested fixes
+
+- **`item_swipe_undo_taps_snackbar_undo`** — the follow-up path fetched its target list through the utterance's memoized `screenTargets` closure. A control exposed after the item's swipe/snackbar transition could therefore be absent from the label-wins decision, after which `undoPlan` correctly returned `CantUndo("the swipe")`. `followup` now invalidates the accessibility cache on API 34+ and rebuilds current targets immediately before exact-label matching. The label decision is extracted as pure `followupLabel` and covered in `FollowupTest`, including case normalization, exact-only matching, and the CantUndo plan for an item swipe.
+- **`pull_to_refresh_refreshes_fixture`** — `SwipeRow` consumed down events without a slop-based direction decision and did not explicitly leave vertical interception available to `SwipeScrollView`. It now uses platform touch slop, asks the parent to wait only after horizontal displacement exceeds slop and dominates vertical displacement, and releases that request on up/cancel.
+- **Label item swipe ambiguity** — label matching now routes `Targets.Outcome.Choose` to the existing numbered target picker instead of reporting no target.
+- **Protocol** — `android/PROTOCOL.md` now documents item swipes, destructive holds, ambiguity, and the executor-only system pull operations.
+
+### Files changed
+
+- `android/app/src/main/java/ai/vox/companion/Followup.kt`
+- `android/app/src/main/java/ai/vox/companion/VoxService.kt`
+- `android/app/src/test/java/ai/vox/companion/FollowupTest.kt`
+- `android/fixture/src/main/java/ai/vox/fixture/Fixture.kt`
+- `android/PROTOCOL.md`
+
+### JVM tests and remaining work
+
+- Requested command `cd android && ./dev env gradle testDebugUnitTest -q` could not reach Gradle: `./dev env` failed while fetching `android/nix` because access to `/nix/var/nix/daemon-socket/socket` is not permitted. The `--offline` retry failed at the same Nix bootstrap step. **No JVM test count is available for Phase E**; the previously recorded Phase D count remains 836 passing tests and is not a result for these edits.
+- The two originally failing emulator tests were not rerun (device/emulator use is prohibited for this task). The other two Phase D suite failures remain uninvestigated here.

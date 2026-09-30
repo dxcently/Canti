@@ -394,6 +394,7 @@ class SwipeRow(ctx: Context, val name: String) : FrameLayout(ctx) {
     private var downX = 0f
     private var downY = 0f
     private var dragging = false
+    private val touchSlop = android.view.ViewConfiguration.get(ctx).scaledTouchSlop
 
     init {
         val tv = TextView(ctx).apply { text = name; textSize = 20f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL }
@@ -405,10 +406,13 @@ class SwipeRow(ctx: Context, val name: String) : FrameLayout(ctx) {
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { downX = ev.rawX; downY = ev.rawY; dragging = false; return true }
+            MotionEvent.ACTION_DOWN -> { downX = ev.rawX; downY = ev.rawY; dragging = false; parent?.requestDisallowInterceptTouchEvent(false); return true }
             MotionEvent.ACTION_MOVE -> {
                 val dx = ev.rawX - downX; val dy = ev.rawY - downY
-                if (!dragging && abs(dx) > abs(dy) && abs(dx) > dp(8)) dragging = true
+                if (!dragging && abs(dx) > touchSlop && abs(dx) > abs(dy)) {
+                    dragging = true
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
                 if (dragging) { translationX = dx; return true }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -416,6 +420,7 @@ class SwipeRow(ctx: Context, val name: String) : FrameLayout(ctx) {
                 translationX = 0f
                 if (dragging && abs(dx) > width * 0.4f) onDismiss?.invoke(if (dx < 0) "left" else "right")
                 dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
                 return true
             }
         }
@@ -431,13 +436,14 @@ class SwipeScrollView(ctx: Context) : ScrollView(ctx) {
     private var downY = 0f
     private var armed = false
 
-    override fun onTouchEvent(ev: MotionEvent): Boolean {
+    // dispatchTouchEvent, not onTouchEvent: a SwipeRow child takes the DOWN, so onTouchEvent never sees it.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> { downY = ev.rawY; armed = scrollY == 0 }
             MotionEvent.ACTION_MOVE -> {
                 if (armed && ev.rawY - downY > height * 0.25f) { armed = false; onRefresh?.invoke() }
             }
         }
-        return super.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
     }
 }

@@ -264,6 +264,13 @@ fun undoPlan(last: Last?, screen: List<Target>): Plan {
     }
 }
 
+/** Exact visible-label precedence for spoken follow-ups (for example, an app's own Undo button). */
+fun followupLabel(said: String, targets: List<Target>): Target? {
+    val query = TargetQuery.normalize(said)
+    // normalize keeps case; the spoken side is lower-case, so "undo" must match an "Undo"/"UNDO" button.
+    return targets.firstOrNull { it.label.isNotBlank() && TargetQuery.normalize(it.label).equals(query, ignoreCase = true) }
+}
+
 /** True when [p] is a navigation undo (a scroll/swipe/next/previous inverse, or a "back"), i.e. a chain can apply it. */
 fun navigationUndo(p: Plan): Boolean = when (p) {
     is Plan.Run -> p.action == "back" ||

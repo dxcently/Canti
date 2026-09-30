@@ -1973,5 +1973,29 @@ def speech_text_switch_expires(c: Ctx):
         assert "zebra" not in json.dumps(e).lower(), f"spoken word leaked after expiry: {e}"
 
 
+
+
+# --- dictation: a polite lead-in starts it; a tap on the dictating strip stops it ------------------------------------
+
+@test
+def dictation_polite_start_and_tap_strip_stops(c: Ctx):
+    c.vox.control("config", transcript_strip=True)
+    c.open(CONTROLS)
+    field = node_by_id(c.vox, "text_field")
+    assert field, "no text field"
+    tap_node(field)
+    time.sleep(0.8)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="hey could you start the dictation")
+    st = c.ev.wait(m, lambda e: e["ev"] == "dictate" and e.get("event") == "start", 5)
+    assert st, [e["ev"] for e in c.ev.since(m)]
+    time.sleep(0.8)
+    ss = c.vox.control("strip_state")
+    assert ss.get("visible") and ss.get("kind") == "dictate", ss
+    sh(f"input tap 540 {ss.get('top', 0) + ss.get('height', 0) * 3 // 4}")
+    stop = c.ev.wait(m, lambda e: e["ev"] == "dictate" and e.get("event") == "stop", 5)
+    assert stop and stop.get("why") == "tap", stop
+
+
 if __name__ == "__main__":
     main()

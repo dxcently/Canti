@@ -694,7 +694,8 @@ class Executor(
     // centre, 400 ms, only when that scrollable is at its top (else "not at the top").
     private fun pullRefresh(action: String): Result {
         val root = TreeReader.appRoot(svc) ?: return Result(false, "not at the top")
-        val target = largestScrollable(root) ?: return Result(false, "not at the top")
+        // A list that fits on screen (an empty inbox) reports no scroll actions: pull on the app window itself.
+        val target = largestScrollable(root) ?: root
         if (target.actions and AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD != 0) return Result(false, "not at the top")
         val r = android.graphics.Rect()
         target.getBoundsInScreen(r)

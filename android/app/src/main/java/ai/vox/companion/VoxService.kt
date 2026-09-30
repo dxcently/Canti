@@ -228,6 +228,7 @@ class VoxService : AccessibilityService() {
         overlay.onQueueTap = { chain?.setExpanded(true); main.removeCallbacks(queueSnap); main.postDelayed(queueSnap, 3000) }   // [chain] C6
         overlay.onQueueScroll = { dy -> chain?.setScroll((chain?.frame()?.scroll ?: 0) + Math.round(-dy)) }   // [chain] C6
         overlay.onBodyScroll = { dy -> stripModel.setScroll(stripModel.scrollOffset() + Math.round(-dy)) }   // [chain] C6/Y2
+        overlay.onBodyTap = { if (dictation.active) dictation.stop("tap") }   // a tap on the dictating strip stops it
         overlay.onPanelMoved = {
             overlay.stripGeometry()?.get(0)?.let { top ->
                 if (screenW() <= screenH()) settings.panelTopPortrait = top else settings.panelTopLandscape = top
@@ -259,7 +260,7 @@ class VoxService : AccessibilityService() {
         }
         listenWindow = ListenWindow(scheduler, micYield)
         stripModel = StripModel(scheduler)
-        stripModel.onChange = { f -> if (f == null) { strip = null; overlay.hideStrip() } else { overlay.showStrip(f); overlay.showBodyTouch(stripModel.scrollable()) } }   // [strip] hidden = the ticket ends
+        stripModel.onChange = { f -> if (f == null) { strip = null; overlay.hideStrip() } else { overlay.showStrip(f); overlay.showBodyTouch(stripModel.scrollable(), strip?.kind == StripKind.DICTATE) } }   // [strip] hidden = the ticket ends
         overlay.stripThemeChanged()
         // Dictation holds the mic itself for the whole session; its windows (one recognizer per utterance) have none.
         dictation = Dictation(scheduler, micYield, ListenWindow(scheduler, null), { asr },
@@ -1137,6 +1138,8 @@ class VoxService : AccessibilityService() {
         if (choice != null) { choicePhrase(h); return }
         // Typing by voice, in a listen window only: the best hypothesis as said, never the grammar's cleaned words.
         if (window) h.best?.let { TypeGrammar.parse(it) }?.let { runTyping(it, source); return }
+        // Starting dictation from any hypothesis (the best may be "dick tate"); never "type", whose words must be the best.
+        if (window && h.hypotheses.any { TypeGrammar.parse(it) == TypeGrammar.Cmd.StartDictation }) { runTyping(TypeGrammar.Cmd.StartDictation, source); return }
         // [swipes] W3: a cancel word during the destructive hold stops it (before about-Canti and the chain control).
         if (swipeHold != null && cancelHoldWord(h.hypotheses)) return
         // [swipes] W7: about-Canti (a fix or a note) returns before the chain control and the grammar — never a decider.
@@ -1380,8 +1383,11 @@ class VoxService : AccessibilityService() {
             is ItemRef.Deictic -> (followups.current(now, pkg) as? Last.Pick)?.target
             is ItemRef.Label -> {
                 val q = TargetQuery.forPicker(ref.text)
-                (TargetMatcher.match(targets, q) as? Targets.Outcome.Tap)
-                    ?.takeIf { TargetMatcher.best(targets, q) >= TargetMatcher.STRONG }?.target
+                when (val match = TargetMatcher.match(targets, q)) {
+                    is Targets.Outcome.Tap -> match.target.takeIf { TargetMatcher.best(targets, q) >= TargetMatcher.STRONG }
+                    is Targets.Outcome.Choose -> { startChoice(n, match.targets); return }
+                    Targets.Outcome.NotOnScreen -> null
+                }
             }
             is ItemRef.Ordinal -> {
                 val rows = targets.filter { it.role.contains("row") || it.role.contains("list") }.sortedBy { it.cy }
@@ -1645,10 +1651,12 @@ class VoxService : AccessibilityService() {
     private fun followup(c: SpeechCommand.Followup, screenTargets: () -> List<Target>) {
         val n = ++decisionCount
         val now = SystemClock.elapsedRealtime()
-        val targets = screenTargets()
-        val saidNorm = TargetQuery.normalize(c.said)
+        // The phrase parser may have read targets before the app finished settling its snackbar/window.
+        // Re-read after invalidating the accessibility cache so a newly visible Undo control can win.
+        if (android.os.Build.VERSION.SDK_INT >= 34) try { clearCache() } catch (_: Exception) {}
+        val targets = currentTargets()
         // 1. LABEL WINS (every mode): an app's own "Undo" / "Try again" button is the better action. Exact equality only.
-        val labelHit = targets.firstOrNull { it.label.isNotBlank() && TargetQuery.normalize(it.label) == saidNorm }
+        val labelHit = followupLabel(c.said, targets)
         if (labelHit != null) {
             followupLog(n, c, "label", followups.current(now, currentApp()), null, now)
             tapTarget(n, labelHit, "label over follow-up")
