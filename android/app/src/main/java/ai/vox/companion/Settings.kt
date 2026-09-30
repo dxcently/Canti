@@ -45,6 +45,9 @@ class Settings(ctx: Context) {
     /** Device-stamp grouping: allowance for a follow-up sound arriving later than the fastest link (PROTOCOL.md). */
     var jitterMs: Long get() = p.getLong("jitter_ms", 150); set(v) = p.edit().putLong("jitter_ms", v).apply()
     var confirmTimeoutMs: Long get() = p.getLong("confirm_timeout_ms", 1500); set(v) = p.edit().putLong("confirm_timeout_ms", v).apply()
+    // [swipes]
+    /** The destructive item-swipe hold: ms before the gesture fires (0 = no hold); speech freezes it, "no" cancels. */
+    var swipeHoldMs: Long get() = p.getLong("swipe_hold_ms", 1500); set(v) = p.edit().putLong("swipe_hold_ms", v).apply()
     /** How long an outward action (like, follow, share...) waits for its confirm click ([Outward.windowMs]). */
     var outwardConfirmMs: Long get() = p.getLong("outward_confirm_ms", Outward.DEFAULT_CONFIRM_MS); set(v) = p.edit().putLong("outward_confirm_ms", v).apply()
     var listenWindowMs: Long get() = p.getLong("listen_window_ms", 6000); set(v) = p.edit().putLong("listen_window_ms", v).apply()
@@ -94,6 +97,10 @@ class Settings(ctx: Context) {
     var appPrefer: String get() = p.getString("app_prefer", AppChoice.DEFAULT_PREFER)!!; set(v) = put("app_prefer", v)
     /** Debug: the dictate and type events carry the typed words. Off: only counts (the words are the user's). */
     var logTypedText: Boolean get() = p.getBoolean("log_typed_text", false); set(v) = p.edit().putBoolean("log_typed_text", v).apply()
+    // [swipes] W12: spoken text is redacted from the event log by default; this switch turns it back on until the expiry.
+    var logSpeechText: Boolean get() = p.getBoolean("log_speech_text", false); set(v) = p.edit().putBoolean("log_speech_text", v).apply()
+    /** [swipes] W12: the switch's expiry (elapsedRealtime ms); 0 = expired. Turning the switch on (re)arms it +60 min. */
+    var logSpeechTextExpiryMs: Long get() = p.getLong("log_speech_text_expiry_ms", 0); set(v) = p.edit().putLong("log_speech_text_expiry_ms", v).apply()
     /** Dictation: a device sound this soon after the last recognized words is speech (ignored); later it stops dictation. */
     var dictateSpeechHoldMs: Long get() = p.getLong("dictate_speech_hold_ms", Dictation.SPEECH_HOLD_MS); set(v) = p.edit().putLong("dictate_speech_hold_ms", v).apply()
     /** While media plays, phone / USB mic sounds are dropped except a `click click click` unlock ([MediaGate]; user decision 2026-09-28). */
@@ -128,6 +135,7 @@ class Settings(ctx: Context) {
             "gap_ms" -> gapMs = o.getLong(k)
             "jitter_ms" -> jitterMs = o.getLong(k)
             "confirm_timeout_ms" -> confirmTimeoutMs = o.getLong(k)
+            "swipe_hold_ms" -> { val v = o.getLong(k); require(v in 0..5000) { "swipe_hold_ms must be 0..5000" }; swipeHoldMs = v }   // [swipes]
             "outward_confirm_ms" -> { val v = o.getLong(k); require(v in Outward.CONFIRM_MS_RANGE) { "outward_confirm_ms must be ${Outward.CONFIRM_MS_RANGE}" }; outwardConfirmMs = v }
             "listen_window_ms" -> listenWindowMs = o.getLong(k)
             "asr_engine" -> { val v = o.getString(k); require(v in ASR_ENGINES) { "asr_engine must be one of $ASR_ENGINES" + if (v == "sherpa") " (sherpa is not built yet)" else "" }; asrEngine = v }
@@ -139,6 +147,9 @@ class Settings(ctx: Context) {
             "timer_app" -> timerApp = o.getString(k).trim()
             "app_prefer" -> { val v = o.getString(k).trim(); AppChoice.parsePrefer(v); appPrefer = v }
             "log_typed_text" -> logTypedText = o.getBoolean(k)
+            // [swipes] W12: turning text logging on arms the 60-min expiry (a short expiry is set via log_speech_text_ms).
+            "log_speech_text" -> logSpeechText = o.getBoolean(k)
+            "log_speech_text_ms" -> logSpeechTextExpiryMs = o.getLong(k)   // debug: a short expiry (VoxService adds the current clock)
             "transcript_strip" -> transcriptStrip = o.getBoolean(k)
             "chains" -> chains = o.getBoolean(k)   // [chain]
             "chain_tail_ms" -> chainTailMs = o.getLong(k)   // [chain]
@@ -169,13 +180,14 @@ class Settings(ctx: Context) {
         .put("decider", decider).put("base_url", baseUrl).put("model", model)
         .put("api_key", if (apiKey.isBlank()) "" else "set(${apiKey.length} chars)")
         .put("min_confidence", minConfidence).put("http_timeout_ms", httpTimeoutMs).put("gap_ms", gapMs).put("jitter_ms", jitterMs)
-        .put("confirm_timeout_ms", confirmTimeoutMs).put("outward_confirm_ms", outwardConfirmMs).put("listen_window_ms", listenWindowMs)
+        .put("confirm_timeout_ms", confirmTimeoutMs).put("swipe_hold_ms", swipeHoldMs).put("outward_confirm_ms", outwardConfirmMs).put("listen_window_ms", listenWindowMs)
         .put("asr_engine", asrEngine).put("asr_allow_online", asrAllowOnline).put("asr_language", asrLanguage)
         .put("target_min_confidence", targetMinConfidence).put("target_model", targetModel).put("target_choose_ms", targetChooseMs)
         .put("enroll_reject_mult", enrollRejectMult).put("enroll_gesture_relabel", enrollGestureRelabel).put("ble_device", bleDevice ?: JSONObject.NULL)
         .put("ollama_endpoint", ollamaEndpoint).put("ollama_model", ollamaModel).put("ollama_key", if (ollamaKey.isBlank()) "" else "set")
         .put("ollama_timeout_ms", ollamaTimeoutMs).put("ollama_target_timeout_ms", ollamaTargetTimeoutMs)
         .put("auto_scroll_pct", autoScrollPct).put("scroll_step", scrollStep).put("cursor_speed", cursorSpeed).put("cursor_pitch_sens", cursorPitchSens).put("feed_fling_ms", feedFlingMs).put("feed_fling_pct", feedFlingPct).put("timer_app", timerApp).put("app_prefer", appPrefer).put("log_typed_text", logTypedText).put("dictate_speech_hold_ms", dictateSpeechHoldMs).put("transcript_strip", transcriptStrip)
+        .put("log_speech_text", logSpeechText).put("log_speech_text_expiry_ms", logSpeechTextExpiryMs)
         .put("chains", chains).put("chain_tail_ms", chainTailMs).put("panel_top_portrait", panelTopPortrait).put("panel_top_landscape", panelTopLandscape)
         .put("media_lock", mediaLock).put("media_unlock_mode", mediaUnlockMode).put("media_unlock_ms", mediaUnlockMs)
         .let { mic.describeInto(it) }   // [phone-mic]

@@ -16,4 +16,10 @@
     <item name="static_label" type="id" />
     <item name="tree" type="id" />
     <item name="tree_tap" type="id" />
+    <item name="swipe_count" type="id" />
+    <item name="swipe_last" type="id" />
+    <item name="refresh_count" type="id" />
+    <item name="swipe_list" type="id" />
+    <item name="swipe_snackbar" type="id" />
+    <item name="swipe_undo" type="id" />
 </resources>

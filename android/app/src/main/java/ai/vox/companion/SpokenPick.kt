@@ -72,6 +72,7 @@ object SpokenPick {
 
     private fun concrete(c: SpeechCommand): Boolean =
         c is SpeechCommand.Nav || c is SpeechCommand.Volume || c is SpeechCommand.OpenApp ||
-            c is SpeechCommand.Swipe || c is SpeechCommand.Timer || c is SpeechCommand.AppMissing ||
+            c is SpeechCommand.Swipe || c is SpeechCommand.ItemSwipe || c is SpeechCommand.SystemAction ||
+            c is SpeechCommand.Timer || c is SpeechCommand.AppMissing ||
             (c is SpeechCommand.Tap && (c.verb != null || c.fallback != null))
 }

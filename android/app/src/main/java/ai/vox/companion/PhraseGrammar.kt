@@ -73,7 +73,11 @@ sealed class SpeechCommand {
      * A horizontal/vertical swipe ([SwipeGrammar]): [action] a finger direction (`swipe_left`...), or [semantic] "next" /
      * "previous" resolved on the screen ([SwipePlan]); [count] times (1..5); [how]: "finger", "content" or the noun said.
      */
-    data class Swipe(val action: String?, val semantic: String?, val count: Int = 1, val how: String = "") : SpeechCommand()
+    data class Swipe(val action: String?, val semantic: String?, val count: Int = 1, val how: String = "", val deictic: Boolean = false) : SpeechCommand()
+    /** A swipe on one on-screen item ([ItemSwipeGrammar]): [ref] what it names, [dir] left / right / away. */
+    data class ItemSwipe(val ref: ItemRef, val dir: String) : SpeechCommand()
+    /** A direct executor action the grammar knows (a system pull/close): executor-only, never in Vocab. */
+    data class SystemAction(val action: String, val via: String = "") : SpeechCommand()
     /**
      * A spoken follow-up on the last action ([Followup.kt]): [kind] retry / other / direction / undo, [dir] the
      * direction for a direction follow-up, [said] the exact matched phrase, and [fallback] what [PhraseGrammar.parse]
@@ -98,8 +102,27 @@ sealed class SpeechCommand {
         is Ignore -> "ignore ($why)"
         is Volume -> "volume ${stream.key} ${op.describe()}"
         is Swipe -> "swipe ${action ?: semantic}" + (if (count > 1) " x$count" else "") + (if (how.isNotEmpty()) " ($how)" else "")
+        is ItemSwipe -> "item_swipe ${ref.describe()} $dir"
+        is SystemAction -> "system $action" + (if (via.isNotEmpty()) " ($via)" else "")
         is Followup -> "followup " + (if (kind == FollowKind.DIRECTION) dir?.name?.lowercase() ?: "direction" else kind.name.lowercase())
         is Chain -> "chain ${steps.size}: " + steps.joinToString(" | ") { it.command.describe() }
+    }
+
+    /** A fixed kind name (no spoken/cleaned words), for the log when speech text is redacted (W12). */
+    fun kindName(): String = when (this) {
+        is OpenApp -> "open_app"
+        is AppMissing -> "app_missing"
+        is Tap -> "tap"
+        is Nav -> "nav"
+        is Timer -> "timer"
+        is Phrase -> "phrase"
+        is Ignore -> "ignore"
+        is Volume -> "volume"
+        is Swipe -> "swipe"
+        is ItemSwipe -> "item_swipe"
+        is SystemAction -> "system"
+        is Followup -> "followup"
+        is Chain -> "chain"
     }
 }
 
@@ -463,8 +486,8 @@ object PhraseGrammar {
     }
 
     /** A command someone means, not just a parse: a navigation, an app, a timer with a length, a tap with a verb. */
-    private fun concrete(c: SpeechCommand?): Boolean = when (c) {
-        is SpeechCommand.Nav, is SpeechCommand.OpenApp, is SpeechCommand.AppMissing, is SpeechCommand.Volume, is SpeechCommand.Swipe -> true
+    internal fun concrete(c: SpeechCommand?): Boolean = when (c) {
+        is SpeechCommand.Nav, is SpeechCommand.OpenApp, is SpeechCommand.AppMissing, is SpeechCommand.Volume, is SpeechCommand.Swipe, is SpeechCommand.ItemSwipe, is SpeechCommand.SystemAction -> true
         is SpeechCommand.Timer -> c.seconds != null
         is SpeechCommand.Tap -> c.verb != null
         else -> false
@@ -659,6 +682,7 @@ object PhraseGrammar {
         // "go back to the previous screen" is back, not a pager swipe to the previous "screen"
         if (BACK_TO.matches(t)) return SpeechCommand.Nav("go back")
         SwipeGrammar.parse(t)?.let { return it }
+        ItemSwipeGrammar.parse(t)?.let { return it }
         // Liking is outward (it always waits for a confirm pop) and "like" is the commonest filler: only an explicit
         // form likes ("like this post", "like it", "heart it"); any other phrase starting with "like" is filler.
         if (LIKE_FORM.matches(t)) return SpeechCommand.Nav(LIKE)
@@ -713,7 +737,7 @@ object PhraseGrammar {
 
     /** How concrete a parse is: a known command > a tap on something > a timer without a length > unparsed. */
     private fun rank(c: SpeechCommand, tapScore: ((String) -> Double)?): Int = when (c) {
-        is SpeechCommand.OpenApp, is SpeechCommand.Nav, is SpeechCommand.Volume, is SpeechCommand.Swipe -> 4
+        is SpeechCommand.OpenApp, is SpeechCommand.Nav, is SpeechCommand.Volume, is SpeechCommand.Swipe, is SpeechCommand.ItemSwipe, is SpeechCommand.SystemAction -> 4
         is SpeechCommand.Followup -> 4   // a follow-up counts as concrete (n-best)
         is SpeechCommand.Chain -> if (c.steps.isNotEmpty() && c.steps.all { concrete(it.command) }) 4 else 2
         is SpeechCommand.AppMissing -> 1

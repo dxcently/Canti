@@ -23,6 +23,7 @@ enum class StripKind(val title: String, val orangeLamp: Boolean) {
     PICK("PICK ONE", true),
     DICTATE("DICTATING", false),
     CHAIN("CHAIN", true),
+    CANTI("ABOUT CANTI", true),
 }
 
 /** A word's drawing tone: settled ink, a still-partial word dim, a word it could not use bad (red). */
@@ -94,6 +95,8 @@ sealed class StripRow(val key: String, val value: String, val signal: Signal) {
     class BackMiss(value: String) : StripRow("BACK", value, Signal.MISS)
     /** A picker inside a chain (`<n> · WHICH ... say 1 or 2`, same value as [Left]). */
     class Which(n: Int) : StripRow("$n · WHICH", pickText(n), Signal.PLAIN)
+    /** An about-Canti outcome (`CANTI ... moved the badge` / `CANTI ... noted for later`). */
+    class Canti(value: String) : StripRow("CANTI", value, Signal.DONE)
 
     /** Two rows are equal when they read the same (a [Miss] also by its retry flag); the view never compares them. */
     override fun equals(other: Any?): Boolean {
@@ -303,6 +306,9 @@ class StripModel(
         hideTask?.invoke(); hideTask = null
         emit()
     }
+
+    /** Change the strip's title (e.g. to ABOUT CANTI) without resetting the row. */
+    fun setKind(kind: StripKind) { this.kind = kind; emit() }
 
     /** The recognizer's words so far: the trailing word dim, and (on a retry) the old row clears. */
     fun partial(text: String) {

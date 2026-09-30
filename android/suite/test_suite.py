@@ -40,8 +40,8 @@ TESTS: list[tuple[str, callable]] = []
 
 class Skip(Exception):
     """A test that cannot run in this environment (reported as SKIP, not as a pass)."""
-FEED, MENU, LIST, CONTROLS, STATIC, TREE = (f"ai.vox.fixture/.{a}" for a in
-    ("FeedActivity", "MenuActivity", "ListActivity", "ControlsActivity", "StaticActivity", "TreeActivity"))
+FEED, MENU, LIST, CONTROLS, STATIC, TREE, SWIPE = (f"ai.vox.fixture/.{a}" for a in
+    ("FeedActivity", "MenuActivity", "ListActivity", "ControlsActivity", "StaticActivity", "TreeActivity", "SwipeActivity"))
 
 
 def test(fn):
@@ -74,7 +74,8 @@ class Ctx:
     def reset(self) -> None:
         self.vox.control("reset")
         self.vox.control("config", decider="rules", gap_ms=600, confirm_timeout_ms=1500, http_timeout_ms=2000, min_confidence=0.5,
-                         target_model="", target_min_confidence=0.6, target_choose_ms=6000, asr_engine="off", transcript_strip=False)
+                         target_model="", target_min_confidence=0.6, target_choose_ms=6000, asr_engine="off", transcript_strip=False,
+                         log_speech_text=True)
         self.vox.control("profile", profile=None)
         self.vox.mode("gesture")
 
@@ -1841,6 +1842,135 @@ def main() -> None:
     print(f"results: {f}")
     c.ev.close()
     sys.exit(0 if passed + skipped == len(results) else 1)
+
+
+# --- item swipes, system pulls, about-Canti, speech-text redaction (r8-swipes-canti) ---------------------------------
+
+@test
+def item_swipe_away_holds_then_dismisses(c: Ctx):
+    c.open(SWIPE)
+    c.vox.control("config", transcript_strip=True, swipe_hold_ms=1500)
+    c.ev.mark()
+    c.vox.control("phrase", text="swipe mail 3 away")
+    time.sleep(0.8)   # mid-hold
+    assert "rows: 8" in c.vox.all_text(), "row dismissed before the hold elapsed"
+    c.texts_until("swipe_count", "rows: 7", timeout=6)
+    assert c.vox.texts()["swipe_last"] == "swiped: Mail 3 left", c.vox.texts()
+
+
+@test
+def item_swipe_no_cancels_during_hold(c: Ctx):
+    c.open(SWIPE)
+    c.vox.control("config", transcript_strip=True, swipe_hold_ms=5000)
+    c.ev.mark()
+    c.vox.control("phrase", text="swipe mail 3 away")
+    time.sleep(0.4)
+    c.vox.control("phrase", text="no")   # injected cancel word during the hold
+    time.sleep(1.0)
+    assert "rows: 8" in c.vox.all_text(), "row dismissed despite the cancel"
+
+
+@test
+def item_swipe_undo_taps_snackbar_undo(c: Ctx):
+    c.open(SWIPE)
+    c.vox.control("config", transcript_strip=True, swipe_hold_ms=0)
+    c.vox.control("phrase", text="swipe mail 3 away")
+    c.texts_until("swipe_count", "rows: 7", timeout=6)
+    c.vox.control("phrase", text="undo")
+    c.texts_until("swipe_count", "rows: 8", timeout=6)
+
+
+@test
+def item_swipe_first_one_ordinal(c: Ctx):
+    c.open(SWIPE)
+    c.vox.control("config", transcript_strip=True, swipe_hold_ms=0)
+    c.vox.control("phrase", text="swipe the first one away")
+    c.texts_until("swipe_count", "rows: 7", timeout=6)
+    assert c.vox.texts()["swipe_last"] == "swiped: Mail 1 left", c.vox.texts()
+
+
+@test
+def pull_to_refresh_refreshes_fixture(c: Ctx):
+    c.open(SWIPE)
+    c.ev.mark()
+    c.vox.control("phrase", text="pull to refresh")
+    c.texts_until("refresh_count", "refreshed: 1", timeout=6)
+
+
+@test
+def chain_with_item_swipe(c: Ctx):
+    c.vox.control("config", transcript_strip=True, swipe_hold_ms=0)
+    c.open(MENU)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="open swipe then swipe mail 2 away")
+    st = c.ev.wait(m, lambda e: e["ev"] == "chain" and e.get("event") == "start", 5)
+    assert st and st.get("steps") == 2, [e["ev"] for e in c.ev.since(m)]
+    c.texts_until("swipe_count", "rows: 7", timeout=8)
+    assert c.vox.texts()["swipe_last"] == "swiped: Mail 2 left", c.vox.texts()
+
+
+@test
+def about_canti_complaint_saves_local_note_and_op_reads_deletes(c: Ctx):
+    c.open(STATIC)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="canti keeps mishearing me")
+    e = c.ev.wait(m, lambda e: e["ev"] == "canti" and e.get("event") == "note", 5)
+    assert e, [x["ev"] for x in c.ev.since(m)]
+    r = c.vox.control("canti_notes")
+    assert r.get("deleted") >= 1 and r.get("notes") and r["notes"][-1]["words"] == "canti keeps mishearing me", r
+    r2 = c.vox.control("canti_notes")
+    assert r2.get("deleted") == 0, r2
+
+
+@test
+def about_canti_never_acts_on_app(c: Ctx):
+    c.open(SWIPE)
+    c.vox.control("config", transcript_strip=True, swipe_hold_ms=0)
+    c.vox.control("phrase", text="swipe mail 3 away")
+    c.texts_until("swipe_count", "rows: 7", timeout=6)
+    c.vox.control("phrase", text="the badge is covering the undo button")   # about-Canti: must NOT tap Undo
+    time.sleep(1.5)
+    assert "rows: 7" in c.vox.all_text(), "about-Canti acted on the app"
+
+
+@test
+def about_canti_not_in_event_log(c: Ctx):
+    c.open(STATIC)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="canti keeps mishearing me")
+    c.ev.wait(m, lambda e: e["ev"] == "canti", 5)
+    for e in c.ev.since(m):
+        blob = json.dumps(e).lower()
+        assert "mishearing" not in blob and "keeps" not in blob, f"about-Canti words leaked: {e}"
+
+
+@test
+def speech_text_redacted_by_default(c: Ctx):
+    c.open(STATIC)
+    c.vox.control("config", log_speech_text=False)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="tap zebra lamp")
+    c.vox.control("phrase", text="open settings then scroll down")
+    time.sleep(1.0)
+    for e in c.ev.since(m):
+        blob = json.dumps(e).lower()
+        for w in ("zebra", "lamp"):
+            assert w not in blob, f"spoken word {w!r} leaked: {e}"
+
+
+@test
+def speech_text_switch_expires(c: Ctx):
+    # turn the switch on with a short (debug) expiry, then watch it switch itself off
+    c.vox.control("config", log_speech_text=True, log_speech_text_ms=2000)
+    assert c.vox.control("config")["settings"]["log_speech_text"] is True
+    time.sleep(2.5)
+    # a new phrase is redacted once the expiry passed
+    c.open(STATIC)
+    m = c.ev.mark()
+    c.vox.control("phrase", text="tap zebra lamp")
+    time.sleep(1.0)
+    for e in c.ev.since(m):
+        assert "zebra" not in json.dumps(e).lower(), f"spoken word leaked after expiry: {e}"
 
 
 if __name__ == "__main__":
