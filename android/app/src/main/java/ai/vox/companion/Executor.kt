@@ -60,6 +60,12 @@ class Executor(
             "home" -> global(action, AccessibilityService.GLOBAL_ACTION_HOME)
             "recents" -> global(action, AccessibilityService.GLOBAL_ACTION_RECENTS)
             "notifications" -> global(action, AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
+            "quick_settings" -> global(action, AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
+            // [swipes] close the shade: dismiss on API 31+, else a Back (the shade is a window "in front").
+            "close_shade" -> if (android.os.Build.VERSION.SDK_INT >= 31)
+                global(action, AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+                else global(action, AccessibilityService.GLOBAL_ACTION_BACK)
+            "pull_refresh" -> pullRefresh(action)
             "scroll_down" -> feedScroll(action, "swipe_up", w.toInt(), h.toInt()) ?: scroll(action, forward = true) ?: gesture(action, swipe(cx, h * 0.62f, cx, h * 0.42f, 300), "short-swipe")
             "scroll_up" -> feedScroll(action, "swipe_down", w.toInt(), h.toInt()) ?: scroll(action, forward = false) ?: gesture(action, swipe(cx, h * 0.42f, cx, h * 0.62f, 300), "short-swipe")
             "zoom_in" -> gesture(action, pinch(cx, cy, w * 0.08f, w * 0.30f), "pinch-out")
@@ -682,6 +688,28 @@ class Executor(
             for (i in x.childCount - 1 downTo 0) x.getChild(i)?.let { stack.add(it) }
         }
         return ScrollPick.best(found.filter { it.area > 0 }, { it.area }, { it.horizontal })?.node
+    }
+
+    // [swipes] pull to refresh: a downward drag from 25% to 70% of the top scrollable's height at its horizontal
+    // centre, 400 ms, only when that scrollable is at its top (else "not at the top").
+    private fun pullRefresh(action: String): Result {
+        val root = TreeReader.appRoot(svc) ?: return Result(false, "not at the top")
+        // A list that fits on screen (an empty inbox) reports no scroll actions: pull on the app window itself.
+        val target = largestScrollable(root) ?: root
+        if (target.actions and AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD != 0) return Result(false, "not at the top")
+        val r = android.graphics.Rect()
+        target.getBoundsInScreen(r)
+        val cx = r.centerX().toFloat()
+        val y0 = r.top + r.height() * 0.25f
+        val y1 = r.top + r.height() * 0.70f
+        return gesture(action, swipe(cx, y0, cx, y1, 400), "pull-refresh")
+    }
+
+    // [swipes] an item swipe (ItemSwipeGeometry): a horizontal drag from the target's centre, 70% of the screen width.
+    // The Confirmer judges the returned watch (a dismissed row changes the tree).
+    fun itemSwipe(box: Box, dir: String, rtl: Boolean): Result {
+        val g = ItemSwipeGeometry.gesture(box, screenW(), dir, rtl)
+        return gesture("item_swipe", swipe(g.x0, g.y0, g.x1, g.y1, g.ms), "item-swipe($dir)")
     }
 
     private fun mediaKey(action: String, code: Int): Result {

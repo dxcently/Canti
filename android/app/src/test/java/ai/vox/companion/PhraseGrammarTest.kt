@@ -521,13 +521,13 @@ class PhraseGrammarTest {
 
     // --- smart swipes (Swipes.kt) ------------------------------------------------------------------------------------
 
-    private fun finger(a: String, n: Int = 1) = SpeechCommand.Swipe(a, null, n, "finger")
+    private fun finger(a: String, n: Int = 1, deictic: Boolean = false) = SpeechCommand.Swipe(a, null, n, "finger", deictic)
     private fun content(a: String, n: Int = 1) = SpeechCommand.Swipe(a, null, n, "content")
     private fun sem(next: Boolean, noun: String, n: Int = 1) = SpeechCommand.Swipe(null, if (next) "next" else "previous", n, noun)
 
     @Test fun swipeDirectionsFingerAndContent() = check(listOf(
         // a swipe word names the finger
-        "swipe right" to finger("swipe_right"), "swipe to the right" to finger("swipe_right"), "swipe it right" to finger("swipe_right"),
+        "swipe right" to finger("swipe_right"), "swipe to the right" to finger("swipe_right"), "swipe it right" to finger("swipe_right", deictic = true),
         "flick right" to finger("swipe_right"), "swipe left" to finger("swipe_left"), "swipe right on it" to finger("swipe_right"),
         "swipe up" to finger("swipe_up"),
         // a content word names what to bring into view: the finger goes the other way
@@ -565,6 +565,45 @@ class PhraseGrammarTest {
 
     @Test fun swipeWordsElsewhereAreNotSwipes() {
         for (s in listOf("go right ahead", "turn right", "right now", "all right")) assertTrue(s, parse(s) !is SpeechCommand.Swipe)
+    }
+
+    // --- system pulls + item swipes (W4, J1) -------------------------------------------------------------------------
+
+    private fun sys(a: String) = SpeechCommand.SystemAction(a, "swipe grammar")
+
+    @Test fun swipeUpForRecentsIsRecents() {
+        assertEquals(nav("recent apps"), parse("swipe up for recents"))
+        assertEquals(nav("recent apps"), parse("swipe up from the bottom and hold"))
+    }
+
+    @Test fun pullDownQuickSettings() {
+        assertEquals(sys("quick_settings"), parse("pull down quick settings"))
+        assertEquals(sys("quick_settings"), parse("open quick settings"))
+    }
+
+    @Test fun closeTheShade() {
+        assertEquals(sys("close_shade"), parse("close the shade"))
+        assertEquals(sys("close_shade"), parse("close notifications"))
+    }
+
+    @Test fun pullToRefresh() {
+        assertEquals(sys("pull_refresh"), parse("pull to refresh"))
+    }
+
+    @Test fun refreshThePage() {
+        assertEquals(sys("pull_refresh"), parse("refresh the page"))
+        assertEquals(sys("pull_refresh"), parse("refresh this"))
+    }
+
+    @Test fun pullDownNotificationsUnchanged() {
+        assertEquals(nav("show notifications"), parse("pull down notifications"))
+    }
+
+    @Test fun chainOpenListThenSwipeFirstOneAway() {
+        assertEquals(
+            listOf(SpeechCommand.Tap("list", "open"), SpeechCommand.ItemSwipe(ItemRef.Ordinal(1, false), "away")),
+            chainSteps("open list then swipe the first one away"),
+        )
     }
 
     // --- "like" is filler unless the like is explicit (like is outward: it always needs a confirm pop too) -----------

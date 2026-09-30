@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
@@ -21,6 +23,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.math.abs
 import kotlin.math.sign
@@ -48,7 +51,7 @@ class MenuActivity : Activity() {
         col.addView(label(R.id.title, "VOX fixture menu", 22f))
         for ((name, cls) in listOf("Feed" to FeedActivity::class.java, "List" to ListActivity::class.java,
                 "Controls" to ControlsActivity::class.java, "Static" to StaticActivity::class.java,
-                "Tree" to TreeActivity::class.java)) {
+                "Tree" to TreeActivity::class.java, "Swipe" to SwipeActivity::class.java)) {
             col.addView(Button(this).apply { text = name; setOnClickListener { startActivity(Intent(this@MenuActivity, cls)) } })
         }
         setContentView(col)
@@ -291,5 +294,156 @@ class TreeList(ctx: Context) : LinearLayout(ctx) {
     override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
         super.onInitializeAccessibilityNodeInfo(info)
         info.collectionInfo = AccessibilityNodeInfo.CollectionInfo.obtain(childCount, 1, false)
+    }
+}
+
+/**
+ * The Swipe screen: 8 rows "Mail 1".."Mail 8", each dismissable by a horizontal swipe (> 40% of the screen width).
+ * Removal shows a bottom snackbar "Deleted Mail N" with an Undo button for 4 s. A downward drag > 25% of the list height
+ * starting at the top pulls to refresh (no real network, no timers besides the 4 s snackbar).
+ */
+class SwipeActivity : Activity() {
+    private val handler = Handler(Looper.getMainLooper())
+    private lateinit var count: TextView
+    private lateinit var last: TextView
+    private lateinit var refresh: TextView
+    private lateinit var list: SwipeList
+    private lateinit var bar: LinearLayout
+    private lateinit var snackbar: TextView
+    private var names = mutableListOf<String>()
+    private var pending: Pair<String, Int>? = null
+    private var undoTask: Runnable? = null
+    private var refreshes = 0
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(0xFF263238.toInt()) }
+        val head = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(24), dp(24), 0) }
+        count = label(R.id.swipe_count, "rows: 8", 16f)
+        last = label(R.id.swipe_last, "swiped: -", 16f)
+        refresh = label(R.id.refresh_count, "refreshed: 0", 16f)
+        head.addView(count); head.addView(last); head.addView(refresh)
+        root.addView(head, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        names = MutableList(8) { "Mail ${it + 1}" }
+        list = SwipeList(this).apply { id = R.id.swipe_list }
+        for (n in names) list.addView(makeRow(n))
+        val scroll = SwipeScrollView(this).apply {
+            onRefresh = { refreshes++; refresh.text = "refreshed: $refreshes" }
+            addView(list, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        }
+        root.addView(scroll, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(0xFF1B1B1B.toInt()); visibility = View.GONE; setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        snackbar = label(R.id.swipe_snackbar, "", 16f)
+        val undo = Button(this).apply { id = R.id.swipe_undo; text = "Undo"; setOnClickListener { undo() } }
+        bar.addView(snackbar, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        bar.addView(undo, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+        root.addView(bar, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            val b = insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+            v.setPadding(b.left, b.top, b.right, b.bottom); insets
+        }
+        setContentView(root)
+    }
+
+    private fun makeRow(name: String): SwipeRow = SwipeRow(this, name).apply {
+        onDismiss = { dir -> dismiss(this, dir) }
+    }
+
+    private fun dismiss(row: SwipeRow, dir: String) {
+        val name = row.name
+        val idx = list.indexOfChild(row)
+        names.remove(name)
+        list.removeView(row)
+        count.text = "rows: ${names.size}"
+        last.text = "swiped: $name $dir"
+        pending = name to idx
+        showSnackbar("Deleted $name")
+        undoTask = Runnable { hideSnackbar(); pending = null }
+        handler.postDelayed(undoTask!!, 4000)
+    }
+
+    private fun undo() {
+        val (name, idx) = pending ?: return
+        undoTask?.let { handler.removeCallbacks(it) }
+        names.add(idx.coerceIn(0, names.size), name)
+        list.addView(makeRow(name), idx)
+        count.text = "rows: ${names.size}"
+        hideSnackbar(); pending = null
+    }
+
+    private fun showSnackbar(text: String) { snackbar.text = text; bar.visibility = View.VISIBLE }
+    private fun hideSnackbar() { bar.visibility = View.GONE }
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+}
+
+/** A vertical list of [SwipeRow]s that reports a CollectionInfo, so VOX reads its rows as "list item"s. */
+class SwipeList(ctx: Context) : LinearLayout(ctx) {
+    init { orientation = LinearLayout.VERTICAL }
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.collectionInfo = AccessibilityNodeInfo.CollectionInfo.obtain(childCount, 1, false)
+    }
+}
+
+/** One "Mail N" row: a horizontal swipe > 40% of the screen width dismisses it (left or right). */
+class SwipeRow(ctx: Context, val name: String) : FrameLayout(ctx) {
+    var onDismiss: ((dir: String) -> Unit)? = null
+    private var downX = 0f
+    private var downY = 0f
+    private var dragging = false
+    private val touchSlop = android.view.ViewConfiguration.get(ctx).scaledTouchSlop
+
+    init {
+        val tv = TextView(ctx).apply { text = name; textSize = 20f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL }
+        addView(tv, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { setMargins(dp(8), dp(8), dp(8), dp(8)) })
+        isClickable = true
+        contentDescription = name
+        setBackgroundColor(0xFF455A64.toInt())
+    }
+
+    override fun onTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> { downX = ev.rawX; downY = ev.rawY; dragging = false; parent?.requestDisallowInterceptTouchEvent(false); return true }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.rawX - downX; val dy = ev.rawY - downY
+                if (!dragging && abs(dx) > touchSlop && abs(dx) > abs(dy)) {
+                    dragging = true
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                if (dragging) { translationX = dx; return true }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val dx = ev.rawX - downX
+                translationX = 0f
+                if (dragging && abs(dx) > width * 0.4f) onDismiss?.invoke(if (dx < 0) "left" else "right")
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                return true
+            }
+        }
+        return super.onTouchEvent(ev)
+    }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+}
+
+/** The Swipe screen's scroll container: a downward drag > 25% of its height, starting at the top, pulls to refresh. */
+class SwipeScrollView(ctx: Context) : ScrollView(ctx) {
+    var onRefresh: (() -> Unit)? = null
+    private var downY = 0f
+    private var armed = false
+
+    // dispatchTouchEvent, not onTouchEvent: a SwipeRow child takes the DOWN, so onTouchEvent never sees it.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> { downY = ev.rawY; armed = scrollY == 0 }
+            MotionEvent.ACTION_MOVE -> {
+                if (armed && ev.rawY - downY > height * 0.25f) { armed = false; onRefresh?.invoke() }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 }

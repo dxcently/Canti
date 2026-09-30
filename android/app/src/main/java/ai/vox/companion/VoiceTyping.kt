@@ -23,11 +23,14 @@ object TypeGrammar {
     }
 
     /** Lead words before the verb ("please type ...", "hey canti, write ..."); kept few on purpose. */
-    private const val LEAD = "(?:please|ok|okay|hey|hi|so|now|um+|uh+|canti|kanti|canty|candy)"
+    private const val LEAD = "(?:please|ok|okay|hey|hi|so|now|um+|uh+|canti|kanti|canty|candy|(?:could|can|would|will) you|i want to)"
     private val TYPE = Regex("^(?:$LEAD[\\s,.!]+)*(type|write)(?![\\p{L}\\p{N}'’-])[\\s,:;.!-]*(.*)$",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     val START = setOf("dictate", "start dictation", "start dictating", "begin dictation", "dictation", "dictation mode",
         "start dictation mode", "turn on dictation")
+    /** "start the dictation", "turn dictation on", "go into dictation mode": the verb, "the", "on" and "mode" optional. */
+    private val START_RE = Regex("^(?:(?:start|begin|turn on|turn|open|enable|enter|go into|go to|switch to|use)\\s+)?(?:the\\s+|a\\s+)?" +
+        "(?:dictation|dictating|dictate|voice typing)(?:\\s+mode)?(?:\\s+on)?$")
     val STOP = setOf("stop dictation", "stop dictating", "end dictation", "stop dictate")
     /** The stop phrase closing an utterance ("... see you soon, stop dictation"). */
     private val STOP_AT_END = Regex("[\\s,.!?]*\\b(?:stop dictat(?:ion|ing|e)|end dictation)[\\s,.!?]*$", RegexOption.IGNORE_CASE)
@@ -37,7 +40,7 @@ object TypeGrammar {
         val t = raw.trim()
         TYPE.find(t)?.let { return Cmd.Type(it.groupValues[2].trim()) }
         val n = PhraseGrammar.normalize(t)
-        if (n in START) return Cmd.StartDictation
+        if (n in START || START_RE.matches(n)) return Cmd.StartDictation
         if (n in STOP) return Cmd.StopDictation
         return null
     }

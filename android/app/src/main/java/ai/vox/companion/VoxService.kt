@@ -32,6 +32,13 @@ import java.util.concurrent.Executors
  *
  * Every step is written to the event log (EventLog: logcat tag VOX + files/events.jsonl).
  */
+
+/** [swipes] Why a phrase's words are kept out of the log (W10): typing, or an about-Canti utterance. */
+enum class HideWhy { TYPING, CANTI }
+
+/** [swipes] W3: words that cancel a destructive item-swipe hold (anything else resumes it). */
+private val CANCEL_WORDS = setOf("no", "stop", "cancel")
+
 class VoxService : AccessibilityService() {
     companion object {
         @Volatile var instance: VoxService? = null
@@ -113,6 +120,10 @@ class VoxService : AccessibilityService() {
     // [chain] the active command chain (Chain.kt) and the memory of the last ended chain (for a while after it ends).
     private var chain: ChainQueue? = null
     private val chainMemory = ChainMemory()
+    // [swipes] the local about-Canti note file (CantiNotes.kt): the only place about-Canti words are stored (W8/W9).
+    private val cantiNotes by lazy { CantiNotes(filesDir) }
+    // [swipes] the active destructive item-swipe hold (W3); "no"/"stop"/"cancel" cancels it.
+    private var swipeHold: SwipeHold? = null
     private lateinit var scheduler: Scheduler
     private var partialTimes: MutableList<Pair<Int, Long>>? = null   // [chain] partial word growth (pause marks)
     private val queueSnap = Runnable { chain?.setExpanded(false) }   // [chain] C6 snap back after 3 s idle
@@ -124,7 +135,7 @@ class VoxService : AccessibilityService() {
     private lateinit var dictation: Dictation
     private var asrProblem: String? = null
     // [strip] the live transcript strip (TranscriptStrip.kt): one ticket at a time.
-    private class StripTicket(val gen: Long, val kind: StripKind, val userOpened: Boolean, val openedAt: Long) {
+    private class StripTicket(val gen: Long, var kind: StripKind, val userOpened: Boolean, val openedAt: Long) {
         var retried = false
         var words = ""
         var boundN: Long? = null
@@ -217,6 +228,7 @@ class VoxService : AccessibilityService() {
         overlay.onQueueTap = { chain?.setExpanded(true); main.removeCallbacks(queueSnap); main.postDelayed(queueSnap, 3000) }   // [chain] C6
         overlay.onQueueScroll = { dy -> chain?.setScroll((chain?.frame()?.scroll ?: 0) + Math.round(-dy)) }   // [chain] C6
         overlay.onBodyScroll = { dy -> stripModel.setScroll(stripModel.scrollOffset() + Math.round(-dy)) }   // [chain] C6/Y2
+        overlay.onBodyTap = { if (dictation.active) dictation.stop("tap") }   // a tap on the dictating strip stops it
         overlay.onPanelMoved = {
             overlay.stripGeometry()?.get(0)?.let { top ->
                 if (screenW() <= screenH()) settings.panelTopPortrait = top else settings.panelTopLandscape = top
@@ -248,7 +260,7 @@ class VoxService : AccessibilityService() {
         }
         listenWindow = ListenWindow(scheduler, micYield)
         stripModel = StripModel(scheduler)
-        stripModel.onChange = { f -> if (f == null) { strip = null; overlay.hideStrip() } else { overlay.showStrip(f); overlay.showBodyTouch(stripModel.scrollable()) } }   // [strip] hidden = the ticket ends
+        stripModel.onChange = { f -> if (f == null) { strip = null; overlay.hideStrip() } else { overlay.showStrip(f); overlay.showBodyTouch(stripModel.scrollable(), strip?.kind == StripKind.DICTATE) } }   // [strip] hidden = the ticket ends
         overlay.stripThemeChanged()
         // Dictation holds the mic itself for the whole session; its windows (one recognizer per utterance) have none.
         dictation = Dictation(scheduler, micYield, ListenWindow(scheduler, null), { asr },
@@ -556,7 +568,7 @@ class VoxService : AccessibilityService() {
     /** Entry point for every source (main thread). */
     fun deliver(msg: JSONObject, source: String): JSONObject {
         return try {
-            if (msg.optString("type", "features") == "control") control(msg)
+            if (msg.optString("type", "features") == "control") control(msg, source)
             else if (HoldMessage.isHold(msg)) hold(HoldMessage.parse(msg), source)
             else MainLoad.time("msg:features") { features(FeatureMessage.parse(msg), source) }
         } catch (e: IllegalArgumentException) {
@@ -580,7 +592,7 @@ class VoxService : AccessibilityService() {
         }
         lastMsgId = m.id
         EventLog.ev("msg", "id" to m.id, "source" to source, "mode" to m.mode, "armed" to m.armed,
-            "sequence" to m.sequence.joinToString(" "), "phrase" to m.phrase, "sleeping" to (if (m.sleeping) true else null),
+            "sequence" to m.sequence.joinToString(" "), "phrase" to m.phrase?.let(::textOrRedact), "sleeping" to (if (m.sleeping) true else null),
             "raw" to folded.raw?.joinToString(" "), "by" to m.by)
         // The user switched the mode on the Pico's button: that is their own choice, so a wake keeps it (UserMode).
         if (m.by == "button" && m.sequence.isEmpty()) userMode.chose(m.mode, "button")
@@ -639,7 +651,7 @@ class VoxService : AccessibilityService() {
         }
         if (m.phrase != null) {
             if (!listenWindow.isOpen) {
-                EventLog.ev("ignored", "reason" to "phrase outside listening window", "phrase" to m.phrase)
+                EventLog.ev("ignored", "reason" to "phrase outside listening window", "phrase" to textOrRedact(m.phrase))
             } else {
                 // A phrase from the device (or the debug socket) answers the window: the phone's recognizer stops.
                 sequencer.flush()
@@ -1081,9 +1093,14 @@ class VoxService : AccessibilityService() {
 
     private fun listenDone(d: ListenWindow.Done, gen: Long) {
         val h = d.heard
-        val hide = h != null && hidesText(h)
+        val hide = h?.let { hideWhy(it) }
         EventLog.ev("asr", "event" to "closed", "why" to d.why, "engine" to d.engine, "recognizer" to (asr as? AndroidPhraseRecognizer)?.kind,
-            "status" to d.status, "n_best" to h?.let { if (hide) "(typing: not logged)" else org.json.JSONArray(it.hypotheses) },
+            "status" to d.status, "n_best" to h?.let { when {
+                hide == HideWhy.TYPING -> "(typing: not logged)"
+                hide == HideWhy.CANTI -> "(about canti: not logged)"
+                !speechTextEnabled() -> org.json.JSONArray(it.hypotheses.map { hp -> SpeechTextLog.summary(hp) })
+                else -> org.json.JSONArray(it.hypotheses)
+            } },
             "confidence" to h?.confidences?.takeIf { it.isNotEmpty() }?.let { c -> org.json.JSONArray(c.map { it.toDouble() }) },
             "partial" to if (h?.partial == true) true else null, "partials" to d.partials, "peak_db" to d.peakDb?.toDouble(),
             "ready_ms" to d.readyMs, "ms" to d.ms, "mic_yielded" to d.micYielded)
@@ -1104,7 +1121,7 @@ class VoxService : AccessibilityService() {
             if (strip?.gen == gen) { stripModel.final("..."); notify("", "no_words") { StripReasons.noWords() } }
             return
         }
-        if (gen != generation || !armed || paused) { EventLog.ev("ignored", "reason" to "disarmed while listening", "phrase" to if (hide) "(typing: not logged)" else h.best); return }
+        if (gen != generation || !armed || paused) { EventLog.ev("ignored", "reason" to "disarmed while listening", "phrase" to if (hide != null) "(redacted)" else h.best); return }
         strip?.let { if (it.gen == gen) it.words = h.best ?: "" }   // [strip] the heard text drives the reason mapping
         if (strip?.gen == gen) stripModel.final(h.best ?: "")
         onHeard(h, "asr:${d.engine}", window = true, pauses = pauseMarks(h.best))   // every recognizer run answers a listen window a pop pop opened
@@ -1121,6 +1138,12 @@ class VoxService : AccessibilityService() {
         if (choice != null) { choicePhrase(h); return }
         // Typing by voice, in a listen window only: the best hypothesis as said, never the grammar's cleaned words.
         if (window) h.best?.let { TypeGrammar.parse(it) }?.let { runTyping(it, source); return }
+        // Starting dictation from any hypothesis (the best may be "dick tate"); never "type", whose words must be the best.
+        if (window && h.hypotheses.any { TypeGrammar.parse(it) == TypeGrammar.Cmd.StartDictation }) { runTyping(TypeGrammar.Cmd.StartDictation, source); return }
+        // [swipes] W3: a cancel word during the destructive hold stops it (before about-Canti and the chain control).
+        if (swipeHold != null && cancelHoldWord(h.hypotheses)) return
+        // [swipes] W7: about-Canti (a fix or a note) returns before the chain control and the grammar — never a decider.
+        if (aboutCanti(h, source, window)) return
         // [chain] a phrase heard while a chain runs is a control or appended steps, not a fresh command.
         if (onChainHeard(h, source, window)) return
         val t0 = System.nanoTime()
@@ -1135,16 +1158,85 @@ class VoxService : AccessibilityService() {
         }
         val pick = PhraseGrammar.choose(h, ctx, tapScore = { q -> TargetMatcher.best(screenTargets(), q) }, pauses = pauses)
         val parseMs = Math.round((System.nanoTime() - t1) / 1e5) / 10.0   // the screen read for a tap included
-        EventLog.ev("phrase_parse", "source" to source, "heard" to pick.text, "hypothesis" to pick.index, "command" to pick.command.describe(),
-            "parses" to org.json.JSONArray(pick.parsed.map { it.describe() }), "mode" to deviceMode, "window" to window, "parse_ms" to parseMs)
-        trace("heard", pick.text); trace("hypothesis", pick.index); trace("command", pick.command.describe())
-        trace("parses", org.json.JSONArray(pick.parsed.map { it.describe() }))
+        val textOn = speechTextEnabled()
+        val heardLog = if (textOn) pick.text else SpeechTextLog.summary(pick.text)
+        val cmdLog: Any = if (textOn) pick.command.describe() else pick.command.kindName()
+        val parsesLog = org.json.JSONArray(pick.parsed.map { if (textOn) it.describe() else it.kindName() })
+        EventLog.ev("phrase_parse", "source" to source, "heard" to heardLog, "hypothesis" to pick.index, "command" to cmdLog,
+            "parses" to parsesLog, "mode" to deviceMode, "window" to window, "parse_ms" to parseMs)
+        trace("heard", heardLog); trace("hypothesis", pick.index); trace("command", cmdLog)
+        trace("parses", parsesLog)
         trace("apps_ms", Math.round((t1 - t0) / 1e5) / 10.0); trace("parse_ms", parseMs)
         runCommand(pick.command, screenTargets)
     }
 
-    /** A "type ..." whose words stay out of the log (unless `log_typed_text`). */
-    private fun hidesText(h: Heard): Boolean = !settings.logTypedText && h.hypotheses.any { TypeGrammar.parse(it) is TypeGrammar.Cmd.Type }
+    /** Why a phrase's words stay out of the log (W10): typing, or an about-Canti utterance (its words live only in the note). */
+    private fun hideWhy(h: Heard): HideWhy? {
+        if (!settings.logTypedText && h.hypotheses.any { TypeGrammar.parse(it) is TypeGrammar.Cmd.Type }) return HideWhy.TYPING
+        if (CantiTalk.detect(h.hypotheses, cantiUi()) != null) return HideWhy.CANTI
+        return null
+    }
+
+    /** [swipes] The current about-Canti UI state (which chrome is up). */
+    private fun cantiUi(): CantiTalk.CantiUi = CantiTalk.CantiUi(
+        badge = overlay.badgeShown(), strip = overlay.stripGeometry() != null, queue = overlay.queueGeometry() != null,
+        preview = overlay.previewShown(), picker = choice != null,
+    )
+
+    /** [swipes] W12: whether spoken text may be logged right now (the switch, still before its expiry). */
+    private fun speechTextEnabled(): Boolean =
+        SpeechTextLog.enabled(settings.logSpeechText, settings.logSpeechTextExpiryMs, SystemClock.elapsedRealtime())
+
+    /** [swipes] W12: a wordy field, replaced by a length+word-count summary while speech text logging is off. */
+    private fun textOrRedact(s: String): String = if (speechTextEnabled()) s else SpeechTextLog.summary(s)
+
+    // [swipes] W6/W7: about-Canti. Applies the UI fix or writes a local note; true when it handled the phrase. The
+    // words never reach the grammar, a Decider, runCommand, or followups (the canti event carries no words, W10).
+    private fun aboutCanti(h: Heard, source: String, window: Boolean): Boolean {
+        val r = CantiTalk.detect(h.hypotheses, cantiUi()) ?: return false
+        EventLog.ev("phrase_parse", "source" to source, "command" to "about_canti", "mode" to deviceMode, "window" to window)
+        trace("command", "about_canti")
+        if (r.fix != null) {
+            val done = applyCantiFix(r.fix)
+            EventLog.ev("canti", "event" to "fix", "fix" to r.fix.name.lowercase())
+            trace("canti", "fix:" + r.fix.name.lowercase())
+            notify("") { StripRow.Canti(done) to emptySet() }
+        } else {
+            writeCantiNote(h)
+            EventLog.ev("canti", "event" to "note", "note_lines" to 1)
+            trace("canti", "note")
+            notify("") { StripRow.Canti("noted for later") to emptySet() }
+        }
+        strip?.kind = StripKind.CANTI
+        stripModel.setKind(StripKind.CANTI)
+        updateBadge("about canti")
+        return true
+    }
+
+    private fun applyCantiFix(f: CantiTalk.Fix): String = when (f) {
+        CantiTalk.Fix.MOVE_BADGE -> { overlay.moveBadgeToOtherSide(); "moved the badge" }
+        CantiTalk.Fix.HIDE_QUEUE -> { overlay.hideQueue(); "hid the queue" }
+        CantiTalk.Fix.PANEL_OTHER_END -> { overlay.panelJump(!overlay.isJumped); "moved the panel" }
+        CantiTalk.Fix.HIDE_STRIP -> { overlay.hideStrip(); "hid the strip" }
+    }
+
+    /** [swipes] W8: the local note (one JSON line). No text field contents beyond the summary; labels are option text. */
+    private fun writeCantiNote(h: Heard) {
+        val pkg = currentApp()
+        val screen = try { summarize(pkg).first.text() } catch (e: Exception) { "" }
+        val options = try { currentTargets().map { it.label }.take(30) } catch (e: Exception) { emptyList() }
+        val stripLines = try { stripModel.frame().lines.flatten().map { it.text } } catch (e: Exception) { emptyList() }
+        val chainSteps = chain?.stepList?.map { it.text } ?: emptyList()
+        cantiNotes.add(JSONObject()
+            .put("ts", System.currentTimeMillis())
+            .put("words", h.best ?: "")
+            .put("alts", org.json.JSONArray(h.hypotheses.drop(1)))
+            .put("pkg", pkg)
+            .put("screen", screen)
+            .put("options", org.json.JSONArray(options))
+            .put("strip", org.json.JSONArray(stripLines))
+            .put("chain", org.json.JSONArray(chainSteps)))
+    }
 
     /** "type <text>" / "write <text>", "dictate", "stop dictation" ([TypeGrammar]). Typing never presses send or enter. */
     private fun runTyping(c: TypeGrammar.Cmd, source: String) {
@@ -1209,6 +1301,8 @@ class VoxService : AccessibilityService() {
                 updateBadge("volume")
             }
             is SpeechCommand.Swipe -> swipeNamed(c, screenTargets)
+            is SpeechCommand.ItemSwipe -> itemSwipe(c, screenTargets)   // [swipes] Phase B
+            is SpeechCommand.SystemAction -> systemAction(c)            // [swipes] Phase B
             is SpeechCommand.Ignore -> {
                 // filler, chatter, a retraction: nothing to do; two commands at once: say so (never a guess)
                 trace("result", "ignored")
@@ -1219,7 +1313,7 @@ class VoxService : AccessibilityService() {
             is SpeechCommand.Tap -> tapNamed(c, screenTargets())
             is SpeechCommand.AppMissing -> {
                 // never a tap on screen text of that name
-                EventLog.ev("exec", "n" to ++decisionCount, "action" to "open_app", "name" to c.name, "ok" to false, "how" to "not installed")
+                EventLog.ev("exec", "n" to ++decisionCount, "action" to "open_app", "name" to textOrRedact(c.name), "ok" to false, "how" to "not installed")
                 trace("exec", JSONObject().put("action", "open_app").put("ok", false).put("how", "not installed"))
                 notify("no app called ${c.name}", "no_app") { StripReasons.noApp(StripWords.final(strip?.words ?: c.name), c.name) }
                 updateBadge("no app called ${c.name}")
@@ -1231,7 +1325,7 @@ class VoxService : AccessibilityService() {
                 val pkg = (if (c.others.isEmpty()) c.pkg else AppChoice.pick(listOf(c.pkg) + c.others, recentUse(listOf(c.pkg) + c.others), prefs = prefs))
                     ?.let { AppChoice.prefer(it, prefs) { p -> p in launchable } }
                 if (pkg == null) {
-                    EventLog.ev("exec", "n" to n, "action" to "open_app", "label" to c.label, "ok" to false, "how" to "ambiguous: ${(listOf(c.pkg) + c.others).joinToString()}")
+                    EventLog.ev("exec", "n" to n, "action" to "open_app", "label" to textOrRedact(c.label), "ok" to false, "how" to "ambiguous: ${(listOf(c.pkg) + c.others).joinToString()}")
                     notify("which ${c.label}? " + (listOf(c.pkg) + c.others).joinToString(" or "), "ambiguous") { StripRow.Ask("which ${c.label}?") to emptySet() }
                     updateBadge("which ${c.label}?")
                     return
@@ -1240,7 +1334,7 @@ class VoxService : AccessibilityService() {
                 val r = try { executor.launchApp(pkg) } catch (e: Exception) { Executor.Result(false, "error: $e") }
                 // [followup] a spoken app launch is its own last slot ("try again" / "undo" -> back when it changed windows).
                 recordLast(Last.OpenApp(pkg, SystemClock.elapsedRealtime(), appBefore, watch = r.watch))
-                EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to c.pkg, "opened" to pkg.takeIf { it != c.pkg }, "label" to c.label, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
+                EventLog.ev("exec", "n" to n, "action" to "open_app", "app" to c.pkg, "opened" to pkg.takeIf { it != c.pkg }, "label" to textOrRedact(c.label), "ok" to r.ok, "how" to r.how, "watch" to r.watch)
                 trace("exec", JSONObject().put("action", "open_app").put("app", c.pkg).put("ok", r.ok).put("how", r.how))
                 if (!r.ok) notify("couldn't open ${c.label}", "failed") { StripRow.Miss("couldn't open ${c.label}", false) to emptySet() }
                 else notify("", "done") { StripRow.Done("open ${c.label}") to emptySet() }
@@ -1265,6 +1359,94 @@ class VoxService : AccessibilityService() {
             is SpeechCommand.Chain -> if (settings.transcriptStrip && settings.chains) startChain(c)
                 else notify("one command at a time", "one_at_a_time") { StripReasons.why("one command at a time") }
         }
+    }
+
+    // [swipes] Phase B (r8-swipes-canti): an executor-only system pull (quick_settings / close_shade / pull_refresh),
+    // performed directly on the executor key (never a Vocab phrase).
+    private fun systemAction(c: SpeechCommand.SystemAction) {
+        val n = ++decisionCount
+        val r = try { executor.perform(c.action, "listening", confirmed = false) } catch (e: Exception) { Executor.Result(false, "error: $e") }
+        EventLog.ev("exec", "n" to n, "action" to c.action, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
+        trace("exec", JSONObject().put("action", c.action).put("ok", r.ok).put("how", r.how))
+        if (!r.ok) notify("couldn't ${c.action.replace('_', ' ')}", "failed") { StripRow.Miss("couldn't do that", false) to emptySet() }
+        else notify("") { StripRow.Done(c.action.replace('_', ' ')) to emptySet() }
+    }
+
+    // [swipes] W2/W3/W5: resolve the target (deictic / label / ordinal), the destructive hold, and undo.
+    private fun itemSwipe(c: SpeechCommand.ItemSwipe, screenTargets: () -> List<Target>) {
+        val n = ++decisionCount
+        val targets = screenTargets()
+        val rtl = resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL
+        val now = SystemClock.elapsedRealtime()
+        val pkg = currentApp()
+        val target: Target? = when (val ref = c.ref) {
+            is ItemRef.Deictic -> (followups.current(now, pkg) as? Last.Pick)?.target
+            is ItemRef.Label -> {
+                val q = TargetQuery.forPicker(ref.text)
+                when (val match = TargetMatcher.match(targets, q)) {
+                    is Targets.Outcome.Tap -> match.target.takeIf { TargetMatcher.best(targets, q) >= TargetMatcher.STRONG }
+                    is Targets.Outcome.Choose -> { startChoice(n, match.targets); return }
+                    Targets.Outcome.NotOnScreen -> null
+                }
+            }
+            is ItemRef.Ordinal -> {
+                val rows = targets.filter { it.role.contains("row") || it.role.contains("list") }.sortedBy { it.cy }
+                rows.getOrNull(if (ref.fromEnd) rows.size - ref.n else ref.n - 1)
+            }
+        }
+        if (target == null) {
+            EventLog.ev("item_swipe", "n" to n, "ref" to textOrRedact(c.ref.describe()), "dir" to c.dir, "ok" to false, "how" to "no target")
+            notify("which one?", "which_one") { StripRow.Miss("which one?", false) to emptySet() }
+            return
+        }
+        val box = Box(target.left, target.top, target.right, target.bottom)
+        val destructive = c.dir == "away" || listOf("delete", "archive", "remove", "dismiss").any { target.label.lowercase().contains(it) }
+        val dir = if (c.dir == "away" && rtl) "right" else if (c.dir == "away") "left" else c.dir
+        if (!destructive) { doItemSwipe(n, target, box, dir, rtl, pkg, now); return }
+        // W3: a destructive swipe holds first (0 = no hold).
+        val holdMs = settings.swipeHoldMs
+        if (holdMs <= 0) { doItemSwipe(n, target, box, dir, rtl, pkg, now); return }
+        overlay.showPreview(target, null)
+        val dirWord = dir.uppercase()
+        val h = SwipeHold(scheduler, holdMs,
+            onTick = { left ->
+                if (swipeHold?.running == true) stripModel.result(StripRow.Done("SWIPE $dirWord IN ${"%.1f".format(java.util.Locale.ROOT, left / 1000.0)} S · SAY NO"), emptySet())
+            },
+            onFire = { swipeHold = null; overlay.hidePreview(); doItemSwipe(n, target, box, dir, rtl, pkg, now) },
+            onCancel = { swipeHold = null; overlay.hidePreview(); notify("") { StripRow.Miss("not swiped", false) to emptySet() } })
+        swipeHold = h
+        stripModel.result(StripRow.Done("SWIPE $dirWord IN ${"%.1f".format(java.util.Locale.ROOT, holdMs / 1000.0)} S · SAY NO"), emptySet())
+        h.start()
+        // W3: listen during the hold — the first partial freezes the countdown; the final cancels ("no"/"stop"/"cancel")
+        // or resumes. A hold of 0 already returned above.
+        listenWindow.open(asr, holdMs + ListenWindow.GRACE_MS,
+            onWords = { if (swipeHold === h && it.isNotBlank()) h.freeze() }) { d -> holdDone(d, h) }
+    }
+
+    /** [swipes] W3: the hold's own listen window ended — a cancel word cancels, anything else resumes the countdown. */
+    private fun holdDone(d: ListenWindow.Done, hold: SwipeHold) {
+        if (swipeHold !== hold) return
+        if (d.why.startsWith("cancelled:")) return   // superseded (phrase op / disarm): the caller decides
+        val cancel = d.heard?.hypotheses?.any { PhraseGrammar.normalize(it) in CANCEL_WORDS } == true
+        if (cancel) hold.cancel("no") else hold.resume()
+    }
+
+    private fun doItemSwipe(n: Long, target: Target, box: Box, dir: String, rtl: Boolean, pkg: String, now: Long) {
+        val r = try { executor.itemSwipe(box, dir, rtl) } catch (e: Exception) { Executor.Result(false, "error: $e") }
+        recordLast(Last.ItemSwipe(target.label, dir, now, pkg, watch = r.watch))
+        EventLog.ev("exec", "n" to n, "action" to "item_swipe", "label" to textOrRedact(target.label), "dir" to dir, "ok" to r.ok, "how" to r.how, "watch" to r.watch)
+        trace("exec", JSONObject().put("action", "item_swipe").put("ok", r.ok).put("how", r.how))
+        if (!r.ok) notify("couldn't swipe ${target.label}", "failed") { StripRow.Miss("couldn't swipe", false) to emptySet() }
+        else notify("") { StripRow.Done("swiped ${target.label} $dir") to emptySet() }
+        updateBadge("item swipe")
+    }
+
+    /** [swipes] W3: a cancel word during the destructive hold stops it (the chain pauses, never cancels all — J3). */
+    private fun cancelHoldWord(hyps: List<String>): Boolean {
+        val h = swipeHold ?: return false
+        if (!h.running) return false
+        if (hyps.any { PhraseGrammar.normalize(it) in CANCEL_WORDS }) { h.cancel("no"); return true }
+        return false
     }
 
     // --- command chains (Chain.kt) ---------------------------------------------------------------------------------
@@ -1439,7 +1621,7 @@ class VoxService : AccessibilityService() {
         val pkg = currentApp()
         val screen = try { summarize(pkg).first } catch (e: Exception) { EventLog.ev("error", "where" to "screen", "error" to e.toString()); null }
         val scene = StateBuilder.build("listening", pkg, appLabel(pkg), emptyList(), emptyList(), phrase, profile, recentActions(), null, screen)
-        EventLog.ev("state", "n" to n, "text" to scene.text())
+        EventLog.ev("state", "n" to n, "text" to textOrRedact(scene.text()))
         val d = try { RuleDecider().decide(DecisionInput(scene, profile)) } catch (e: Exception) { Decision("none", "error:${e.javaClass.simpleName}") }
         act(n, generation, "listening", d, local = true)
     }
@@ -1469,10 +1651,12 @@ class VoxService : AccessibilityService() {
     private fun followup(c: SpeechCommand.Followup, screenTargets: () -> List<Target>) {
         val n = ++decisionCount
         val now = SystemClock.elapsedRealtime()
-        val targets = screenTargets()
-        val saidNorm = TargetQuery.normalize(c.said)
+        // The phrase parser may have read targets before the app finished settling its snackbar/window.
+        // Re-read after invalidating the accessibility cache so a newly visible Undo control can win.
+        if (android.os.Build.VERSION.SDK_INT >= 34) try { clearCache() } catch (_: Exception) {}
+        val targets = currentTargets()
         // 1. LABEL WINS (every mode): an app's own "Undo" / "Try again" button is the better action. Exact equality only.
-        val labelHit = targets.firstOrNull { it.label.isNotBlank() && TargetQuery.normalize(it.label) == saidNorm }
+        val labelHit = followupLabel(c.said, targets)
         if (labelHit != null) {
             followupLog(n, c, "label", followups.current(now, currentApp()), null, now)
             tapTarget(n, labelHit, "label over follow-up")
@@ -1525,7 +1709,7 @@ class VoxService : AccessibilityService() {
     private fun followupLog(n: Long, c: SpeechCommand.Followup, result: String, last: Last?, why: String?, now: Long) {
         EventLog.ev("followup", "n" to n, "kind" to c.kind.name.lowercase(),
             "dir" to c.dir?.name?.lowercase(), "result" to result,
-            "last_kind" to when (last) { is Last.Action -> "action"; is Last.Volume -> "volume"; is Last.OpenApp -> "open_app"; is Last.Pick -> "pick"; null -> null },
+            "last_kind" to when (last) { is Last.Action -> "action"; is Last.Volume -> "volume"; is Last.OpenApp -> "open_app"; is Last.Pick -> "pick"; is Last.ItemSwipe -> "item_swipe"; null -> null },
             "age_ms" to last?.let { now - it.at }, "confirm" to last?.confirm, "why" to why)
     }
 
@@ -1536,6 +1720,18 @@ class VoxService : AccessibilityService() {
     private fun swipeNamed(c: SpeechCommand.Swipe, screenTargets: () -> List<Target>) {
         val n = ++decisionCount
         strip?.boundN = n; strip?.boundNav = true   // [strip] a spoken swipe is this ticket's decision (its DO row)
+        // [swipes] J1: a deictic "swipe it/this/that left|right" upgrades to an item swipe when a deictic target exists
+        // (the last picked target); otherwise it stays a screen swipe.
+        if (c.deictic && c.action in setOf("swipe_left", "swipe_right") && c.count == 1) {
+            val now = SystemClock.elapsedRealtime()
+            val pkg = currentApp()
+            val t = (followups.current(now, pkg) as? Last.Pick)?.target
+            if (t != null) {
+                val dir = if (c.action == "swipe_left") "left" else "right"
+                doItemSwipe(n, t, Box(t.left, t.top, t.right, t.bottom), dir, false, pkg, now)
+                return
+            }
+        }
         var action = c.action
         var via = c.how
         if (action == null) {
@@ -1545,7 +1741,7 @@ class VoxService : AccessibilityService() {
             // a Next/Previous control only matters where neither the screen type nor the noun decides
             val button = if (Vocab.SCREEN_NEXT.containsKey(kind) || c.how in SwipeGrammar.HORIZONTAL || c.how in SwipeGrammar.VERTICAL) null else pagerButton(screenTargets(), next)
             val plan = SwipePlan.semantic(next, c.how, kind, button != null, rtl)
-            EventLog.ev("swipe_plan", "n" to n, "semantic" to c.semantic, "noun" to c.how, "screen" to kind, "rtl" to rtl, "via" to plan.via,
+            EventLog.ev("swipe_plan", "n" to n, "semantic" to c.semantic, "noun" to textOrRedact(c.how), "screen" to kind, "rtl" to rtl, "via" to plan.via,
                 "action" to plan.action, "button" to button?.option, "count" to c.count)
             trace("swipe_plan", JSONObject().put("via", plan.via).put("action", plan.action).put("screen", kind).put("count", c.count))
             if (plan.tapButton && button != null) { repeat(c.count) { tapTarget(n, button, "pager button") }; return }
@@ -1572,12 +1768,12 @@ class VoxService : AccessibilityService() {
         // Every target picker (this matcher, the local model, the cloud) gets the same cleaned query; the raw one is logged.
         val query = TargetQuery.forPicker(c.query)
         val out = TargetMatcher.match(targets, query)
-        EventLog.ev("target_match", "n" to n, "query" to query, "query_raw" to c.query.takeIf { it != query }, "targets" to targets.size,
+        EventLog.ev("target_match", "n" to n, "query" to textOrRedact(query), "query_raw" to textOrRedact(c.query).takeIf { it != textOrRedact(query) }, "targets" to targets.size,
             "result" to when (out) { is Targets.Outcome.Tap -> "tap"; is Targets.Outcome.Choose -> "choose"; else -> "not on screen" },
             "top" to org.json.JSONArray(TargetMatcher.rank(targets, query).take(3).map {
                 JSONObject().put("option", it.target.option).put("score", Math.round(it.score * 100) / 100.0)
                     .putOpt("context", it.target.context) }))
-        trace("target", JSONObject().put("query", query).put("query_raw", c.query).put("targets", targets.size).put("result", when (out) {
+        trace("target", JSONObject().put("query", textOrRedact(query)).put("query_raw", textOrRedact(c.query)).put("targets", targets.size).put("result", when (out) {
             is Targets.Outcome.Tap -> "tap"; is Targets.Outcome.Choose -> "choose"; else -> "not on screen" }))
         when (out) {
             is Targets.Outcome.Tap -> {
@@ -1701,7 +1897,7 @@ class VoxService : AccessibilityService() {
         val scene = StateBuilder.build(mode, pkg, appLabel(pkg), sounds, seq, phrase, profile, recentActions(),
             if (mode == "cursor") overlay.description else null, screen)
         val input = DecisionInput(scene, profile)
-        EventLog.ev("state", "n" to n, "text" to scene.text())
+        EventLog.ev("state", "n" to n, "text" to textOrRedact(scene.text()))
         deciding += n
         updateBadge("")
         trace("pending", "decider n=$n on the worker: its decision and exec events follow in the log")
@@ -1915,7 +2111,7 @@ class VoxService : AccessibilityService() {
     }
 
     private fun toast(text: String) {
-        EventLog.ev("toast", "text" to text)
+        EventLog.ev("toast", "text" to textOrRedact(text))
         try { android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
     }
 
@@ -1933,7 +2129,7 @@ class VoxService : AccessibilityService() {
         val query = TargetQuery.forPicker(utterance)
         val state = Targets.stateText(StateBuilder.appName(pkg, appLabel(pkg)), pkg, screen, query)
         val options = Targets.options(targets)
-        EventLog.ev("target_state", "n" to n, "app" to pkg, "text" to state, "query_raw" to raw.takeIf { it != query },
+        EventLog.ev("target_state", "n" to n, "app" to pkg, "text" to textOrRedact(state), "query_raw" to textOrRedact(raw).takeIf { it != textOrRedact(query) },
             "options" to org.json.JSONArray(options))
         if (targets.isEmpty()) { notify("nothing to tap on this screen", "failed") { StripRow.Miss("nothing to tap on this screen", false) to emptySet() }; EventLog.ev("target", "n" to n, "result" to "no targets"); return }
         if (settings.decider == "rules") {
@@ -2059,7 +2255,7 @@ class VoxService : AccessibilityService() {
     private fun choicePhrase(h: Heard) {
         val c = choice ?: return
         val text = h.best ?: return
-        EventLog.ev("choice", "n" to choiceN, "event" to "spoken", "text" to text)
+        EventLog.ev("choice", "n" to choiceN, "event" to "spoken", "text" to textOrRedact(text))
         when (val r = SpokenPick.parse(text, c.candidates)) {
             is SpokenPick.Result.Tap -> pickChoice(r.index)
             SpokenPick.Result.Cancel -> cancelChoice("spoken cancel")
@@ -2069,29 +2265,29 @@ class VoxService : AccessibilityService() {
                 try { overlay.selectTarget(c.index) } catch (e: Exception) { EventLog.ev("error", "where" to "highlight", "error" to e.toString()) }
                 armChoiceTimeout()
                 openChoiceListening()
-                EventLog.ev("choice", "n" to choiceN, "event" to "select", "text" to text, "selected" to c.index + 1, "option" to c.selected.option)
+                EventLog.ev("choice", "n" to choiceN, "event" to "select", "text" to textOrRedact(text), "selected" to c.index + 1, "option" to c.selected.option)
             }
             is SpokenPick.Result.Narrow -> {
                 if (r.targets.size == 1) {
                     val t = r.targets[0]
-                    EventLog.ev("choice", "n" to choiceN, "event" to "narrowed", "text" to text, "remaining" to 1, "option" to t.option)
+                    EventLog.ev("choice", "n" to choiceN, "event" to "narrowed", "text" to textOrRedact(text), "remaining" to 1, "option" to t.option)
                     tapPicked(t, "spoken ${text}")
                 } else {
-                    EventLog.ev("choice", "n" to choiceN, "event" to "narrowed", "text" to text, "remaining" to r.targets.size,
+                    EventLog.ev("choice", "n" to choiceN, "event" to "narrowed", "text" to textOrRedact(text), "remaining" to r.targets.size,
                         "options" to org.json.JSONArray(r.targets.map { it.option }))
                     if (settings.decider != "rules") narrowByModel(text, r.targets)
                     else renumberChoice(r.targets)
                 }
             }
             is SpokenPick.Result.Hint -> {
-                EventLog.ev("choice", "n" to choiceN, "event" to "no_match", "text" to text)
+                EventLog.ev("choice", "n" to choiceN, "event" to "no_match", "text" to textOrRedact(text))
                 // [strip] no match while picking: every word BAD, no retry (the choice window reopens by itself).
                 notify(r.text, "hint") { StripRow.Miss(r.text, false) to StripWords.final(strip?.words ?: "").indices.toSet() }
                 armChoiceTimeout()
                 openChoiceListening()
             }
             SpokenPick.Result.RunNormally -> {
-                EventLog.ev("choice", "n" to choiceN, "event" to "cancelled", "why" to "full command", "text" to text)
+                EventLog.ev("choice", "n" to choiceN, "event" to "cancelled", "why" to "full command", "text" to textOrRedact(text))
                 cancelChoice(null)
                 val targets = { try { Targets.build(TreeReader.targetLayers(this), screenW(), screenH(), format = optionFormat) }
                     catch (e: Exception) { EventLog.ev("error", "where" to "targets", "error" to e.toString()); emptyList() } }
@@ -2141,7 +2337,7 @@ class VoxService : AccessibilityService() {
         val query = TargetQuery.forPicker(phrase)
         val state = Targets.stateText(StateBuilder.appName(pkg, appLabel(pkg)), pkg, screen, query)
         val options = Targets.options(candidates)
-        EventLog.ev("target_state", "n" to n, "app" to pkg, "text" to state, "query_raw" to phrase.takeIf { it != query },
+        EventLog.ev("target_state", "n" to n, "app" to pkg, "text" to textOrRedact(state), "query_raw" to textOrRedact(phrase).takeIf { it != textOrRedact(query) },
             "options" to org.json.JSONArray(options), "narrowed" to true)
         val client = SystemOneClient(settings.baseUrl, settings.targetModel.ifBlank { settings.model }, { settings.apiKey }, settings.httpTimeoutMs)
         val esc = decider as? EscalatingDecider
@@ -2625,7 +2821,7 @@ class VoxService : AccessibilityService() {
         refreshOptionFormat(0)
     }
 
-    private fun control(m: JSONObject): JSONObject {
+    private fun control(m: JSONObject, source: String): JSONObject {
         val op = m.getString("op")
         val reply = JSONObject().put("ok", true).put("op", op)
         when (op) {
@@ -2657,7 +2853,7 @@ class VoxService : AccessibilityService() {
                     .put("route", ai.vox.companion.audio.SpeakerRoute.routeName(ai.vox.companion.audio.SpeakerRoute.mediaRoute(audio)))
                     .put("locked", settings.mic.usesMic && mediaLocked(SystemClock.elapsedRealtime()))
                     .put("unlock_left_ms", mediaGate.leftMs(SystemClock.elapsedRealtime())))
-            "config" -> { settings.apply(m); mediaCheck(); rebuildDecider(); rebuildMatcher(); soundSourceChanged(); rebuildAsr(); if (m.has("asr_allow_online") || m.has("asr_language")) checkAsr("config"); if (m.has("panel_top_portrait") || m.has("panel_top_landscape")) { overlay.panelTop = if (screenW() <= screenH()) settings.panelTopPortrait.takeIf { it >= 0 } else settings.panelTopLandscape.takeIf { it >= 0 }; overlay.placeStrip() }; reply.put("settings", settings.describe()) }   // [chain] [phone-mic] soundSourceChanged
+            "config" -> { settings.apply(m); if (m.has("log_speech_text_ms")) settings.logSpeechTextExpiryMs = SystemClock.elapsedRealtime() + m.getLong("log_speech_text_ms"); else if (m.has("log_speech_text") && m.optBoolean("log_speech_text")) settings.logSpeechTextExpiryMs = SystemClock.elapsedRealtime() + SpeechTextLog.AUTO_EXPIRE_MS; mediaCheck(); rebuildDecider(); rebuildMatcher(); soundSourceChanged(); rebuildAsr(); if (m.has("asr_allow_online") || m.has("asr_language")) checkAsr("config"); if (m.has("panel_top_portrait") || m.has("panel_top_landscape")) { overlay.panelTop = if (screenW() <= screenH()) settings.panelTopPortrait.takeIf { it >= 0 } else settings.panelTopLandscape.takeIf { it >= 0 }; overlay.placeStrip() }; reply.put("settings", settings.describe()) }   // [chain] [phone-mic] soundSourceChanged
             "enroll_add" -> {
                 // {kind, name, examples: [{fp, fp_version, pitch16, meta?}], source?} for the active profile on the
                 // current sound source, or on `source` ([train] per-source stores).
@@ -2875,6 +3071,14 @@ class VoxService : AccessibilityService() {
                 EventLog.ev("reset")
                 updateBadge("reset")
                 mic?.refresh("reset")   // [phone-mic]
+            }
+            "canti_notes" -> {   // [swipes] W9: read-and-delete the local note file, socket only.
+                if (source == "debug-broadcast") { reply.put("ok", false).put("error", "socket only"); return reply }
+                val notes = cantiNotes.read()
+                val arr = org.json.JSONArray()
+                for (n in notes) arr.put(n)
+                val deleted = if (m.optBoolean("peek")) 0 else cantiNotes.delete()
+                reply.put("notes", arr).put("deleted", deleted)
             }
             else -> throw IllegalArgumentException("unknown control op '$op'")
         }

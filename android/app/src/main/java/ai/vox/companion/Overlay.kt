@@ -209,6 +209,12 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
     }
     fun badgePlayOnce(s: BadgeState) { badge?.playOnce(s) }
 
+    /** [swipes] The badge is on screen (not tucked away). */
+    fun badgeShown(): Boolean = badge != null && !tucked
+
+    /** [swipes] The NOW/NEXT preview outline is up. */
+    fun previewShown(): Boolean = previewView != null
+
     private fun portrait() = screenW() <= screenH()
     private fun posKey() = if (portrait()) "pos_portrait" else "pos_landscape"
 
@@ -347,6 +353,21 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         prefs.edit().putString(posKey(), "${if (right) "R" else "L"},$frac").apply()
         EventLog.ev("badge", "event" to "moved", "edge" to if (right) "right" else "left", "y_frac" to Math.round(frac * 1000) / 1000.0,
             "orientation" to if (portrait()) "portrait" else "landscape")
+    }
+
+    /** [swipes] MOVE_BADGE: hop the head to the other side edge (the about-Canti "move the badge" fix). */
+    fun moveBadgeToOtherSide() {
+        val v = badge?.view ?: return
+        val p = badgeParams ?: return
+        val goRight = p.x + v.width / 2 < screenW() / 2
+        val w = (if (v.width > 0) v.width else v.measuredWidth).coerceAtLeast(1)
+        val to = (if (goRight) screenW() - w else 0) to clampY(p.y, v.height)
+        hopTo(v, p, to) {
+            val frac = p.y.toFloat() / screenH()
+            prefs.edit().putString(posKey(), "${if (goRight) "R" else "L"},$frac").apply()
+            EventLog.ev("badge", "event" to "moved", "edge" to if (goRight) "right" else "left",
+                "orientation" to if (portrait()) "portrait" else "landscape")
+        }
     }
 
     /**
@@ -831,11 +852,15 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
 
     /** [chain] C6/Y2: a touchable window over the strip body, shown only while the transcript overflows (scrollable). */
     var onBodyScroll: ((Float) -> Unit)? = null
+    /** A tap on the strip body while it is tappable (dictation: a tap stops it). */
+    var onBodyTap: (() -> Unit)? = null
+    private var bodyTappable = false
     private var bodyView: View? = null
     private var bodyParams: WindowManager.LayoutParams? = null
 
-    fun showBodyTouch(scrollable: Boolean) {
-        if (!scrollable) { hideBodyTouch(); return }
+    fun showBodyTouch(scrollable: Boolean, tappable: Boolean = bodyTappable) {
+        bodyTappable = tappable
+        if (!scrollable && !tappable) { hideBodyTouch(); return }
         val sp = stripParams ?: return
         val s = stripScale()
         val v = bodyView ?: View(svc).also { bodyView = it }
@@ -844,11 +869,12 @@ class Overlay(private val svc: AccessibilityService, private val screenW: () -> 
         p.height = Math.round((stripBodyHeight(true) - 52f) * s).coerceAtLeast(1)
         p.x = sp.x; p.y = sp.y + Math.round(52f * s)
         var downY = 0f
+        var startY = 0f
         v.setOnTouchListener { _, e ->
             when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> { downY = e.rawY; true }
+                android.view.MotionEvent.ACTION_DOWN -> { downY = e.rawY; startY = e.rawY; true }
                 android.view.MotionEvent.ACTION_MOVE -> { onBodyScroll?.invoke(e.rawY - downY); downY = e.rawY; true }
-                android.view.MotionEvent.ACTION_UP -> true
+                android.view.MotionEvent.ACTION_UP -> { if (bodyTappable && Math.abs(e.rawY - startY) < 12 * density) onBodyTap?.invoke(); true }
                 else -> false
             }
         }

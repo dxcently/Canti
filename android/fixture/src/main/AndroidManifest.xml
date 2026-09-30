@@ -13,5 +13,6 @@
         <activity android:name=".ControlsActivity" android:exported="true" android:windowSoftInputMode="adjustNothing" />
         <activity android:name=".StaticActivity" android:exported="true" />
         <activity android:name=".TreeActivity" android:exported="true" />
+        <activity android:name=".SwipeActivity" android:exported="true" />
     </application>
 </manifest>

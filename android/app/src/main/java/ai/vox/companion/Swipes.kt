@@ -35,6 +35,8 @@ object SwipeGrammar {
     private const val DIR = "(left|right|up|down)"
     private const val TAIL = "(?: on (?:it|this|that|him|her|them|this one|that one))?"
     private val EXPLICIT = Regex("^(?:swipe|flick|fling|slide)(?: it| this| that| the screen| the page| the photo| the picture)?(?: over)?(?: to the| towards the| to| towards)? $DIR$TAIL(?: (.+))?$")
+    /** "swipe it/this/that <dir>": a deictic subject, which VoxService upgrades to an item swipe when a target exists (J1). */
+    private val DEICTIC_SUBJECT = Regex("^(?:swipe|flick|fling|slide) (it|this|that) ")
     private val CONTENT = Regex("^(?:scroll|go|move|pan|look|shift)(?: it| the page| the screen| over)?(?: to the| over to the| towards the| to| towards| over)? (left|right)(?: (.+))?$")
     private val WHATS_ON = Regex("^(?:(?:let me |lets )?see |show me |show )?(?:whats|what is) (?:on|to|over on|off to) the (left|right)$")
 
@@ -65,11 +67,21 @@ object SwipeGrammar {
 
     private fun noun(w: String): String? { val s = PLURAL[w] ?: w; return if (s in HORIZONTAL || s in ITEMS) s else null }
 
+    // W4 system pulls, matched before EXPLICIT (its trailing "( .+)?" would swallow "swipe up for recents").
+    private val RECENTS = Regex("^swipe up (?:for recents|from the bottom and hold)$")
+    private val QUICK_SETTINGS = Regex("^(?:pull down(?: the)?|open) quick settings$")
+    private val CLOSE_SHADE = Regex("^close(?: the)?(?: notifications| quick settings| shade)$")
+    private val PULL_REFRESH = Regex("^(?:pull to refresh|refresh(?: this| the page))$")
+
     /** The swipe (or a plain nav phrase for one ordinary "next video") in [t] (a cleaned phrase), or null. */
     fun parse(t: String): SpeechCommand? {
+        if (RECENTS.matches(t)) return SpeechCommand.Nav("recent apps")
+        if (QUICK_SETTINGS.matches(t)) return SpeechCommand.SystemAction("quick_settings", "swipe grammar")
+        if (CLOSE_SHADE.matches(t)) return SpeechCommand.SystemAction("close_shade", "swipe grammar")
+        if (PULL_REFRESH.matches(t)) return SpeechCommand.SystemAction("pull_refresh", "swipe grammar")
         EXPLICIT.find(t)?.let { m ->
             val n = count(m.groupValues[2]) ?: return null
-            return SpeechCommand.Swipe("swipe_${m.groupValues[1]}", null, n, "finger")
+            return SpeechCommand.Swipe("swipe_${m.groupValues[1]}", null, n, "finger", deictic = DEICTIC_SUBJECT.containsMatchIn(t))
         }
         CONTENT.find(t)?.let { m ->
             val n = count(m.groupValues[2]) ?: return null

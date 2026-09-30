@@ -452,6 +452,8 @@ object AsrAudioArgs {
             is SpeechCommand.Volume -> o.put("type", "volume").put("stream", c.stream.key).put("op", c.op.describe())
             is SpeechCommand.Swipe -> o.put("type", "swipe").put("action", c.action ?: JSONObject.NULL).put("semantic", c.semantic ?: JSONObject.NULL)
                 .put("count", c.count).put("how", c.how)
+            is SpeechCommand.ItemSwipe -> o.put("type", "item_swipe").put("ref", c.ref.describe()).put("dir", c.dir)
+            is SpeechCommand.SystemAction -> o.put("type", "system").put("action", c.action).put("via", c.via)
             is SpeechCommand.Followup -> o.put("type", "followup").put("kind", c.kind.name.lowercase())
                 .put("dir", c.dir?.name?.lowercase() ?: JSONObject.NULL).put("fallback", c.fallback?.let(::command) ?: JSONObject.NULL)
             is SpeechCommand.Chain -> o.put("type", "chain").put("steps", c.steps.size).put("dangling", c.dangling).put("dropped", c.dropped)

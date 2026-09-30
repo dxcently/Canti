@@ -70,6 +70,10 @@ class VoiceTypingTest {
 
     @Test fun dictationPhrases() {
         for (s in listOf("dictate", "Start dictation", "start dictating please")) assertEquals(s, TypeGrammar.Cmd.StartDictation, TypeGrammar.parse(s))
+        for (s in listOf("Hey could you start dictation", "start the dictation", "turn dictation on", "can you go into dictation mode",
+            "enable voice typing")) assertEquals(s, TypeGrammar.Cmd.StartDictation, TypeGrammar.parse(s))
+        assertNull(TypeGrammar.parse("what is dictation"))
+        assertEquals(TypeGrammar.Cmd.Type("hello"), TypeGrammar.parse("Hey could you type hello"))
         assertEquals(TypeGrammar.Cmd.StopDictation, TypeGrammar.parse("stop dictation"))
         assertEquals("see you soon", TypeGrammar.beforeStop("see you soon, stop dictation."))
         assertEquals("", TypeGrammar.beforeStop("Stop dictation"))

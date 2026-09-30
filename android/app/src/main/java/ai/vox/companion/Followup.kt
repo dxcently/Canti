@@ -76,6 +76,17 @@ sealed class Last {
         override fun withResult(appAfter: String, confirm: String, by: String?) =
             copy(appAfter = appAfter, confirm = confirm, by = by)
     }
+
+    /** A spoken item swipe (ItemSwipe.kt): [label] the target's label, [dir] left/right/away. */
+    data class ItemSwipe(
+        val label: String, val dir: String,
+        override val at: Long, override val appBefore: String,
+        override val appAfter: String? = null, override val watch: Long? = null,
+        override val confirm: String? = null, override val by: String? = null,
+    ) : Last() {
+        override fun withResult(appAfter: String, confirm: String, by: String?) =
+            copy(appAfter = appAfter, confirm = confirm, by = by)
+    }
 }
 
 /**
@@ -201,6 +212,7 @@ fun resolve(kind: FollowKind, dir: Dir?, said: String, last: Last?, screen: List
             val t = refind(last.target, screen) ?: return Plan.Nothing("not on screen")
             Plan.Tap(t, last.alternatives.mapNotNull { refind(it, screen) })
         }
+        is Last.ItemSwipe -> Plan.Nothing("nothing to repeat")
     }
     FollowKind.OTHER -> {
         if (last !is Last.Pick) {
@@ -248,7 +260,15 @@ fun undoPlan(last: Last?, screen: List<Target>): Plan {
         is Last.OpenApp -> backIfWindowChange(last, "listening")
         is Last.Pick -> if (Outward.isOutwardTarget(last.target.label)) Plan.CantUndo("can't undo that")
             else backIfWindowChange(last, "listening")
+        is Last.ItemSwipe -> Plan.CantUndo("the swipe")
     }
+}
+
+/** Exact visible-label precedence for spoken follow-ups (for example, an app's own Undo button). */
+fun followupLabel(said: String, targets: List<Target>): Target? {
+    val query = TargetQuery.normalize(said)
+    // normalize keeps case; the spoken side is lower-case, so "undo" must match an "Undo"/"UNDO" button.
+    return targets.firstOrNull { it.label.isNotBlank() && TargetQuery.normalize(it.label).equals(query, ignoreCase = true) }
 }
 
 /** True when [p] is a navigation undo (a scroll/swipe/next/previous inverse, or a "back"), i.e. a chain can apply it. */
